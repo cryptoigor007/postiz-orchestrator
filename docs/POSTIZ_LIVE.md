@@ -55,10 +55,11 @@ TELEGRAM_BOT_TOKEN=<orchestrator bot>
 - Postiz Telegram publisher bot `TELEGRAM_TOKEN` set in Postiz compose
 - Channel connected: `Postiz Test Channel`
 - integrationId: `cmu7g6kjq0001rw6wbwh46plb` → `config.yaml` `platforms.telegram.integration_id`
+- `POSTIZ_API_TOKEN` (org apiKey) set in `.env`; `/public/v1/integrations` returns the channel
+- Live create verified: upload → create (schedule) → delete against real Postiz
 
 ## Still waiting
-1. `POSTIZ_API_TOKEN` for the orchestrator (from Postiz UI)
-2. Orchestrator control bot token (`TELEGRAM_BOT_TOKEN`) from BotFather
-3. release URL field name after first published
-4. WATCH_ROOTS paths
+1. Orchestrator control bot token (`TELEGRAM_BOT_TOKEN`) from BotFather
+2. release URL field name after first real published post
+3. WATCH_ROOTS paths (VideoMaker/ShortsMaker output dirs)
 

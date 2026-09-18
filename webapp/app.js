@@ -202,8 +202,8 @@
         <div class="title">${p.name}</div>
         ${p.enabled ? pill("ok") : pill("off")}
         ${p.paused ? pill("paused") : ""}
-        <span class="meta">limit ${p.daily_limit}</span>
-        <button class="btn secondary" data-act="resume-one" data-p="${p.name}">Resume</button>
+        <span class="meta">лимит ${p.daily_limit}</span>
+        <button class="btn secondary" data-act="resume-one" data-p="${p.name}">Возобновить</button>
       </div>`
       )
       .join("");
@@ -211,9 +211,9 @@
       <div class="panel">
         <div class="panel-header">
           Платформы
-          <span>
-            <button class="btn danger" data-act="pause-all">Pause all</button>
-            <button class="btn success" data-act="resume-all">Resume all</button>
+          <span class="panel-actions">
+            <button class="btn danger" data-act="pause-all">Пауза всем</button>
+            <button class="btn success" data-act="resume-all">Возобновить все</button>
           </span>
         </div>
         ${rows || '<div class="empty">Нет</div>'}
@@ -258,12 +258,12 @@
       <div class="panel">
         <div class="panel-header">Быстрые действия</div>
         <div class="form-row">
-          <button class="btn primary" data-act="distribute">Distribute long</button>
+          <button class="btn primary" data-act="distribute">Распределить длинные</button>
           <button class="btn secondary" data-act="refresh">Обновить данные</button>
         </div>
       </div>
       <div class="panel">
-        <div class="panel-header">Force link update</div>
+        <div class="panel-header">Обновить ссылку вручную</div>
         <div class="form-row">
           <input id="fl-id" type="number" placeholder="entity_id" style="width:100px" />
           <select id="fl-p">
@@ -277,17 +277,54 @@
   }
 
 
+  function fmtDuration(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (d) return `${d} д ${h} ч`;
+    if (h) return `${h} ч ${m} м`;
+    if (m) return `${m} м ${sec % 60} с`;
+    return `${sec} с`;
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return "—";
+    try {
+      return new Date(ts * 1000).toLocaleString("ru-RU", {
+        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+      });
+    } catch (_) {
+      return "—";
+    }
+  }
+
+  function metric(label, value) {
+    return `<div class="card"><div class="label">${label}</div><div class="value">${value ?? "—"}</div></div>`;
+  }
+
   function renderMetrics(d) {
-    const entries = Object.entries(d || {}).filter(([k]) => k !== "note");
-    const cards = entries
-      .map(([k, v]) => {
-        const val = typeof v === "object" ? JSON.stringify(v) : v;
-        return `<div class="card"><div class="label">${k}</div><div class="value" style="font-size:18px">${val ?? "—"}</div></div>`;
-      })
-      .join("");
-    content().innerHTML = `<div class="grid">${cards || '<div class="empty">Нет метрик</div>'}</div>
-      <div class="panel"><div class="panel-header">Raw</div>
-      <div class="row"><span class="mono">${JSON.stringify(d || {}, null, 0)}</span></div></div>`;
+    d = d || {};
+    const now = Date.now() / 1000;
+    const uptime = d.started_at ? fmtDuration(now - d.started_at) : "—";
+    const cards = [
+      metric("Аптайм", uptime),
+      metric("Циклов", d.cycles ?? 0),
+      metric("Публикаций в очереди", (d.scheduled_long || 0) + (d.scheduled_short || 0)),
+      metric("Синхронизаций", d.sync_updates ?? 0),
+      metric("Ошибок", d.errors ?? 0),
+    ].join("");
+    const errRow = d.last_error
+      ? `<div class="row"><span class="pill err">Ошибка</span><span class="title">${d.last_error}</span></div>`
+      : `<div class="row"><span class="pill ok">ОК</span><span class="title">Ошибок нет</span></div>`;
+    content().innerHTML = `
+      <div class="grid">${cards}</div>
+      <div class="panel">
+        <div class="panel-header">Активность</div>
+        <div class="row"><div class="title">Последний цикл</div><span class="meta">${fmtTime(d.last_cycle_at)}</span></div>
+        <div class="row"><div class="title">Запланировано (длинные / шортсы)</div><span class="meta">${d.scheduled_long || 0} / ${d.scheduled_short || 0}</span></div>
+        ${errRow}
+      </div>`;
   }
 
   function render() {

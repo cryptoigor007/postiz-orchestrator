@@ -443,13 +443,6 @@
     if (tg) {
       try { tg.ready(); } catch (_) {}
       try { tg.expand(); } catch (_) {}
-      // full height: use Telegram's stable viewport height when available
-      try {
-        if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
-      } catch (_) {}
-      try {
-        if (tg.requestFullscreen) tg.requestFullscreen();
-      } catch (_) {}
       try {
         tg.setHeaderColor("secondary_bg_color");
         tg.setBackgroundColor("bg_color");

@@ -116,11 +116,13 @@
       )
       .join("");
     const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
+    const rootLabel = (r) =>
+      r === "/mnt/video" ? "Сеть · /mnt/video" : r === "/" ? "Локально · /" : r;
     const rsel = (b.roots || []).length > 1
       ? `<div class="form-row">${(b.roots || [])
           .map(
             (r) =>
-              `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}">${r}</button>`
+              `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}">${rootLabel(r)}</button>`
           )
           .join("")}</div>`
       : "";
@@ -137,7 +139,7 @@
         ${roots || '<div class="empty">Папки не выбраны</div>'}
       </div>
       <div class="panel">
-        <div class="panel-header">Сетевая папка: <span class="mono" style="font-size:12px">${b.root || ""}</span></div>
+        <div class="panel-header">Обзор папок · <span class="mono" style="font-size:12px">${b.path || ""}</span></div>
         ${rsel}
         <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
         <div class="form-row">

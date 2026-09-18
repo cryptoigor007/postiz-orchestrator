@@ -3,13 +3,20 @@
   const state = {
     view: "status",
     initData: tg?.initData || "",
-    key: new URLSearchParams(location.search).get("key") || "",
+    key: readKey() || "",
     user: tg?.initDataUnsafe?.user || null,
     data: {},
   };
 
   const $ = (id) => document.getElementById(id);
   const content = () => $("content");
+
+  function readKey() {
+    const q = new URLSearchParams(location.search).get("key");
+    if (q) return q;
+    const m = location.pathname.match(/\/webapp\/k\/([^/]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
 
   function toast(msg) {
     const el = $("toast");

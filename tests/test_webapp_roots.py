@@ -143,6 +143,16 @@ def test_api_scan_registers(env, tmp_path):
     assert db.fetchone("SELECT id FROM long_videos")
 
 
+def test_path_key_serves_app(env):
+    api, db, clock, cfg, watcher = env
+    code, body, ctype = api.handle("GET", "/webapp/k/abc123/", {}, b"")
+    assert code == 200
+    assert b"Orchestrator" in body
+    code, body, _ = api.handle("GET", "/webapp/k/abc123", {}, b"")
+    assert code == 200
+    assert b"Orchestrator" in body
+
+
 def test_access_key_auth(env):
     api, db, clock, cfg, watcher = env
     os.environ.pop("WEBAPP_DEV", None)

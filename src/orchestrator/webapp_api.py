@@ -81,7 +81,10 @@ class WebAppAPI:
 
         # static (never intercept /webapp/api/*)
         if not is_api:
-            if method == "GET" and (qpath in ("/webapp", "/webapp/", "/webapp/index.html")):
+            if method == "GET" and (
+                qpath in ("/webapp", "/webapp/", "/webapp/index.html")
+                or qpath.startswith("/webapp/k/")
+            ):
                 return self._file("index.html", "text/html; charset=utf-8")
             if method == "GET" and qpath.startswith("/webapp/") and ".." not in qpath:
                 name = qpath[len("/webapp/") :] or "index.html"

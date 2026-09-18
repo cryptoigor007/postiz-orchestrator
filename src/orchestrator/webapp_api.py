@@ -193,27 +193,34 @@ class WebAppAPI:
             if method == "GET" and route == "roots":
                 return 200, {
                     "roots": self._roots(),
-                    "browse_root": str(self._browse_root()),
+                    "browse_roots": [str(r) for r in self._browse_roots()],
                 }, "application/json"
             if method == "POST" and route == "roots":
                 new = data.get("roots")
                 if not isinstance(new, list):
                     return 400, {"error": "roots must be a list"}, "application/json"
-                root = self._browse_root()
+                allowed = self._browse_roots()
                 cleaned: list[str] = []
                 for p in new:
                     target = Path(str(p)).expanduser()
                     if not target.is_dir():
                         return 400, {"error": f"not a directory: {p}"}, "application/json"
                     rp = target.resolve()
-                    if rp != root and root not in rp.parents:
+                    if not any(rp == r or r in rp.parents for r in allowed):
                         return 400, {"error": f"outside allowed root: {p}"}, "application/json"
                     cleaned.append(str(rp))
                 self.db.set_setting(WATCH_ROOTS_KEY, json.dumps(cleaned))
                 return 200, {"ok": True, "roots": cleaned}, "application/json"
             if method == "GET" and route == "browse":
-                root = self._browse_root()
-                target = query.get("path") or (self._roots()[0] if self._roots() else str(root))
+                roots = self._browse_roots()
+                root = roots[0]
+                sel = query.get("root")
+                if sel:
+                    rp = Path(sel).expanduser()
+                    rp = rp.resolve() if rp.is_dir() else None
+                    if rp in roots:
+                        root = rp
+                target = query.get("path") or str(root)
                 base = Path(target).expanduser()
                 base = base.resolve() if base.is_dir() else root
                 if base != root and root not in base.parents:
@@ -229,6 +236,7 @@ class WebAppAPI:
                     "path": str(base),
                     "parent": str(base.parent) if base != root else None,
                     "root": str(root),
+                    "roots": [str(r) for r in roots],
                     "dirs": dirs,
                     "selected": str(base) in self._roots(),
                 }, "application/json"
@@ -256,13 +264,20 @@ class WebAppAPI:
                 pass
         return {"cycles": 0, "note": "no metrics yet"}
 
-    def _browse_root(self) -> Path:
+    def _browse_roots(self) -> list[Path]:
         raw = os.getenv("WEBAPP_BROWSE_ROOT", "/mnt/video")
-        try:
-            p = Path(raw).expanduser().resolve()
-        except Exception:
-            return Path("/")
-        return p if p.is_dir() else Path("/")
+        out: list[Path] = []
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                p = Path(part).expanduser().resolve()
+            except Exception:
+                continue
+            if p.is_dir():
+                out.append(p)
+        return out or [Path("/")]
 
     def _key_from_request(self, qpath: str, query: dict[str, str]) -> str:
         k = query.get("key")

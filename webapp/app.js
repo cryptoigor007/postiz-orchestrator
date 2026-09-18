@@ -115,7 +115,15 @@
            <button class="btn danger" data-act="folder-remove" data-p="${r}">Убрать</button></div>`
       )
       .join("");
-    const b = state.browse || { path: "", parent: null, dirs: [], root: "" };
+    const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
+    const rsel = (b.roots || []).length > 1
+      ? `<div class="form-row">${(b.roots || [])
+          .map(
+            (r) =>
+              `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}">${r}</button>`
+          )
+          .join("")}</div>`
+      : "";
     const dirs = (b.dirs || [])
       .map(
         (x) =>
@@ -130,6 +138,7 @@
       </div>
       <div class="panel">
         <div class="panel-header">Сетевая папка: <span class="mono" style="font-size:12px">${b.root || ""}</span></div>
+        ${rsel}
         <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
         <div class="form-row">
           <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>↑ Вверх</button>

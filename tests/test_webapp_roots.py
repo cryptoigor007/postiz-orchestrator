@@ -202,6 +202,21 @@ def test_browse_restricted_to_configured_root(env, tmp_path):
     assert code == 400
 
 
+def test_browse_multiple_roots(env, tmp_path, monkeypatch):
+    api, db, clock, cfg, watcher = env
+    second = tmp_path / "second"
+    second.mkdir()
+    monkeypatch.setenv("WEBAPP_BROWSE_ROOT", f"{tmp_path},{second}")
+    headers = {"X-Telegram-Init-Data": "dev"}
+    code, payload, _ = api.handle("GET", "/webapp/api/browse", headers, b"")
+    assert code == 200
+    assert len(payload["roots"]) == 2
+    code, payload, _ = api.handle(
+        "GET", f"/webapp/api/browse?root={second}", headers, b""
+    )
+    assert payload["path"] == str(second.resolve())
+
+
 def test_diag_endpoint(env):
     api, db, clock, cfg, watcher = env
     code, _, _ = api.handle("GET", "/webapp/diag?u=https://x/webapp/&tg=1&k=0", {}, b"")

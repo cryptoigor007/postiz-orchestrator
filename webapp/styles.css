@@ -54,7 +54,7 @@ html, body {
 .brand span { display: block; font-size: 11px; color: var(--text-3); font-weight: 500; margin-top: 1px; }
 .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav button {
-  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
   border-radius: 9px; font-size: 13px; font-weight: 510; color: var(--text); cursor: pointer;
   transition: background var(--dur-press) var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
@@ -128,7 +128,7 @@ html, body {
 .pill.info { background: rgba(10,132,255,0.14); color: var(--accent); }
 .btn {
   all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-height: 34px; padding: 7px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  min-height: 30px; padding: 5px 12px; border-radius: 9px; font-size: 13px; font-weight: 600;
   cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
   transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
 }
@@ -169,13 +169,13 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
   .sidebar { width: 100%; padding: 8px; border-right: none; border-bottom: 1px solid var(--sep); }
   .brand { padding: 6px 8px 8px; }
   .nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 0 0 auto; width: 100%; }
-  .nav button { padding: 8px 8px; gap: 8px; font-size: 12px; min-height: 38px; min-width: 0; overflow: hidden; }
+  .nav button { padding: 6px 8px; gap: 8px; font-size: 12px; min-height: 32px; min-width: 0; overflow: hidden; }
   .nav button .ico { flex: 0 0 auto; }
   .sidebar-footer { display: none; }
   .content { padding: 6px 14px calc(24px + env(safe-area-inset-bottom)); }
   .topbar { padding: calc(12px + env(safe-area-inset-top)) 14px 6px; }
   .topbar h2 { font-size: 20px; }
-  .btn { min-height: 38px; padding: 8px 14px; }
+  .btn { min-height: 32px; padding: 6px 12px; }
   .row { padding: 10px 14px; }
   .form-row { gap: 8px; }
 }

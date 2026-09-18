@@ -163,6 +163,7 @@ def test_composed_index_inlines_assets_and_key(env):
         assert b'src="app.js' not in body
         assert b"__WEBAPP_KEY__" in body
         assert b'"s3cret"' in body
+        assert b"[build b4]" in body
         code, body, _ = api.handle("GET", "/webapp/b/4/", {}, b"")
         assert b'__WEBAPP_KEY__=""' in body
     finally:

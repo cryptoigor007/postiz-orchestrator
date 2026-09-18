@@ -79,7 +79,12 @@ class WebAppAPI:
         split = urlsplit(path)
         qpath = split.path
         query = dict(parse_qsl(split.query))
-        logger.info("WEBAPP_REQ %s %s", method, path)
+        logger.info(
+            "WEBAPP_REQ %s %s ua=%s ip=%s",
+            method, path,
+            (headers.get("User-Agent") or headers.get("user-agent") or "")[:70],
+            headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or "",
+        )
         is_api = qpath.startswith("/webapp/api/")
 
         # static (never intercept /webapp/api/*)

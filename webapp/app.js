@@ -3,7 +3,7 @@
   const state = {
     view: "status",
     initData: tg?.initData || "",
-    key: readKey() || "",
+    key: window.__WEBAPP_KEY__ || readKey() || "",
     user: tg?.initDataUnsafe?.user || null,
     data: {},
   };

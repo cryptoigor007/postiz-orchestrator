@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -89,35 +90,34 @@ class WebAppAPI:
                     query.get("u"), query.get("tg"), query.get("k"),
                 )
                 return 204, b"", "text/plain"
-            if method == "GET" and (
-                qpath in ("/webapp", "/webapp/", "/webapp/index.html")
-                or qpath.startswith("/webapp/k/")
-            ):
-                return self._file("index.html", "text/html; charset=utf-8")
-            bprefix = f"/webapp/b/{WEBAPP_BUILD}"
-            if method == "GET" and qpath in (bprefix, bprefix + "/"):
-                return self._file("index.html", "text/html; charset=utf-8")
-            if method == "GET" and qpath.startswith(bprefix + "/") and ".." not in qpath:
-                bname = qpath[len(bprefix) + 1 :]
-                if bname:
-                    bctype = {
-                        "css": "text/css; charset=utf-8",
-                        "js": "application/javascript; charset=utf-8",
-                        "html": "text/html; charset=utf-8",
-                        "svg": "image/svg+xml",
-                        "png": "image/png",
-                    }.get(bname.rsplit(".", 1)[-1], "application/octet-stream")
-                    return self._file(bname, bctype)
-            if method == "GET" and qpath.startswith("/webapp/") and ".." not in qpath:
-                name = qpath[len("/webapp/") :] or "index.html"
-                ctype = {
-                    "css": "text/css; charset=utf-8",
-                    "js": "application/javascript; charset=utf-8",
-                    "html": "text/html; charset=utf-8",
-                    "svg": "image/svg+xml",
-                    "png": "image/png",
-                }.get(name.rsplit(".", 1)[-1], "application/octet-stream")
-                return self._file(name, ctype)
+            if method == "GET":
+                bprefix = f"/webapp/b/{WEBAPP_BUILD}"
+                last = qpath.rstrip("/").rsplit("/", 1)[-1]
+                is_asset = "." in last
+                is_page = (not is_asset) and (
+                    qpath in ("/webapp", "/webapp/", "/webapp/index.html")
+                    or qpath.startswith("/webapp/k/")
+                    or qpath == bprefix
+                    or qpath.startswith(bprefix + "/")
+                )
+                if is_page:
+                    return (
+                        200,
+                        self._compose_index(self._key_from_request(qpath, query)),
+                        "text/html; charset=utf-8",
+                    )
+                for prefix in (bprefix + "/", "/webapp/"):
+                    if qpath.startswith(prefix) and ".." not in qpath:
+                        name = qpath[len(prefix):]
+                        if name and "." in name.rsplit("/", 1)[-1]:
+                            ctype = {
+                                "css": "text/css; charset=utf-8",
+                                "js": "application/javascript; charset=utf-8",
+                                "html": "text/html; charset=utf-8",
+                                "svg": "image/svg+xml",
+                                "png": "image/png",
+                            }.get(name.rsplit(".", 1)[-1], "application/octet-stream")
+                            return self._file(name, ctype)
             return 404, {"error": "not found"}, "application/json"
 
         auth = self._auth(headers, query)
@@ -243,6 +243,13 @@ class WebAppAPI:
                 pass
         return {"cycles": 0, "note": "no metrics yet"}
 
+    def _key_from_request(self, qpath: str, query: dict[str, str]) -> str:
+        k = query.get("key")
+        if k:
+            return k
+        m = re.match(r"^/webapp/k/([^/]+)", qpath)
+        return m.group(1) if m else ""
+
     def _roots(self) -> list[str]:
         raw = self.db.get_setting(WATCH_ROOTS_KEY)
         if raw:
@@ -253,6 +260,25 @@ class WebAppAPI:
             except Exception:
                 logger.warning("invalid watch_roots setting")
         return []
+
+    def _compose_index(self, key: str = "") -> bytes:
+        """Self-contained page: inline CSS/JS so nothing can be cached separately."""
+        try:
+            html = (WEBAPP_DIR / "index.html").read_text(encoding="utf-8")
+            css = (WEBAPP_DIR / "styles.css").read_text(encoding="utf-8")
+            js = (WEBAPP_DIR / "app.js").read_text(encoding="utf-8")
+        except OSError:
+            return (WEBAPP_DIR / "index.html").read_bytes()
+        html = html.replace(
+            '<link rel="stylesheet" href="styles.css?v=2" />',
+            f"<style>\n{css}\n</style>",
+        )
+        html = html.replace(
+            '<script src="app.js?v=2"></script>',
+            "<script>window.__WEBAPP_KEY__=" + json.dumps(key) + ";</script>\n"
+            f"<script>\n{js}\n</script>",
+        )
+        return html.encode("utf-8")
 
     def _file(self, name: str, ctype: str) -> tuple[int, bytes, str]:
         path = WEBAPP_DIR / name

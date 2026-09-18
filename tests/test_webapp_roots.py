@@ -153,6 +153,22 @@ def test_path_key_serves_app(env):
     assert b"Orchestrator" in body
 
 
+def test_composed_index_inlines_assets_and_key(env):
+    api, db, clock, cfg, watcher = env
+    os.environ["WEBAPP_ACCESS_KEY"] = "s3cret"
+    try:
+        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/4/", {}, b"")
+        assert code == 200
+        assert ctype.startswith("text/html")
+        assert b'src="app.js' not in body
+        assert b"__WEBAPP_KEY__" in body
+        assert b'"s3cret"' in body
+        code, body, _ = api.handle("GET", "/webapp/b/4/", {}, b"")
+        assert b'__WEBAPP_KEY__=""' in body
+    finally:
+        os.environ.pop("WEBAPP_ACCESS_KEY", None)
+
+
 def test_build_path_serves_app_and_assets(env):
     api, db, clock, cfg, watcher = env
     code, body, _ = api.handle("GET", "/webapp/b/4/", {}, b"")

@@ -51,9 +51,14 @@ TELEGRAM_BOT_TOKEN=<orchestrator bot>
 - telegram.allowed_chat_ids: [7004751908, -5565497388]
 - limits.postiz_create_per_hour: 30
 
+## Connected (verified)
+- Postiz Telegram publisher bot `TELEGRAM_TOKEN` set in Postiz compose
+- Channel connected: `Postiz Test Channel`
+- integrationId: `cmu7g6kjq0001rw6wbwh46plb` → `config.yaml` `platforms.telegram.integration_id`
+
 ## Still waiting
-1. Postiz integrationId for Telegram (after connecting channel in UI)
-2. Postiz publisher bot token (`TELEGRAM_TOKEN` env in Postiz) — required for Telegram channel
+1. `POSTIZ_API_TOKEN` for the orchestrator (from Postiz UI)
+2. Orchestrator control bot token (`TELEGRAM_BOT_TOKEN`) from BotFather
 3. release URL field name after first published
 4. WATCH_ROOTS paths
 

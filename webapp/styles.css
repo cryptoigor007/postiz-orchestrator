@@ -38,7 +38,7 @@ html, body {
 }
 #app { display: flex; height: 100%; max-width: 980px; margin: 0 auto; }
 .sidebar {
-  width: 228px; background: var(--sidebar);
+  width: 228px; min-width: 0; background: var(--sidebar);
   backdrop-filter: saturate(160%) blur(24px); -webkit-backdrop-filter: saturate(160%) blur(24px);
   border-right: 1px solid var(--sep); display: flex; flex-direction: column;
   padding: calc(14px + env(safe-area-inset-top)) 10px calc(14px + env(safe-area-inset-bottom));
@@ -168,8 +168,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
   #app { flex-direction: column; }
   .sidebar { width: 100%; padding: 8px; border-right: none; border-bottom: 1px solid var(--sep); }
   .brand { padding: 6px 8px 8px; }
-  .nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; flex: 0 0 auto; }
-  .nav button { padding: 10px 12px; font-size: 12px; min-height: 44px; min-width: 0; overflow: hidden; }
+  .nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 0 0 auto; width: 100%; }
+  .nav button { padding: 10px 8px; gap: 8px; font-size: 12px; min-height: 44px; min-width: 0; overflow: hidden; }
+  .nav button .ico { flex: 0 0 auto; }
   .sidebar-footer { display: none; }
   .content { padding: 6px 14px calc(28px + env(safe-area-inset-bottom)); }
   .topbar { padding: calc(12px + env(safe-area-inset-top)) 14px 6px; }

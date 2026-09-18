@@ -45,7 +45,7 @@ def start_http_server(
                 self._send(200, get_health(), "application/json")
                 return
             if webapp_handler and path.startswith("/webapp"):
-                code, payload, ctype = webapp_handler("GET", path, self._headers_dict(), b"")
+                code, payload, ctype = webapp_handler("GET", self.path, self._headers_dict(), b"")
                 self._send(code, payload, ctype)
                 return
             self._send(404, {"error": "not found"}, "application/json")
@@ -56,7 +56,7 @@ def start_http_server(
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else b""
             if webapp_handler and path.startswith("/webapp"):
-                code, payload, ctype = webapp_handler("POST", path, self._headers_dict(), body)
+                code, payload, ctype = webapp_handler("POST", self.path, self._headers_dict(), body)
                 self._send(code, payload, ctype)
                 return
             self._send(404, {"error": "not found"}, "application/json")

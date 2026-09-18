@@ -188,6 +188,17 @@ class Database:
             (entity_type, entity_id, platform, action, details, _utc_now()),
         )
 
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        row = self.fetchone("SELECT value FROM system_state WHERE key=?", (key,))
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        self.execute(
+            "INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            (key, value, _utc_now()),
+        )
+
     def ensure_platform_states(self, platforms: list[str]) -> None:
         now = _utc_now()
         with self.conn() as c:

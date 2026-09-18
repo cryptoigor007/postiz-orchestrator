@@ -42,6 +42,7 @@
 
   const titles = {
     status: "Статус",
+    folders: "Папки с видео",
     calendar: "Календарь",
     queue: "Очередь",
     platforms: "Платформы",
@@ -56,6 +57,10 @@
     content().innerHTML = `<div class="empty">Загрузка…</div>`;
     try {
       if (v === "status") state.data = await api("/status");
+      else if (v === "folders") {
+        state.data = await api("/roots");
+        if (!state.browse) state.browse = await api("/browse");
+      }
       else if (v === "calendar") state.data = await api("/calendar");
       else if (v === "queue") state.data = await api("/queue");
       else if (v === "platforms") state.data = await api("/platforms");
@@ -92,6 +97,45 @@
         ${plats || '<div class="empty">Нет платформ</div>'}
       </div>`;
   }
+
+  function renderFolders(d) {
+    const roots = (d.roots || [])
+      .map(
+        (r) =>
+          `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${r}</div>
+           <button class="btn danger" data-act="folder-remove" data-p="${r}">Убрать</button></div>`
+      )
+      .join("");
+    const b = state.browse || { path: "", parent: null, dirs: [] };
+    const dirs = (b.dirs || [])
+      .map(
+        (x) =>
+          `<div class="row"><div class="title">📁 ${x.name}</div>
+           <button class="btn secondary" data-act="folder-open" data-p="${x.path}">Открыть</button></div>`
+      )
+      .join("");
+    content().innerHTML = `
+      <div class="panel">
+        <div class="panel-header">Папки для сканирования</div>
+        ${roots || '<div class="empty">Папки не выбраны</div>'}
+      </div>
+      <div class="panel">
+        <div class="panel-header">Обзор: <span class="mono" style="font-size:12px">${b.path || ""}</span></div>
+        <div class="form-row">
+          <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}">↑ Вверх</button>
+          <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}">Добавить эту папку</button>
+          <button class="btn success" data-act="folder-scan">Сканировать</button>
+        </div>
+        ${dirs || '<div class="empty">Нет подпапок</div>'}
+      </div>`;
+  }
+
+  async function browseTo(path) {
+    const q = path ? `?path=${encodeURIComponent(path)}` : "";
+    state.browse = await api("/browse" + q);
+    renderFolders(state.data || {});
+  }
+
 
   function renderCalendar(d) {
     const days = d.days || [];
@@ -231,6 +275,7 @@
     $("title").textContent = titles[state.view] || state.view;
     const d = state.data;
     if (state.view === "status") renderStatus(d);
+    else if (state.view === "folders") renderFolders(d);
     else if (state.view === "calendar") renderCalendar(d);
     else if (state.view === "queue") renderQueue(d);
     else if (state.view === "platforms") renderPlatforms(d);
@@ -249,6 +294,35 @@
   async function onAction(act, el) {
     try {
       if (act === "refresh") return load();
+      if (act === "folder-open") return browseTo(el.dataset.p);
+      if (act === "folder-up") return browseTo(el.dataset.p || "/");
+      if (act === "folder-add") {
+        const p = el.dataset.p;
+        if (!p) return;
+        const roots = (state.data?.roots || []).slice();
+        if (!roots.includes(p)) roots.push(p);
+        state.data = await api("/roots", {
+          method: "POST",
+          body: JSON.stringify({ roots }),
+        });
+        toast("Папка добавлена");
+        return load();
+      }
+      if (act === "folder-remove") {
+        const roots = (state.data?.roots || []).filter((r) => r !== el.dataset.p);
+        state.data = await api("/roots", {
+          method: "POST",
+          body: JSON.stringify({ roots }),
+        });
+        toast("Папка убрана");
+        return load();
+      }
+      if (act === "folder-scan") {
+        const r = await api("/scan", { method: "POST", body: "{}" });
+        const s = r.stats || {};
+        toast(`Скан: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        return;
+      }
       if (act === "pause-all") {
         await api("/pause", { method: "POST", body: "{}" });
         toast("Все платформы на паузе");

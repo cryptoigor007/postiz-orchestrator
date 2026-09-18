@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from datetime import datetime, timezone
+import json
 import logging
 import os
 
@@ -9,6 +10,8 @@ from .config import AppConfig
 from .db import Database
 
 logger = logging.getLogger(__name__)
+
+WATCH_ROOTS_KEY = "watch_roots"
 
 
 class Watcher:
@@ -20,6 +23,18 @@ class Watcher:
         self.roots = [Path(r) for r in roots]
         self.max_age_days = max_age_days
         self._size_cache: dict[str, tuple[int, int]] = {}
+
+    def effective_roots(self) -> list[Path]:
+        """Roots configured via webapp (DB) take precedence over CLI defaults."""
+        raw = self.db.get_setting(WATCH_ROOTS_KEY)
+        if raw:
+            try:
+                items = json.loads(raw)
+                if isinstance(items, list) and items:
+                    return [Path(str(x)) for x in items]
+            except Exception:
+                logger.warning("Invalid %s setting", WATCH_ROOTS_KEY)
+        return list(self.roots)
 
     def _is_fresh_enough(self, path: Path) -> bool:
         if self.max_age_days <= 0:
@@ -48,7 +63,7 @@ class Watcher:
 
     def scan(self) -> dict[str, int]:
         stats = {"long": 0, "shorts": 0, "standalone": 0}
-        for root in self.roots:
+        for root in self.effective_roots():
             if not root.exists():
                 continue
             # shortsmaker root: flat or dated folders with mp4

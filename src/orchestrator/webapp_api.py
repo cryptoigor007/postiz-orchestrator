@@ -7,7 +7,9 @@ import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlsplit
+
+from .watcher import WATCH_ROOTS_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +64,17 @@ class WebAppAPI:
 
     def handle(self, method: str, path: str, headers: dict, body: bytes) -> tuple[int, dict | bytes, str]:
         """Return (status, payload, content_type)."""
-        is_api = path.startswith("/webapp/api/")
+        split = urlsplit(path)
+        qpath = split.path
+        query = dict(parse_qsl(split.query))
+        is_api = qpath.startswith("/webapp/api/")
 
         # static (never intercept /webapp/api/*)
         if not is_api:
-            if method == "GET" and (path in ("/webapp", "/webapp/", "/webapp/index.html")):
+            if method == "GET" and (qpath in ("/webapp", "/webapp/", "/webapp/index.html")):
                 return self._file("index.html", "text/html; charset=utf-8")
-            if method == "GET" and path.startswith("/webapp/") and ".." not in path:
-                name = path[len("/webapp/") :] or "index.html"
+            if method == "GET" and qpath.startswith("/webapp/") and ".." not in qpath:
+                name = qpath[len("/webapp/") :] or "index.html"
                 ctype = {
                     "css": "text/css; charset=utf-8",
                     "js": "application/javascript; charset=utf-8",
@@ -84,7 +89,7 @@ class WebAppAPI:
         if not auth:
             return 401, {"error": "unauthorized"}, "application/json"
 
-        route = path[len("/webapp/api/") :].strip("/")
+        route = qpath[len("/webapp/api/") :].strip("/")
         data = {}
         if body:
             try:
@@ -145,6 +150,50 @@ class WebAppAPI:
                 return (200, {"ok": True}, "application/json") if ok else (
                     400, {"error": "failed"}, "application/json"
                 )
+            if method == "GET" and route == "roots":
+                return 200, {"roots": self._roots()}, "application/json"
+            if method == "POST" and route == "roots":
+                new = data.get("roots")
+                if not isinstance(new, list):
+                    return 400, {"error": "roots must be a list"}, "application/json"
+                cleaned: list[str] = []
+                for p in new:
+                    target = Path(str(p)).expanduser()
+                    if not target.is_dir():
+                        return 400, {"error": f"not a directory: {p}"}, "application/json"
+                    cleaned.append(str(target.resolve()))
+                self.db.set_setting(WATCH_ROOTS_KEY, json.dumps(cleaned))
+                return 200, {"ok": True, "roots": cleaned}, "application/json"
+            if method == "GET" and route == "browse":
+                target = query.get("path") or (self._roots()[0] if self._roots() else "/")
+                base = Path(target).expanduser()
+                if not base.is_dir():
+                    return 400, {"error": "not a directory"}, "application/json"
+                resolved = base.resolve()
+                dirs = []
+                try:
+                    for child in sorted(resolved.iterdir()):
+                        if child.is_dir() and not child.name.startswith("."):
+                            dirs.append({"name": child.name, "path": str(child.resolve())})
+                except PermissionError:
+                    return 403, {"error": "permission denied"}, "application/json"
+                parent = str(resolved.parent) if resolved.parent != resolved else None
+                return 200, {
+                    "path": str(resolved),
+                    "parent": parent,
+                    "dirs": dirs,
+                    "selected": str(resolved) in self._roots(),
+                }, "application/json"
+            if method == "POST" and route == "scan":
+                watcher = self.comps.get("watcher")
+                if not watcher:
+                    return 500, {"error": "watcher unavailable"}, "application/json"
+                stats = watcher.scan()
+                return 200, {
+                    "ok": True,
+                    "stats": stats,
+                    "roots": [str(r) for r in watcher.effective_roots()],
+                }, "application/json"
             return 404, {"error": "unknown route"}, "application/json"
         except Exception as e:
             logger.exception("webapp api")
@@ -158,6 +207,17 @@ class WebAppAPI:
             except Exception:
                 pass
         return {"cycles": 0, "note": "no metrics yet"}
+
+    def _roots(self) -> list[str]:
+        raw = self.db.get_setting(WATCH_ROOTS_KEY)
+        if raw:
+            try:
+                items = json.loads(raw)
+                if isinstance(items, list):
+                    return [str(x) for x in items]
+            except Exception:
+                logger.warning("invalid watch_roots setting")
+        return []
 
     def _file(self, name: str, ctype: str) -> tuple[int, bytes, str]:
         path = WEBAPP_DIR / name

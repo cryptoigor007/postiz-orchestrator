@@ -92,8 +92,11 @@ class Publisher:
             return None
 
         # 3. Upload
+        pcfg = self.cfg.platforms.get(platform)
+        if pcfg and getattr(pcfg, "integration_id", None):
+            content = {**content, "integration_id": pcfg.integration_id}
         try:
-            media_id = self.postiz.upload_media(media_path, platform)
+            media = self.postiz.upload_media(media_path, platform)
         except Exception as e:
             self.db.execute(
                 "UPDATE entity_platform_status SET status='error', last_error=? "
@@ -114,7 +117,7 @@ class Publisher:
             try:
                 post = self.postiz.create_post(
                     platform=platform,
-                    media_id=media_id,
+                    media=media,
                     content=content,
                     scheduled_for=scheduled_for,
                 )

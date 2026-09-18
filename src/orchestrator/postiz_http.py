@@ -6,9 +6,10 @@ import os
 
 import httpx
 
-from .postiz import PostizPost
+from .postiz import MediaRef, PostizPost
 
 logger = logging.getLogger(__name__)
+
 
 def _request_with_retry(client: httpx.Client, method: str, url: str, retries: int = 3, **kwargs):
     last = None
@@ -25,7 +26,6 @@ def _request_with_retry(client: httpx.Client, method: str, url: str, retries: in
     raise last
 
 
-
 def _first(data: dict, *keys: str, default=None):
     for k in keys:
         if k in data and data[k] is not None:
@@ -33,68 +33,152 @@ def _first(data: dict, *keys: str, default=None):
     return default
 
 
-class HttpPostizClient:
-    """Real Postiz API client with flexible JSON fields and path overrides."""
+def _upload_path(data: dict) -> str | None:
+    return _first(data, "path", "url")
 
-    def __init__(self, base_url: str | None = None, token: str | None = None, timeout: float = 60.0):
+
+class HttpPostizClient:
+    """
+    Postiz public API v1 (confirmed):
+      Authorization: <api_key>   # NO "Bearer"
+      POST   /public/v1/upload
+      POST   /public/v1/posts
+      GET    /public/v1/posts?startDate=&endDate=
+      DELETE /public/v1/posts/{id}
+      PUT    /public/v1/posts/{id}/status
+      PUT    /public/v1/posts/{id}/release-id
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        token: str | None = None,
+        timeout: float = 60.0,
+        transport: httpx.BaseTransport | None = None,
+        verify: bool | None = None,
+    ):
         self.base_url = (base_url or os.getenv("POSTIZ_BASE_URL", "http://localhost:5000")).rstrip("/")
         self.token = token or os.getenv("POSTIZ_API_TOKEN", "")
-        self.path_upload = os.getenv("POSTIZ_PATH_UPLOAD", "/api/media/upload")
-        self.path_posts = os.getenv("POSTIZ_PATH_POSTS", "/api/posts")
+        self.path_upload = os.getenv("POSTIZ_PATH_UPLOAD", "/public/v1/upload")
+        self.path_posts = os.getenv("POSTIZ_PATH_POSTS", "/public/v1/posts")
+        if verify is None:
+            verify = os.getenv("POSTIZ_VERIFY_TLS", "0").strip().lower() in (
+                "1", "true", "yes", "on",
+            )
+        self.verify_tls = verify
+        # Real Postiz: Authorization is raw key, not Bearer
+        auth_style = os.getenv("POSTIZ_AUTH_STYLE", "raw").lower()  # raw | bearer
+        if self.token:
+            header = f"Bearer {self.token}" if auth_style == "bearer" else self.token
+            headers = {"Authorization": header}
+        else:
+            headers = {}
         self._client = httpx.Client(
             base_url=self.base_url,
-            headers={"Authorization": f"Bearer {self.token}"} if self.token else {},
+            headers=headers,
             timeout=timeout,
+            verify=verify,
+            transport=transport,
         )
         self._orphan_media: list[str] = []
+        # optional default integration from env
+        self.default_integration_id = os.getenv("POSTIZ_INTEGRATION_ID", "").strip()
 
     def close(self) -> None:
         self._client.close()
 
-    def upload_media(self, path: str, platform: str) -> str:
+    def upload_media(self, path: str, platform: str) -> MediaRef:
         with open(path, "rb") as f:
-            r = _request_with_retry(self._client, "POST", self.path_upload,
-                files={"file": (path.split("/")[-1], f)},
-                data={"platform": platform},
+            r = _request_with_retry(
+                self._client, "POST", self.path_upload,
+                files={"file": (os.path.basename(path), f)},
             )
         r.raise_for_status()
         data = r.json()
-        mid = _first(data, "id", "mediaId", "media_id", "path")
+        mid = _first(data, "id", "mediaId", "media_id")
         if not mid:
             raise RuntimeError(f"upload: no media id in {data}")
-        return str(mid)
+        mpath = _upload_path(data)
+        if not mpath:
+            raise RuntimeError(f"upload: no media path in {data}")
+        return MediaRef(id=str(mid), path=str(mpath))
 
-    def create_post(self, platform: str, media_id: str, content: dict[str, Any],
-                    scheduled_for: datetime | None = None) -> PostizPost:
-        body: dict[str, Any] = {
-            "platform": platform,
-            "mediaId": media_id,
-            "media_id": media_id,
-            "title": content.get("title", ""),
-            "description": content.get("description", ""),
-            "hashtags": content.get("hashtags", ""),
-        }
+    def create_post(
+        self,
+        platform: str,
+        media: MediaRef | str,
+        content: dict[str, Any],
+        scheduled_for: datetime | None = None,
+    ) -> PostizPost:
+        media_ref = media if isinstance(media, MediaRef) else MediaRef(id=str(media), path="")
+        integration_id = (
+            content.get("integration_id")
+            or content.get("integrationId")
+            or self.default_integration_id
+        )
+        if not integration_id:
+            raise RuntimeError(
+                "Postiz requires integrationId — set platforms.<name>.integration_id "
+                "or POSTIZ_INTEGRATION_ID"
+            )
+
+        message = content.get("description") or content.get("title") or ""
+        hashtags = content.get("hashtags")
+        if hashtags:
+            tags = hashtags if isinstance(hashtags, str) else " ".join(hashtags)
+            message = f"{message} {tags}".strip()
+
+        image = []
+        if media_ref.id:
+            image.append({"id": media_ref.id, "path": media_ref.path})
+
+        # Postiz CreatePostDto: { type, shortLink, date, tags, posts:[{integration,value,settings}] }
         if scheduled_for:
             if scheduled_for.tzinfo is None:
                 scheduled_for = scheduled_for.replace(tzinfo=timezone.utc)
-            iso = scheduled_for.isoformat()
-            body["scheduledFor"] = iso
-            body["scheduled_for"] = iso
+            post_type = content.get("post_type", "schedule")
+            date = scheduled_for.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            post_type = content.get("post_type", "now")
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        entry: dict[str, Any] = {
+            "integration": {"id": integration_id},
+            "value": [{"content": message, "image": image}],
+            "settings": content.get("settings") or {},
+        }
+        if content.get("group"):
+            entry["group"] = content["group"]
+
+        body: dict[str, Any] = {
+            "type": post_type,
+            "shortLink": False,
+            "date": date,
+            "tags": [],
+            "posts": [entry],
+        }
+
         try:
             r = _request_with_retry(self._client, "POST", self.path_posts, json=body)
             r.raise_for_status()
         except Exception:
-            self._orphan_media.append(media_id)
-            logger.error("CREATE failed, orphan media_id=%s", media_id)
+            self._orphan_media.append(media_ref.id)
+            logger.error("CREATE failed, orphan media_id=%s", media_ref.id)
             raise
+
         data = r.json()
+        # response may be object or list
+        if isinstance(data, list) and data:
+            data = data[0]
         pid = _first(data, "id", "postId", "post_id")
         if not pid:
             raise RuntimeError(f"create: no post id in {data}")
         return PostizPost(
-            id=str(pid), platform=platform, scheduled_for=scheduled_for,
+            id=str(pid),
+            platform=platform,
+            scheduled_for=scheduled_for,
             status=_first(data, "status", default="scheduled"),
-            release_url=_first(data, "releaseUrl", "release_url", "url"),
+            release_url=_first(data, "releaseUrl", "releaseURL", "release_url", "url", "releaseId"),
             content=content,
         )
 
@@ -103,26 +187,48 @@ class HttpPostizClient:
         if r.status_code not in (200, 204, 404):
             r.raise_for_status()
 
+    def set_status(self, post_id: str, status: str) -> None:
+        r = self._client.put(f"{self.path_posts}/{post_id}/status", json={"status": status})
+        if r.status_code not in (200, 204):
+            r.raise_for_status()
+
+    def set_release_id(self, post_id: str, release_id: str) -> None:
+        r = self._client.put(
+            f"{self.path_posts}/{post_id}/release-id",
+            json={"releaseId": release_id, "release_id": release_id},
+        )
+        if r.status_code not in (200, 204):
+            r.raise_for_status()
+
     def get_post(self, post_id: str) -> PostizPost | None:
+        # list endpoint may be the only way until single-get is confirmed
         r = self._client.get(f"{self.path_posts}/{post_id}")
         if r.status_code == 404:
             return None
-        r.raise_for_status()
+        if r.status_code >= 400:
+            # fallback: not supported
+            return None
         data = r.json()
-        sched = _first(data, "scheduledFor", "scheduled_for")
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        sched = _first(data, "scheduledFor", "scheduled_for", "date")
         return PostizPost(
-            id=str(_first(data, "id", "postId")),
+            id=str(_first(data, "id", "postId") or post_id),
             platform=_first(data, "platform", default=""),
-            scheduled_for=datetime.fromisoformat(sched) if sched else None,
+            scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
             status=_first(data, "status", default="unknown"),
-            release_url=_first(data, "releaseUrl", "release_url", "url"),
+            release_url=_first(data, "releaseUrl", "release_url", "url", "releaseId"),
             content=data.get("content"),
         )
 
     def list_scheduled(self, platform: str | None = None) -> list[PostizPost]:
-        params: dict[str, str] = {"status": "scheduled"}
-        if platform:
-            params["platform"] = platform
+        # API: GET /public/v1/posts?startDate=&endDate=
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        params = {
+            "startDate": (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDate": (now + timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
         r = self._client.get(self.path_posts, params=params)
         r.raise_for_status()
         payload = r.json()
@@ -131,13 +237,16 @@ class HttpPostizClient:
         )
         result = []
         for data in items:
-            sched = _first(data, "scheduledFor", "scheduled_for")
+            sched = _first(data, "scheduledFor", "scheduled_for", "date")
+            st = _first(data, "status", default="scheduled")
+            if st and str(st).lower() not in ("scheduled", "queue", "pending", "draft", "published"):
+                continue
             result.append(PostizPost(
                 id=str(_first(data, "id", "postId")),
-                platform=_first(data, "platform", default=""),
-                scheduled_for=datetime.fromisoformat(sched) if sched else None,
-                status=_first(data, "status", default="scheduled"),
-                release_url=_first(data, "releaseUrl", "release_url", "url"),
+                platform=_first(data, "platform", default=platform or ""),
+                scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
+                status=str(st),
+                release_url=_first(data, "releaseUrl", "release_url", "url", "releaseId"),
             ))
         return result
 

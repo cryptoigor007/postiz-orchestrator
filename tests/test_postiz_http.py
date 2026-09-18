@@ -1,0 +1,131 @@
+from __future__ import annotations
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import httpx
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from orchestrator.postiz import MediaRef
+from orchestrator.postiz_http import HttpPostizClient
+
+
+def _client(handler, token="pos_test", base="https://192-168-100-60.sslip.io"):
+    return HttpPostizClient(
+        base_url=base, token=token, transport=httpx.MockTransport(handler)
+    )
+
+
+def test_create_post_body_matches_postiz_dto():
+    captured = {}
+
+    def handler(request):
+        captured["method"] = request.method
+        captured["url"] = str(request.url)
+        captured["auth"] = request.headers.get("authorization")
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json=[{"postId": "abc-123", "integration": "int-1"}])
+
+    client = _client(handler)
+    scheduled_for = datetime(2026, 9, 19, 15, 0, tzinfo=timezone.utc)
+    post = client.create_post(
+        platform="telegram",
+        media=MediaRef(id="media-1", path="https://host/uploads/a.mp4"),
+        content={"description": "Hello", "integration_id": "int-1"},
+        scheduled_for=scheduled_for,
+    )
+
+    body = captured["json"]
+    assert captured["method"] == "POST"
+    assert captured["url"].endswith("/public/v1/posts")
+    assert captured["auth"] == "pos_test"
+
+    assert body["type"] == "schedule"
+    assert body["shortLink"] is False
+    assert body["tags"] == []
+    assert body["date"] == "2026-09-19T15:00:00Z"
+
+    entry = body["posts"][0]
+    assert entry["integration"]["id"] == "int-1"
+    assert entry["value"][0]["content"] == "Hello"
+    assert entry["value"][0]["image"] == [
+        {"id": "media-1", "path": "https://host/uploads/a.mp4"}
+    ]
+    assert entry["settings"] == {}
+
+    assert post.id == "abc-123"
+
+
+def test_create_post_now_when_no_schedule():
+    captured = {}
+
+    def handler(request):
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json=[{"postId": "p-now"}])
+
+    client = _client(handler)
+    client.create_post(
+        platform="telegram",
+        media=MediaRef(id="m1", path="https://host/u/a.mp4"),
+        content={"description": "now", "integration_id": "int-1"},
+        scheduled_for=None,
+    )
+    assert captured["json"]["type"] == "now"
+    assert "date" in captured["json"]
+
+
+def test_create_post_requires_integration_id():
+    client = _client(lambda r: httpx.Response(200, json=[]))
+    with pytest.raises(RuntimeError):
+        client.create_post(
+            platform="telegram",
+            media=MediaRef(id="m1", path="https://host/u/a.mp4"),
+            content={"description": "no integration"},
+            scheduled_for=None,
+        )
+
+
+def test_upload_media_returns_id_and_path(tmp_path):
+    media_file = tmp_path / "clip.mp4"
+    media_file.write_bytes(b"fake")
+
+    def handler(request):
+        assert request.method == "POST"
+        assert request.url.path.endswith("/public/v1/upload")
+        return httpx.Response(
+            200,
+            json={
+                "id": "m-42",
+                "path": "https://host/uploads/clip.mp4",
+                "name": "clip.mp4",
+            },
+        )
+
+    client = _client(handler)
+    ref = client.upload_media(str(media_file), "telegram")
+    assert isinstance(ref, MediaRef)
+    assert ref.id == "m-42"
+    assert ref.path == "https://host/uploads/clip.mp4"
+
+
+def test_upload_media_requires_path_in_response(tmp_path):
+    media_file = tmp_path / "clip.mp4"
+    media_file.write_bytes(b"fake")
+    client = _client(lambda r: httpx.Response(200, json={"id": "m-1"}))
+    with pytest.raises(RuntimeError):
+        client.upload_media(str(media_file), "telegram")
+
+
+def test_tls_verification_off_by_default(monkeypatch):
+    monkeypatch.delenv("POSTIZ_VERIFY_TLS", raising=False)
+    client = _client(lambda r: httpx.Response(200, json={}))
+    assert client.verify_tls is False
+
+
+def test_tls_verification_can_be_enabled(monkeypatch):
+    monkeypatch.setenv("POSTIZ_VERIFY_TLS", "1")
+    client = _client(lambda r: httpx.Response(200, json={}))
+    assert client.verify_tls is True

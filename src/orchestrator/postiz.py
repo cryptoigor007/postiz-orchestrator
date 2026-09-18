@@ -9,6 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class MediaRef:
+    """Postiz media reference: Postiz needs both the media id and its path."""
+    id: str
+    path: str
+
+
+@dataclass
 class PostizPost:
     id: str
     platform: str
@@ -19,11 +26,11 @@ class PostizPost:
 
 
 class PostizClient(Protocol):
-    def upload_media(self, path: str, platform: str) -> str:
-        """Upload media, return media_id."""
+    def upload_media(self, path: str, platform: str) -> MediaRef:
+        """Upload media, return its id + path."""
         ...
 
-    def create_post(self, platform: str, media_id: str, content: dict[str, Any],
+    def create_post(self, platform: str, media: MediaRef, content: dict[str, Any],
                     scheduled_for: datetime | None = None) -> PostizPost:
         ...
 
@@ -48,15 +55,16 @@ class MockPostizClient:
         self.fail_upload = False
         self._orphan_media: list[str] = []
 
-    def upload_media(self, path: str, platform: str) -> str:
+    def upload_media(self, path: str, platform: str) -> MediaRef:
         if self.fail_upload:
             raise RuntimeError("upload_failed")
         mid = hashlib.md5(f"{path}:{platform}".encode()).hexdigest()[:12]
         self.media[mid] = path
-        return mid
+        return MediaRef(id=mid, path=path)
 
-    def create_post(self, platform: str, media_id: str, content: dict[str, Any],
+    def create_post(self, platform: str, media: MediaRef | str, content: dict[str, Any],
                     scheduled_for: datetime | None = None) -> PostizPost:
+        media_id = media.id if isinstance(media, MediaRef) else str(media)
         if self.fail_create:
             self._orphan_media.append(media_id)
             raise RuntimeError("create_failed")

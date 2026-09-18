@@ -17,8 +17,10 @@ python3 -m orchestrator.main --daemon --health-port 8080
 ```
 POSTIZ_BASE_URL=
 POSTIZ_API_TOKEN=
-POSTIZ_PATH_UPLOAD=/api/media/upload
-POSTIZ_PATH_POSTS=/api/posts
+POSTIZ_AUTH_STYLE=raw
+POSTIZ_PATH_UPLOAD=/public/v1/upload
+POSTIZ_PATH_POSTS=/public/v1/posts
+POSTIZ_VERIFY_TLS=0
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_MODE=poll
 WEBAPP_PUBLIC_URL=https://host/webapp

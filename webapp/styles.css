@@ -168,8 +168,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
   #app { flex-direction: column; }
   .sidebar { width: 100%; padding: 8px; border-right: none; border-bottom: 1px solid var(--sep); }
   .brand { padding: 6px 8px 8px; }
-  .nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
-  .nav button { padding: 10px 12px; font-size: 12px; min-height: 44px; }
+  .nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; flex: 0 0 auto; }
+  .nav button { padding: 10px 12px; font-size: 12px; min-height: 44px; min-width: 0; overflow: hidden; }
   .sidebar-footer { display: none; }
   .content { padding: 6px 14px calc(28px + env(safe-area-inset-bottom)); }
   .topbar { padding: calc(12px + env(safe-area-inset-top)) 14px 6px; }

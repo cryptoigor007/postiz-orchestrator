@@ -47,7 +47,17 @@ class WebAppAPI:
         self.db = comps["db"]
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-    def _auth(self, headers: dict[str, str]) -> dict[str, Any] | None:
+    def _auth(self, headers: dict[str, str], query: dict[str, str] | None = None) -> dict[str, Any] | None:
+        access_key = os.getenv("WEBAPP_ACCESS_KEY", "").strip()
+        if access_key:
+            provided = (
+                headers.get("X-Webapp-Key")
+                or headers.get("x-webapp-key")
+                or (query or {}).get("key")
+                or ""
+            )
+            if provided and hmac.compare_digest(provided, access_key):
+                return {"user": {"id": "access-key"}, "access_key": True}
         init = headers.get("X-Telegram-Init-Data") or headers.get("x-telegram-init-data") or ""
         data = validate_init_data(init, self.token)
         if not data:
@@ -85,7 +95,7 @@ class WebAppAPI:
                 return self._file(name, ctype)
             return 404, {"error": "not found"}, "application/json"
 
-        auth = self._auth(headers)
+        auth = self._auth(headers, query)
         if not auth:
             return 401, {"error": "unauthorized"}, "application/json"
 

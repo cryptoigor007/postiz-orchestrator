@@ -3,6 +3,7 @@
   const state = {
     view: "status",
     initData: tg?.initData || "",
+    key: new URLSearchParams(location.search).get("key") || "",
     user: tg?.initDataUnsafe?.user || null,
     data: {},
   };
@@ -21,6 +22,7 @@
     const headers = {
       "Content-Type": "application/json",
       "X-Telegram-Init-Data": state.initData,
+      ...(state.key ? { "X-Webapp-Key": state.key } : {}),
       ...(opts.headers || {}),
     };
     return fetch(`/webapp/api${path}`, { ...opts, headers }).then(async (r) => {
@@ -393,9 +395,18 @@
       } catch (_) {}
     }
 
+    // Fallback: some clients expose initData only via the URL hash
+    if (!state.initData) {
+      const h = (location.hash || "").replace(/^#/, "");
+      if (h) {
+        const hd = new URLSearchParams(h).get("tgWebAppData");
+        if (hd) state.initData = hd;
+      }
+    }
+
     // Dev fallback: allow ?dev=1 without Telegram
     const dev = new URLSearchParams(location.search).get("dev") === "1";
-    if (!state.initData && !dev) {
+    if (!state.initData && !dev && !state.key) {
       $("gate").hidden = false;
       $("app").hidden = true;
       return;

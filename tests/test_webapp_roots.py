@@ -141,3 +141,21 @@ def test_api_scan_registers(env, tmp_path):
     assert code == 200
     assert total == 1
     assert db.fetchone("SELECT id FROM long_videos")
+
+
+def test_access_key_auth(env):
+    api, db, clock, cfg, watcher = env
+    os.environ.pop("WEBAPP_DEV", None)
+    os.environ["WEBAPP_ACCESS_KEY"] = "s3cret"
+    try:
+        code, _, _ = api.handle("GET", "/webapp/api/status", {"X-Webapp-Key": "s3cret"}, b"")
+        assert code == 200
+        code, _, _ = api.handle("GET", "/webapp/api/status", {"X-Webapp-Key": "nope"}, b"")
+        assert code == 401
+        code, _, _ = api.handle("GET", "/webapp/api/status?key=s3cret", {}, b"")
+        assert code == 200
+        code, _, _ = api.handle("GET", "/webapp/api/status", {}, b"")
+        assert code == 401
+    finally:
+        os.environ.pop("WEBAPP_ACCESS_KEY", None)
+        os.environ["WEBAPP_DEV"] = "1"

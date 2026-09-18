@@ -129,9 +129,9 @@ def test_warmup_after_long_pause(env):
 
 def test_tg_commands_bundle(env):
     tg = env["tg"]
-    r1 = tg.handle_update(1, "/status")
-    r2 = tg.handle_update(1, "/platforms")
-    r3 = tg.handle_update(1, "/tail")
+    r1 = tg.handle_update(7004751908, "/status")
+    r2 = tg.handle_update(7004751908, "/platforms")
+    r3 = tg.handle_update(7004751908, "/tail")
     assert r1 and r2 and r3
     assert "Access denied" not in r1
 
@@ -149,7 +149,7 @@ def test_force_link_command(env):
         "VALUES ('long_video', ?, 'youtube', 'published')",
         (vid,),
     )
-    resp = tg.handle_update(1, f"/force_link_update {vid} youtube https://youtu.be/forced")
+    resp = tg.handle_update(7004751908, f"/force_link_update {vid} youtube https://youtu.be/forced")
     assert resp is not None
     assert "OK" in resp or "ok" in resp.lower() or "Failed" not in resp
     row = db.fetchone(

@@ -55,20 +55,18 @@ def test_soft_enter_asks(env):
 
 def test_tg_whitelist(env):
     db, cfg, clock, tg, tail, link = env
-    assert tg.is_allowed(111)
-    assert tg._owner_chat_id == 111
+    # config.yaml has explicit allowed_chat_ids
+    assert tg.is_allowed(7004751908)
     assert not tg.is_allowed(999)
+    assert not tg.is_allowed(111)
 
 
 def test_tg_commands(env):
     db, cfg, clock, tg, tail, link = env
-    comps = {
-        "db": db, "cfg": cfg, "safety": None, "scheduler": None, "clock": clock,
-    }
-    # minimal handlers already need safety/scheduler — just test access
-    resp = tg.handle_update(111, "/status")
-    # status handler not registered yet in this isolated test
+    resp = tg.handle_update(7004751908, "/status")
+    # status handler not registered in this isolated test
     assert resp is None or "Unknown" in (resp or "") or "Status" in (resp or "") or "No entities" in (resp or "")
+    assert tg.handle_update(111, "/status") == "Access denied"
 
 
 def test_overflow(env, tmp_path):

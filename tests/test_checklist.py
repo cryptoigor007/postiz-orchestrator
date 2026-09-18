@@ -130,7 +130,7 @@ def test_refresh_thematic_with_url(env):
 
 def test_tg_status_command(env):
     db, cfg, clock, postiz, safety, pub, sched, tg, link, sync = env
-    resp = tg.handle_update(42, "/status")
+    resp = tg.handle_update(7004751908, "/status")
     assert resp is not None
     assert "Status" in resp or "No entities" in resp or "entities" in resp.lower() or "youtube" in resp.lower() or resp == "No entities"
 

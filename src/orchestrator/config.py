@@ -29,10 +29,11 @@ class ScheduleStandalone(BaseModel):
 
 
 class PlatformCfg(BaseModel):
-    video_variant: str
-    audio_profile: str
+    video_variant: str = "wide"
+    audio_profile: str = "default"
     enabled: bool = True
     daily_limit: int = 5
+    integration_id: str = ""  # Postiz integrationId (required for live create)
 
 
 class TailCfg(BaseModel):
@@ -45,7 +46,7 @@ class TailCfg(BaseModel):
 
 class LimitsCfg(BaseModel):
     max_posts_per_distribute: int = 12
-    postiz_create_per_hour: int = 60
+    postiz_create_per_hour: int = 30
     max_shorts_per_long_video: int = 8
 
 

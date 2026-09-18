@@ -104,4 +104,5 @@ def test_tg_queue_push():
 
 def test_stage_config_loads():
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.stage.yaml")
-    assert cfg.platforms["youtube"].enabled is True
+    assert cfg.platforms["telegram"].enabled is True
+    assert cfg.platforms["youtube"].enabled is False

@@ -167,3 +167,5 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
   .topbar { padding: 12px 14px 6px; }
   .topbar h2 { font-size: 20px; }
 }
+
+[hidden] { display: none !important; }

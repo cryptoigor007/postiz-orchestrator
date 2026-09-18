@@ -441,13 +441,33 @@
 
   function boot() {
     if (tg) {
-      tg.ready();
-      tg.expand();
+      try { tg.ready(); } catch (_) {}
+      try { tg.expand(); } catch (_) {}
+      // full height: use Telegram's stable viewport height when available
+      try {
+        if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+      } catch (_) {}
+      try {
+        if (tg.requestFullscreen) tg.requestFullscreen();
+      } catch (_) {}
       try {
         tg.setHeaderColor("secondary_bg_color");
         tg.setBackgroundColor("bg_color");
       } catch (_) {}
     }
+
+    function applyViewportHeight() {
+      const h =
+        (tg && (tg.viewportStableHeight || tg.viewportHeight)) ||
+        window.innerHeight;
+      document.documentElement.style.setProperty("--wa-h", h + "px");
+    }
+    applyViewportHeight();
+    try {
+      if (tg && tg.onEvent) tg.onEvent("viewportChanged", applyViewportHeight);
+    } catch (_) {}
+    window.addEventListener("resize", applyViewportHeight);
+    window.addEventListener("orientationchange", () => setTimeout(applyViewportHeight, 200));
 
     // Fallback: some clients expose initData only via the URL hash
     if (!state.initData) {

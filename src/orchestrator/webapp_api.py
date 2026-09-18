@@ -14,6 +14,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
+WEBAPP_BUILD = "3"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -92,6 +93,20 @@ class WebAppAPI:
                 or qpath.startswith("/webapp/k/")
             ):
                 return self._file("index.html", "text/html; charset=utf-8")
+            bprefix = f"/webapp/b/{WEBAPP_BUILD}"
+            if method == "GET" and qpath in (bprefix, bprefix + "/"):
+                return self._file("index.html", "text/html; charset=utf-8")
+            if method == "GET" and qpath.startswith(bprefix + "/") and ".." not in qpath:
+                bname = qpath[len(bprefix) + 1 :]
+                if bname:
+                    bctype = {
+                        "css": "text/css; charset=utf-8",
+                        "js": "application/javascript; charset=utf-8",
+                        "html": "text/html; charset=utf-8",
+                        "svg": "image/svg+xml",
+                        "png": "image/png",
+                    }.get(bname.rsplit(".", 1)[-1], "application/octet-stream")
+                    return self._file(bname, bctype)
             if method == "GET" and qpath.startswith("/webapp/") and ".." not in qpath:
                 name = qpath[len("/webapp/") :] or "index.html"
                 ctype = {

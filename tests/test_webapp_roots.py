@@ -153,6 +153,16 @@ def test_path_key_serves_app(env):
     assert b"Orchestrator" in body
 
 
+def test_build_path_serves_app_and_assets(env):
+    api, db, clock, cfg, watcher = env
+    code, body, _ = api.handle("GET", "/webapp/b/3/", {}, b"")
+    assert code == 200
+    assert b"Orchestrator" in body
+    code, body, ctype = api.handle("GET", "/webapp/b/3/app.js", {}, b"")
+    assert code == 200
+    assert ctype.startswith("application/javascript")
+
+
 def test_diag_endpoint(env):
     api, db, clock, cfg, watcher = env
     code, _, _ = api.handle("GET", "/webapp/diag?u=https://x/webapp/&tg=1&k=0", {}, b"")

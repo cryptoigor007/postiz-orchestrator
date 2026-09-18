@@ -191,38 +191,46 @@ class WebAppAPI:
                     400, {"error": "failed"}, "application/json"
                 )
             if method == "GET" and route == "roots":
-                return 200, {"roots": self._roots()}, "application/json"
+                return 200, {
+                    "roots": self._roots(),
+                    "browse_root": str(self._browse_root()),
+                }, "application/json"
             if method == "POST" and route == "roots":
                 new = data.get("roots")
                 if not isinstance(new, list):
                     return 400, {"error": "roots must be a list"}, "application/json"
+                root = self._browse_root()
                 cleaned: list[str] = []
                 for p in new:
                     target = Path(str(p)).expanduser()
                     if not target.is_dir():
                         return 400, {"error": f"not a directory: {p}"}, "application/json"
-                    cleaned.append(str(target.resolve()))
+                    rp = target.resolve()
+                    if rp != root and root not in rp.parents:
+                        return 400, {"error": f"outside allowed root: {p}"}, "application/json"
+                    cleaned.append(str(rp))
                 self.db.set_setting(WATCH_ROOTS_KEY, json.dumps(cleaned))
                 return 200, {"ok": True, "roots": cleaned}, "application/json"
             if method == "GET" and route == "browse":
-                target = query.get("path") or (self._roots()[0] if self._roots() else "/")
+                root = self._browse_root()
+                target = query.get("path") or (self._roots()[0] if self._roots() else str(root))
                 base = Path(target).expanduser()
-                if not base.is_dir():
-                    return 400, {"error": "not a directory"}, "application/json"
-                resolved = base.resolve()
+                base = base.resolve() if base.is_dir() else root
+                if base != root and root not in base.parents:
+                    base = root
                 dirs = []
                 try:
-                    for child in sorted(resolved.iterdir()):
+                    for child in sorted(base.iterdir()):
                         if child.is_dir() and not child.name.startswith("."):
                             dirs.append({"name": child.name, "path": str(child.resolve())})
                 except PermissionError:
                     return 403, {"error": "permission denied"}, "application/json"
-                parent = str(resolved.parent) if resolved.parent != resolved else None
                 return 200, {
-                    "path": str(resolved),
-                    "parent": parent,
+                    "path": str(base),
+                    "parent": str(base.parent) if base != root else None,
+                    "root": str(root),
                     "dirs": dirs,
-                    "selected": str(resolved) in self._roots(),
+                    "selected": str(base) in self._roots(),
                 }, "application/json"
             if method == "POST" and route == "scan":
                 watcher = self.comps.get("watcher")
@@ -247,6 +255,14 @@ class WebAppAPI:
             except Exception:
                 pass
         return {"cycles": 0, "note": "no metrics yet"}
+
+    def _browse_root(self) -> Path:
+        raw = os.getenv("WEBAPP_BROWSE_ROOT", "/mnt/video")
+        try:
+            p = Path(raw).expanduser().resolve()
+        except Exception:
+            return Path("/")
+        return p if p.is_dir() else Path("/")
 
     def _key_from_request(self, qpath: str, query: dict[str, str]) -> str:
         k = query.get("key")

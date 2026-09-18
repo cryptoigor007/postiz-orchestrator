@@ -56,6 +56,7 @@ def test_watcher_uses_db_roots(tmp_path):
 @pytest.fixture
 def env(tmp_path):
     os.environ["WEBAPP_DEV"] = "1"
+    os.environ["WEBAPP_BROWSE_ROOT"] = str(tmp_path)
     db = Database(tmp_path / "wa.sqlite")
     cfg = load_config(ROOT / "config.yaml")
     db.ensure_platform_states(list(cfg.platforms.keys()))
@@ -178,6 +179,27 @@ def test_build_path_serves_app_and_assets(env):
     code, body, ctype = api.handle("GET", "/webapp/b/5/app.js", {}, b"")
     assert code == 200
     assert ctype.startswith("application/javascript")
+
+
+def test_browse_restricted_to_configured_root(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    (tmp_path / "net" / "sub").mkdir(parents=True)
+    code, payload, _ = api.handle("GET", "/webapp/api/browse", headers, b"")
+    assert code == 200
+    assert payload["path"] == str(tmp_path.resolve())
+    assert payload["parent"] is None
+    # cannot escape the configured root
+    code, payload, _ = api.handle(
+        "GET", f"/webapp/api/browse?path={tmp_path.parent}", headers, b""
+    )
+    assert payload["path"] == str(tmp_path.resolve())
+    # roots outside the configured root are rejected
+    code, _, _ = api.handle(
+        "POST", "/webapp/api/roots", headers,
+        json.dumps({"roots": [str(tmp_path.parent)]}).encode(),
+    )
+    assert code == 400
 
 
 def test_diag_endpoint(env):

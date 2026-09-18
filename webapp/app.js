@@ -115,7 +115,7 @@
            <button class="btn danger" data-act="folder-remove" data-p="${r}">Убрать</button></div>`
       )
       .join("");
-    const b = state.browse || { path: "", parent: null, dirs: [] };
+    const b = state.browse || { path: "", parent: null, dirs: [], root: "" };
     const dirs = (b.dirs || [])
       .map(
         (x) =>
@@ -129,9 +129,10 @@
         ${roots || '<div class="empty">Папки не выбраны</div>'}
       </div>
       <div class="panel">
-        <div class="panel-header">Обзор: <span class="mono" style="font-size:12px">${b.path || ""}</span></div>
+        <div class="panel-header">Сетевая папка: <span class="mono" style="font-size:12px">${b.root || ""}</span></div>
+        <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
         <div class="form-row">
-          <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}">↑ Вверх</button>
+          <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>↑ Вверх</button>
           <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}">Добавить эту папку</button>
           <button class="btn success" data-act="folder-scan">Сканировать</button>
         </div>

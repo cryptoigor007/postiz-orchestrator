@@ -1,0 +1,31 @@
+from __future__ import annotations
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from orchestrator.slots import apply_jitter
+from orchestrator.reload import reload_config
+from orchestrator.config import load_config
+from orchestrator.calendar_view import build_calendar
+from orchestrator.db import Database
+from orchestrator.clock import FakeClock
+
+
+def test_jitter_changes_time():
+    dt = datetime(2026, 3, 10, 16, 0, tzinfo=timezone.utc)
+    j = apply_jitter(dt, 90)
+    assert abs((j - dt).total_seconds()) <= 90
+
+
+def test_reload_ok():
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    new, msg = reload_config(Path(__file__).resolve().parents[1] / "config.yaml", cfg)
+    assert new is not None
+    assert msg == "ok"
+
+
+def test_calendar_empty(tmp_path):
+    db = Database(tmp_path / "c.sqlite")
+    assert "empty" in build_calendar(db).lower()

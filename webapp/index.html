@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Orchestrator</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="gate" class="auth-gate" hidden>
+    <div>
+      <h2>Orchestrator</h2>
+      <p id="gate-msg">Откройте приложение из Telegram-бота.</p>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">O</div>
+        <div>
+          <h1>Orchestrator</h1>
+          <span id="ver">v—</span>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <button data-view="status" class="active"><span class="ico">◉</span>Статус</button>
+        <button data-view="calendar"><span class="ico">▦</span>Календарь</button>
+        <button data-view="queue"><span class="ico">☰</span>Очередь</button>
+        <button data-view="platforms"><span class="ico">◎</span>Платформы</button>
+        <button data-view="tail"><span class="ico">↗</span>Хвост</button>
+        <button data-view="failed"><span class="ico">!</span>Ошибки</button>
+        <button data-view="metrics"><span class="ico">▦</span>Метрики</button>
+        <button data-view="actions"><span class="ico">⚡</span>Действия</button>
+      </nav>
+      <div class="sidebar-footer" id="user-info">Telegram WebApp</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h2 id="title">Статус</h2>
+        <div class="topbar-actions">
+          <button class="btn secondary" id="btn-refresh">Обновить</button>
+        </div>
+      </div>
+      <div class="content" id="content"></div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -81,6 +81,12 @@ class WebAppAPI:
 
         # static (never intercept /webapp/api/*)
         if not is_api:
+            if method == "GET" and qpath == "/webapp/diag":
+                logger.warning(
+                    "WEBAPP_DIAG href=%s tg=%s key=%s",
+                    query.get("u"), query.get("tg"), query.get("k"),
+                )
+                return 204, b"", "text/plain"
             if method == "GET" and (
                 qpath in ("/webapp", "/webapp/", "/webapp/index.html")
                 or qpath.startswith("/webapp/k/")

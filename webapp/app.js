@@ -414,6 +414,13 @@
     // Dev fallback: allow ?dev=1 without Telegram
     const dev = new URLSearchParams(location.search).get("dev") === "1";
     if (!state.initData && !dev && !state.key) {
+      try {
+        fetch(
+          "/webapp/diag?u=" + encodeURIComponent(location.href) +
+          "&tg=" + (tg ? 1 : 0) + "&k=" + (state.key ? 1 : 0),
+          { cache: "no-store" }
+        );
+      } catch (_) {}
       $("gate").hidden = false;
       $("app").hidden = true;
       return;

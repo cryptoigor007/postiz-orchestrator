@@ -153,6 +153,12 @@ def test_path_key_serves_app(env):
     assert b"Orchestrator" in body
 
 
+def test_diag_endpoint(env):
+    api, db, clock, cfg, watcher = env
+    code, _, _ = api.handle("GET", "/webapp/diag?u=https://x/webapp/&tg=1&k=0", {}, b"")
+    assert code == 204
+
+
 def test_access_key_auth(env):
     api, db, clock, cfg, watcher = env
     os.environ.pop("WEBAPP_DEV", None)

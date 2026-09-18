@@ -8,7 +8,7 @@ User=orchestrator
 WorkingDirectory=/opt/orchestrator
 Environment=PYTHONPATH=/opt/orchestrator/src
 EnvironmentFile=-/opt/orchestrator/.env
-ExecStart=/usr/bin/python3 -m orchestrator.main --config /opt/orchestrator/config.yaml --db /opt/orchestrator/data/data.sqlite --daemon --health-port 8080
+ExecStart=/opt/orchestrator/venv/bin/python -m orchestrator.main --config /opt/orchestrator/config.yaml --db /opt/orchestrator/data/data.sqlite --daemon --health-port 8080
 Restart=always
 RestartSec=15
 StandardOutput=journal

@@ -487,6 +487,13 @@
         $("ver").textContent = "v" + (v.version || "?");
       })
       .catch(() => {});
+    const viewParam = new URLSearchParams(location.search).get("view");
+    if (viewParam && titles[viewParam]) {
+      state.view = viewParam;
+      $("nav").querySelectorAll("button").forEach((b) =>
+        b.classList.toggle("active", b.dataset.view === viewParam)
+      );
+    }
     bind();
     load();
   }

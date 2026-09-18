@@ -494,6 +494,22 @@
         b.classList.toggle("active", b.dataset.view === viewParam)
       );
     }
+    if (new URLSearchParams(location.search).has("diag")) {
+      setTimeout(() => {
+        const nav = $("nav");
+        document.title =
+          "DIAG " +
+          JSON.stringify({
+            iw: window.innerWidth,
+            body: document.body.scrollWidth,
+            app: $("app").offsetWidth,
+            side: document.querySelector(".sidebar").offsetWidth,
+            navW: nav.offsetWidth,
+            disp: getComputedStyle(nav).display,
+            cols: getComputedStyle(nav).gridTemplateColumns,
+          });
+      }, 1200);
+    }
     bind();
     load();
   }

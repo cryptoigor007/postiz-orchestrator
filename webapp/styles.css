@@ -54,7 +54,7 @@ html, body {
 .brand span { display: block; font-size: 11px; color: var(--text-3); font-weight: 500; margin-top: 1px; }
 .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav button {
-  all: unset; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 9px 12px;
   border-radius: 9px; font-size: 13px; font-weight: 510; color: var(--text); cursor: pointer;
   transition: background var(--dur-press) var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
@@ -65,7 +65,7 @@ html, body {
 .nav button .ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.92; }
 .nav button .ico svg { width: 18px; height: 18px; display: block; }
 .sidebar-footer { padding: 12px 12px 6px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--sep); margin-top: 8px; }
-.main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.main { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; display: flex; flex-direction: column; background: var(--bg); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px 10px; }
 .topbar h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
 .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -127,7 +127,7 @@ html, body {
 .pill.err { background: rgba(255,59,48,0.16); color: var(--red); }
 .pill.info { background: rgba(10,132,255,0.14); color: var(--accent); }
 .btn {
-  all: unset; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 36px; padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 600;
   cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
   transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);

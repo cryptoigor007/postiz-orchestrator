@@ -181,6 +181,15 @@ def test_telegram_link_post_after_youtube(env):
     )
     n = sched.schedule_telegram_links()
     assert n == 1
+    row_t = db.fetchone(
+        "SELECT postiz_scheduled_for FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='telegram'",
+        (lv["id"],),
+    )
+    # время = сейчас + задержка (15 мин), не привязывается к слотам
+    from datetime import datetime as _dt
+    t = _dt.fromisoformat(row_t["postiz_scheduled_for"])
+    assert 10 <= (t - clock.now()).total_seconds() / 60 <= 20
     row = db.fetchone(
         "SELECT status, postiz_post_id FROM entity_platform_status "
         "WHERE entity_type='long_video' AND entity_id=? AND platform='telegram'",
@@ -228,6 +237,22 @@ def test_thematic_short_exact_time_and_busy_slot_skipped(env):
     assert sched.schedule_thematic_shorts(lv["id"], "telegram") == 0
     assert len(db.fetchall(
         "SELECT 1 FROM entity_platform_status WHERE entity_type='short'")) == 1
+
+
+def test_link_post_without_media_allowed_any_time(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "media"
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, video_path, title_text, created_at) "
+        "VALUES ('shortsmaker', '/sm/link', '/sm/link/v.mp4', 'S', ?)",
+        (now,),
+    )
+    sh = db.fetchone("SELECT id FROM shorts")
+    weird = datetime(2026, 3, 11, 12, 7, tzinfo=UTC)
+    post = sched._safe_publish("short", sh["id"], "telegram", None,
+                               {"title": "x", "description": "link"}, weird)
+    assert post is not None  # ссылка без медиа — время свободное
 
 
 def test_non_canonical_slot_rejected(env):

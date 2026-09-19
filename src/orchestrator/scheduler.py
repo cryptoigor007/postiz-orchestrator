@@ -74,7 +74,8 @@ class Scheduler:
         """Публикация с изоляцией: сбой одного поста не ломает весь цикл."""
         when = args[5] if len(args) > 5 else kwargs.get("scheduled_for")
         platform = str(args[2]) if len(args) > 2 else ""
-        if when is not None and platform and not self._is_canonical(platform, when):
+        has_media = (args[3] is not None) if len(args) > 3 else True
+        if when is not None and platform and has_media and not self._is_canonical(platform, when):
             logger.warning("Отклонено: время %s не из расписания (%s)", when, platform)
             try:
                 self.db.log(args[0], args[1], platform, "non_canonical_slot", str(when))
@@ -396,10 +397,7 @@ class Scheduler:
                     description=item["description_text"] or "",
                     link=r["url"] or "",
                 ).strip()
-                when = self._next_canonical(
-                    "telegram", self.clock.now() + timedelta(minutes=delay))
-                if when is None:
-                    continue
+                when = self.clock.now() + timedelta(minutes=delay)
                 ok, reason = self.safety.can_schedule("telegram", when, limit)
                 if not ok:
                     logger.info("telegram link skip (%s/%s): %s", etype, r["id"], reason)

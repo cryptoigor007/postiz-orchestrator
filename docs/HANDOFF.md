@@ -81,7 +81,7 @@ flowchart TD
 | Что | Значение |
 |---|---|
 | PVE-хост | `ssh root@100.95.225.71` (tailscale) / `192.168.100.50` (LAN/USB-NIC) / `192.168.100.40` (Wi-Fi), hostname `pve`. **Если на Mac Tailscale выключен** — работает LAN-адрес; `deploy.sh`/`runvm.sh` перебирают все три сами |
-| VM Postiz | прямой `ssh postiz@192.168.100.60` с Mac (docker + passwordless sudo работают); хелпер `./scripts/runvm.sh '<cmd>'`; либо `qm guest exec 120 -- ...` с pve |
+| VM Postiz | прямой `ssh postiz@192.168.100.60` с Mac (docker + passwordless sudo работают); хелпер `./scripts/runvm.sh '<cmd>'`; либо `qm guest exec 120 -- ...` с pve. Диск 234 ГБ, RAM 8 ГБ |
 | Docker-стек | `postiz`, `postiz-nginx-https-1`, `postiz-db`, `postiz-redis`, `postiz-temporal`, `postiz-media` |
 | Оркестратор | `/opt/orchestrator` на `pve`, пользователь `orchestrator` (systemd) |
 | Compose Postiz | `/home/postiz/postiz/docker-compose.yml` (бэкапы `.bak.*`) |
@@ -115,7 +115,7 @@ flowchart TD
 ### Postiz
 - Найден и исправлен **cookie domain** (`Domain=.sslip.io` → hostname без точки) и **nginx**:
   - `/api/` → backend со срезом префикса; `/auth/*` → фронтенд (страницы логина); `/public` → backend.
-- Собран и задеплоен образ **`postiz-fixed:v1.47.0`** (фикс cookie + патчи), compose переведён на него.
+- Собран и задеплоен образ **`postiz-fixed:v1.47.2`** (фикс cookie, патчи; потоковая загрузка на диск, лимит 20 ГБ), compose переведён на него. Медиа: volume `postiz_uploads` → `/uploads`, env `UPLOAD_DIRECTORY=/uploads`, nginx `location /uploads/`.
 - Подключён Telegram publisher-бот (`TELEGRAM_TOKEN`), канал `Postiz Test Channel`.
 - Подключён YouTube (новый OAuth-клиент, канал `testPostiz`).
 

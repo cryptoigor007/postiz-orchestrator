@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import UTC, datetime
 
+from . import sched_settings
 from .clock import Clock
 from .config import AppConfig
 from .db import Database
@@ -69,29 +70,30 @@ class Scheduler:
         return bool(cnt and (cnt["c"] or 0) > 0)
 
     def schedule_long_videos(self) -> int:
-        """Place ready long videos into future slots (per platform)."""
-        sched = self.cfg.schedules.get("long_video", {})
-        days = sched.get("days", ["tue", "fri"])
-        time_str = sched.get("time", "16:00")
-        exceptions = sched.get("exception_days", [])
+        """Place ready long videos into future slots (per platform, effective settings)."""
         now = self.clock.now()
-
-        future_slots = next_long_video_dates(days, time_str, now, count=20,
-                                             exception_days=exceptions, tz_name=self.cfg.timezone)
-        if not future_slots:
-            return 0
-
         videos = self.db.fetchall(
             "SELECT id, wide_path, vertical_path, platform_paths, title_text, description_text, hashtags_text "
             "FROM long_videos ORDER BY created_at"
         )
         count = 0
-        for video in videos:
-            for platform, pcfg in self.cfg.platforms.items():
-                if not pcfg.enabled:
-                    continue
-                if self._backlog_active(platform):
-                    continue  # сначала выкладываем остаток предыдущей серии
+        for platform, pcfg in self.cfg.platforms.items():
+            if not pcfg.enabled:
+                continue
+            if self._backlog_active(platform):
+                continue  # сначала выкладываем остаток предыдущей серии
+            eff = sched_settings.effective(self.db, self.cfg, platform, "long")
+            future_slots = next_long_video_dates(
+                eff.get("days") or ["tue", "fri"],
+                eff.get("time") or "16:00",
+                now, count=20,
+                exception_days=eff.get("exception_days", []),
+                tz_name=self.cfg.timezone,
+            )
+            if not future_slots:
+                continue
+            limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
+            for video in videos:
                 exists = self.db.fetchone(
                     "SELECT 1 FROM entity_platform_status WHERE entity_type='long_video' "
                     "AND entity_id=? AND platform=? AND status IN ('scheduled','published')",
@@ -102,7 +104,7 @@ class Scheduler:
                 if not path:
                     continue
                 for slot in future_slots:
-                    ok, _ = self.safety.can_schedule(platform, slot, pcfg.daily_limit)
+                    ok, _ = self.safety.can_schedule(platform, slot, limit)
                     if ok:
                         content = {
                             "title": video["title_text"] or "",
@@ -177,7 +179,8 @@ class Scheduler:
             if next_dt.tzinfo is None:
                 next_dt = next_dt.replace(tzinfo=UTC)
 
-        default_time = self.cfg.schedules.get("shorts_thematic", {}).get("default_time", "20:30")
+        eff = sched_settings.effective(self.db, self.cfg, platform, "thematic")
+        default_time = eff.get("time") or "20:30"
         slots = thematic_slot_days(long_dt, next_dt, default_time, tz_name=self.cfg.timezone)
         if not slots:
             return 0
@@ -332,10 +335,6 @@ class Scheduler:
 
         from .slots import DAY_MAP, get_tz, local_to_utc, parse_time
 
-        sched = self.cfg.schedules.get("shorts_standalone", {})
-        days = sched.get("days", ["mon", "wed", "thu", "sat", "sun"])
-        times = sched.get("times", ["12:00", "18:00"])
-        exceptions = set(sched.get("exception_days", []))
         now = self.clock.now()
         tz = get_tz(self.cfg.timezone)
         local_today = now.astimezone(tz).date()
@@ -359,13 +358,17 @@ class Scheduler:
         if not ready:
             return 0
 
-        weekday_set = {DAY_MAP[d.lower()[:3]] for d in days}
         count = 0
         for platform, pcfg in self.cfg.platforms.items():
             if not pcfg.enabled:
                 continue
             if tail_manager and tail_manager.should_pause_standalone(platform):
                 continue
+            eff = sched_settings.effective(self.db, self.cfg, platform, "standalone")
+            days = eff.get("days") or ["mon", "wed", "thu", "sat", "sun"]
+            times = eff.get("times") or ["12:00", "18:00"]
+            limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
+            weekday_set = {DAY_MAP[d.lower()[:3]] for d in days}
             thematic = self._thematic_dates_for_platform(platform)
             for short in ready:
                 cur = local_today
@@ -373,7 +376,6 @@ class Scheduler:
                 for _ in range(28):
                     if (
                         cur.weekday() in weekday_set
-                        and cur.isoformat() not in exceptions
                         and cur not in thematic
                     ):
                         for ts in times:
@@ -381,7 +383,7 @@ class Scheduler:
                             candidate = local_to_utc(cur, t, self.cfg.timezone)
                             if candidate <= now:
                                 continue
-                            ok, _ = self.safety.can_schedule(platform, candidate, pcfg.daily_limit)
+                            ok, _ = self.safety.can_schedule(platform, candidate, limit)
                             if ok:
                                 content = {
                                     "title": short["title_text"] or "",

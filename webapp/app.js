@@ -245,7 +245,7 @@
     status: t("title_status"), folders: t("title_folders"), calendar: t("title_calendar"),
     queue: t("title_queue"), platforms: t("title_platforms"), tail: t("title_tail"),
     failed: t("title_failed"), actions: t("title_actions"), metrics: t("title_metrics"),
-    help: t("title_help"), manual: t("title_manual"),
+    help: t("title_help"), manual: t("title_manual"), schedule: t("title_schedule"),
   });
 
   async function load() {
@@ -260,6 +260,7 @@
       else if (v === "calendar") state.data = await api("/calendar");
       else if (v === "queue") state.data = await api("/queue");
       else if (v === "platforms") state.data = await api("/platforms");
+      else if (v === "schedule") state.data = await api("/schedule_settings");
       else if (v === "tail") {
         const tail = await api("/tail");
         const backlog = await api("/backlog");
@@ -301,9 +302,12 @@
   }
 
   function renderFolders(d) {
-    const roots = (d.roots || [])
-      .map((r) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${r}</div>
-        <button class="btn danger" data-act="folder-remove" data-p="${r}">${t("remove")}</button></div>`)
+    const items = d.items || (d.roots || []).map((x) => ({ path: x, kind: "auto" }));
+    const roots = items
+      .map((it) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${it.path}</div>
+        <span class="meta">${t("kind_label")}: ${t("kind_" + (it.kind || "auto"))}</span>
+        <button class="btn secondary" data-act="folder-kind" data-p="${it.path}" title="${t("kind_label")}">⇄</button>
+        <button class="btn danger" data-act="folder-remove" data-p="${it.path}">${t("remove")}</button></div>`)
       .join("");
     const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
     const rootLabel = (r) => r;
@@ -325,7 +329,9 @@
         <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
         <div class="form-row">
           <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
-          <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}">${t("add_folder")}</button>
+          <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}" data-kind="series">${t("add_series")}</button>
+          <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}" data-kind="shorts">${t("add_shorts")}</button>
+          <button class="btn secondary" data-act="folder-add" data-p="${b.path || ""}" data-kind="auto">${t("add_auto")}</button>
           <button class="btn success" data-act="folder-scan">${t("scan")}</button>
         </div>
         ${dirs || `<div class="empty">${t("no_subfolders")}</div>`}
@@ -563,6 +569,60 @@
       ${rows || `<div class="panel"><div class="empty">${t("mu_none")}</div></div>`}`;
   }
 
+  const DAY_KEYS = [["mon", "Пн"], ["tue", "Вт"], ["wed", "Ср"], ["thu", "Чт"], ["fri", "Пт"], ["sat", "Сб"], ["sun", "Вс"]];
+  function dayChecksKind(scope, kind, selected) {
+    return DAY_KEYS.map(([k, l]) =>
+      `<label class="chk" style="margin-right:6px"><input type="checkbox" data-day="${scope}|${kind}" value="${k}"${(selected || []).includes(k) ? " checked" : ""}/> ${l}</label>`
+    ).join("");
+  }
+  function schedBlock(key, title, eff, block, withLimit) {
+    const long = (block && block.long) || {};
+    const th = (block && block.thematic) || {};
+    const sa = (block && block.standalone) || {};
+    const effLong = (eff && eff.long) || {};
+    const effTh = (eff && eff.thematic) || {};
+    const effSa = (eff && eff.standalone) || {};
+    const longDays = long.days || effLong.days || [];
+    const longTime = long.time || effLong.time || "";
+    const thTime = th.time || effTh.time || "";
+    const saDays = sa.days || effSa.days || [];
+    const saTimes = (sa.times || effSa.times || []).join(", ");
+    const limit = withLimit ? ((block && block.daily_limit) ?? ((eff && eff.daily_limit) ?? "")) : "";
+    return `<div class="panel"><div class="panel-header">${title}</div>
+      <div class="row"><span class="meta" style="min-width:130px">${t("sched_long")}</span>
+        <div>${dayChecksKind(key, "long", longDays)} <input type="time" data-time="${key}|long" value="${longTime}"/></div></div>
+      <div class="row"><span class="meta" style="min-width:130px">${t("sched_thematic")}</span>
+        <div><input type="time" data-time="${key}|thematic" value="${thTime}"/></div></div>
+      <div class="row"><span class="meta" style="min-width:130px">${t("sched_standalone")}</span>
+        <div>${dayChecksKind(key, "standalone", saDays)} <input type="text" data-times="${key}|standalone" value="${saTimes}" placeholder="12:00, 18:00"/></div></div>
+      ${withLimit ? `<div class="row"><span class="meta" style="min-width:130px">${t("sched_limit")}</span>
+        <input type="number" min="0" max="50" data-limit="${key}" value="${limit}"/></div>` : ""}
+      <div class="form-row">
+        <button class="btn primary" data-act="sched-save" data-p="${key}">${t("sched_save")}</button>
+        <button class="btn secondary" data-act="sched-reset" data-p="${key}">${t("sched_reset")}</button>
+      </div></div>`;
+  }
+  function renderSchedule(d) {
+    const settings = d.settings || {};
+    const groups = d.groups || [];
+    const eff = d.effective || {};
+    const plats = d.platforms || [];
+    const groupRows = groups.map((g) =>
+      `<div class="row"><div class="title">👥 ${g.name}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
+        <button class="btn danger" data-act="group-remove" data-p="${g.name}">${t("group_remove")}</button></div>`).join("");
+    const groupForm = `<div class="form-row"><input id="group-name" placeholder="${t("group_name")}" />
+      <span class="meta">${plats.map((p) => `<label class="chk" style="margin-right:6px"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
+      <button class="btn secondary" data-act="group-add">${t("group_add")}</button></div>`;
+    const platformsHtml = plats.map((p) => schedBlock(p, p, eff[p] || {}, settings[p] || {}, true)).join("");
+    const groupsHtml = groups.map((g) => schedBlock(`group:${g.name}`, `👥 ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
+    content().innerHTML = `<div class="view-enter">
+      <div class="panel"><div class="panel-header">${t("groups_title")}</div>
+        ${groupRows || `<div class="empty">${t("groups_none")}</div>`}${groupForm}</div>
+      <div class="panel"><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>
+      ${platformsHtml}
+      ${groupsHtml}
+    </div>`;
+  }
   function renderHelp() {
     content().innerHTML = [
       helpSection("help_nav", [
@@ -607,6 +667,7 @@
     else if (state.view === "calendar") renderCalendar(d);
     else if (state.view === "queue") renderQueue(d);
     else if (state.view === "platforms") renderPlatforms(d);
+    else if (state.view === "schedule") renderSchedule(d);
     else if (state.view === "tail") renderTail(d);
     else if (state.view === "failed") renderFailed(d);
     else if (state.view === "actions") renderActions(d);
@@ -712,16 +773,81 @@
       if (act === "folder-add") {
         const p = el.dataset.p;
         if (!p) return;
-        const roots = (state.data?.roots || []).slice();
-        if (!roots.includes(p)) roots.push(p);
-        state.data = await api("/roots", { method: "POST", body: JSON.stringify({ roots }) });
+        const kind = el.dataset.kind || "auto";
+        const items = (state.data?.items || (state.data?.roots || []).map((x) => ({ path: x, kind: "auto" }))).slice();
+        if (!items.some((it) => it.path === p)) items.push({ path: p, kind });
+        state.data = await api("/roots", { method: "POST", body: JSON.stringify({ items }) });
         toast(t("t_folder_added"));
         return load();
       }
+      if (act === "folder-kind") {
+        const p = el.dataset.p;
+        const items = (state.data?.items || []).map((it) => ({ ...it }));
+        const it = items.find((x) => x.path === p);
+        if (it) {
+          const order = ["auto", "series", "shorts"];
+          it.kind = order[(order.indexOf(it.kind) + 1) % order.length];
+        }
+        state.data = await api("/roots", { method: "POST", body: JSON.stringify({ items }) });
+        toast(t("t_kind_changed"));
+        return load();
+      }
       if (act === "folder-remove") {
-        const roots = (state.data?.roots || []).filter((r) => r !== el.dataset.p);
-        state.data = await api("/roots", { method: "POST", body: JSON.stringify({ roots }) });
+        const items = (state.data?.items || []).filter((it) => it.path !== el.dataset.p);
+        state.data = await api("/roots", { method: "POST", body: JSON.stringify({ items }) });
         toast(t("t_folder_removed"));
+        return load();
+      }
+      if (act === "sched-save") {
+        const key = el.dataset.p;
+        const root = el.closest(".panel");
+        const daysOf = (kind) => Array.from(root.querySelectorAll(`[data-day="${key}|${kind}"]:checked`)).map((c) => c.value);
+        const timeOf = (kind) => {
+          const i = root.querySelector(`[data-time="${key}|${kind}"]`);
+          return i ? i.value.trim() : "";
+        };
+        const block = {};
+        const longDays = daysOf("long"), longTime = timeOf("long");
+        if (longDays.length || longTime) block.long = {};
+        if (longDays.length) block.long.days = longDays;
+        if (longTime) block.long.time = longTime;
+        const thTime = timeOf("thematic");
+        if (thTime) block.thematic = { time: thTime };
+        const saDays = daysOf("standalone");
+        const saInput = root.querySelector(`[data-times="${key}|standalone"]`);
+        const saTimes = saInput ? saInput.value.split(",").map((x) => x.trim()).filter(Boolean) : [];
+        if (saDays.length || saTimes.length) block.standalone = {};
+        if (saDays.length) block.standalone.days = saDays;
+        if (saTimes.length) block.standalone.times = saTimes;
+        const limitInput = root.querySelector(`[data-limit="${key}"]`);
+        if (limitInput && limitInput.value !== "") block.daily_limit = Number(limitInput.value);
+        const settings = Object.assign({}, state.data?.settings || {});
+        settings[key] = block;
+        await api("/schedule_settings", { method: "POST", body: JSON.stringify({ settings }) });
+        toast(t("sched_saved"));
+        return load();
+      }
+      if (act === "sched-reset") {
+        const key = el.dataset.p;
+        const settings = Object.assign({}, state.data?.settings || {});
+        delete settings[key];
+        await api("/schedule_settings", { method: "POST", body: JSON.stringify({ settings }) });
+        toast(t("sched_saved"));
+        return load();
+      }
+      if (act === "group-add") {
+        const name = (document.getElementById("group-name")?.value || "").trim();
+        const plats = Array.from(document.querySelectorAll("[data-gplat]:checked")).map((c) => c.value);
+        if (!name || !plats.length) return toast(t("error_prefix"));
+        const groups = (state.data?.groups || []).concat([{ name, platforms: plats }]);
+        await api("/groups", { method: "POST", body: JSON.stringify({ groups }) });
+        toast(t("t_group_added"));
+        return load();
+      }
+      if (act === "group-remove") {
+        const groups = (state.data?.groups || []).filter((g) => g.name !== el.dataset.p);
+        await api("/groups", { method: "POST", body: JSON.stringify({ groups }) });
+        toast(t("t_group_removed"));
         return load();
       }
       if (act === "folder-scan") {

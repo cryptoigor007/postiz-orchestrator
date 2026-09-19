@@ -160,3 +160,52 @@ def test_platform_dirs_platform_paths(tmp_path):
     pmap = _json.loads(lv["platform_paths"])
     assert set(pmap) == {"youtube", "telegram"}
     assert pmap["youtube"].endswith("final.mp4")
+
+
+def test_root_kind_series_skips_standalone(tmp_path):
+    db = Database(tmp_path / "k.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    root = tmp_path / "content"
+    # эпизод
+    ep = root / "ep1"
+    (ep / "vertical").mkdir(parents=True)
+    (ep / "vertical" / "final_9x16.mp4").write_bytes(b"v" * 200)
+    (ep / "shorts" / "short_001").mkdir(parents=True)
+    (ep / "shorts" / "short_001" / "short_001.mp4").write_bytes(b"s" * 100)
+    # standalone-шортс Shorts Maker
+    sm = root / "шортс" / "Ш 1"
+    sm.mkdir(parents=True)
+    (sm / "Ш 1_final.mp4").write_bytes(b"f" * 150)
+    (sm / "Ш 1_titles.txt").write_text("Заголовок: Тест", encoding="utf-8")
+    db.set_setting("watch_roots", "[""{\"path\": \"" + str(root) + "\", \"kind\": \"series\"}""]")
+    w = Watcher(db, cfg, clock, [])
+    for _ in range(4):
+        w.scan()
+    assert db.fetchone("SELECT * FROM long_videos") is not None
+    titles = [r["title_text"] for r in db.fetchall("SELECT title_text FROM shorts")]
+    assert "Тест" not in titles  # standalone не взят
+
+
+def test_root_kind_shorts_only(tmp_path):
+    db = Database(tmp_path / "k2.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    root = tmp_path / "content"
+    ep = root / "ep1"
+    (ep / "vertical").mkdir(parents=True)
+    (ep / "vertical" / "final_9x16.mp4").write_bytes(b"v" * 200)
+    (ep / "shorts" / "short_001").mkdir(parents=True)
+    (ep / "shorts" / "short_001" / "short_001.mp4").write_bytes(b"s" * 100)
+    sm = root / "шортс" / "Ш 1"
+    sm.mkdir(parents=True)
+    (sm / "Ш 1_final.mp4").write_bytes(b"f" * 150)
+    (sm / "Ш 1_titles.txt").write_text("Заголовок: Тест", encoding="utf-8")
+    db.set_setting("watch_roots", "[""{\"path\": \"" + str(root) + "\", \"kind\": \"shorts\"}""]")
+    w = Watcher(db, cfg, clock, [])
+    for _ in range(4):
+        w.scan()
+    assert db.fetchone("SELECT * FROM long_videos") is None
+    rows = db.fetchall("SELECT title_text, parent_video_id FROM shorts")
+    assert any(r["title_text"] == "Тест" for r in rows)
+    assert all(r["parent_video_id"] is None for r in rows)

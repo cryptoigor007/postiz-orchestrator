@@ -13,12 +13,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+from . import sched_settings
 from .watcher import WATCH_ROOTS_KEY
 
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "29"
+WEBAPP_BUILD = "30"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -199,24 +200,75 @@ class WebAppAPI:
             if method == "GET" and route == "roots":
                 return 200, {
                     "roots": self._roots(),
+                    "items": self._root_items(),
                     "browse_roots": [str(r) for r in self._browse_roots()],
                 }, "application/json"
             if method == "POST" and route == "roots":
-                new = data.get("roots")
-                if not isinstance(new, list):
-                    return 400, {"error": "roots must be a list"}, "application/json"
+                source = data.get("items")
+                if source is None:
+                    source = data.get("roots")
+                if not isinstance(source, list):
+                    return 400, {"error": "items must be a list"}, "application/json"
                 allowed = self._browse_roots()
-                cleaned: list[str] = []
-                for p in new:
-                    target = Path(str(p)).expanduser()
+                cleaned: list[dict[str, str]] = []
+                for item in source:
+                    if isinstance(item, dict):
+                        raw_path = item.get("path")
+                        kind = str(item.get("kind") or "auto").strip().lower()
+                    else:
+                        raw_path = item
+                        kind = "auto"
+                    if kind not in ("auto", "series", "shorts"):
+                        return 400, {"error": f"bad kind: {kind}"}, "application/json"
+                    target = Path(str(raw_path or "")).expanduser()
                     if not target.is_dir():
-                        return 400, {"error": f"not a directory: {p}"}, "application/json"
+                        return 400, {"error": f"not a directory: {raw_path}"}, "application/json"
                     rp = target.resolve()
                     if not any(rp == r or r in rp.parents for r in allowed):
-                        return 400, {"error": f"outside allowed root: {p}"}, "application/json"
-                    cleaned.append(str(rp))
-                self.db.set_setting(WATCH_ROOTS_KEY, json.dumps(cleaned))
-                return 200, {"ok": True, "roots": cleaned}, "application/json"
+                        return 400, {"error": f"outside allowed root: {raw_path}"}, "application/json"
+                    cleaned.append({"path": str(rp), "kind": kind})
+                self.db.set_setting(WATCH_ROOTS_KEY, json.dumps(cleaned, ensure_ascii=False))
+                return 200, {"ok": True, "items": cleaned,
+                             "roots": [it["path"] for it in cleaned]}, "application/json"
+            if method == "GET" and route == "schedule_settings":
+                settings = sched_settings.load_schedule_settings(self.db)
+                groups = sched_settings.load_groups(self.db)
+                platforms = list(self.cfg.platforms.keys())
+                effective = {}
+                for p in platforms:
+                    effective[p] = {
+                        "long": sched_settings.effective(self.db, self.cfg, p, "long"),
+                        "thematic": sched_settings.effective(self.db, self.cfg, p, "thematic"),
+                        "standalone": sched_settings.effective(self.db, self.cfg, p, "standalone"),
+                        "daily_limit": sched_settings.effective_daily_limit(self.db, self.cfg, p),
+                    }
+                return 200, {
+                    "settings": settings,
+                    "groups": groups,
+                    "platforms": platforms,
+                    "effective": effective,
+                }, "application/json"
+            if method == "POST" and route == "schedule_settings":
+                payload = data.get("settings")
+                ok, msg = sched_settings.validate_schedule_settings(payload)
+                if not ok:
+                    return 400, {"error": msg}, "application/json"
+                known = list(self.cfg.platforms.keys())
+                for key in payload:
+                    if key.startswith("group:"):
+                        if key[6:] not in {g["name"] for g in sched_settings.load_groups(self.db)}:
+                            return 400, {"error": f"unknown group: {key[6:]}"}, "application/json"
+                    elif key not in known:
+                        return 400, {"error": f"unknown platform: {key}"}, "application/json"
+                sched_settings.save_schedule_settings(self.db, payload)
+                return 200, {"ok": True}, "application/json"
+            if method == "POST" and route == "groups":
+                payload = data.get("groups")
+                ok, msg = sched_settings.validate_groups(payload, list(self.cfg.platforms.keys()))
+                if not ok:
+                    return 400, {"error": msg}, "application/json"
+                sched_settings.save_groups(self.db, payload)
+                return 200, {"ok": True, "groups": payload}, "application/json"
             if method == "GET" and route == "browse":
                 roots = self._browse_roots()
                 root = roots[0]
@@ -520,15 +572,26 @@ class WebAppAPI:
                 "last_scan": last}
 
     def _roots(self) -> list[str]:
+        return [it["path"] for it in self._root_items()]
+
+    def _root_items(self) -> list[dict[str, str]]:
         raw = self.db.get_setting(WATCH_ROOTS_KEY)
+        out: list[dict[str, str]] = []
         if raw:
             try:
                 items = json.loads(raw)
-                if isinstance(items, list):
-                    return [str(x) for x in items]
             except Exception:
+                items = None
                 logger.warning("invalid watch_roots setting")
-        return []
+            if isinstance(items, list):
+                for x in items:
+                    if isinstance(x, dict) and x.get("path"):
+                        kind = str(x.get("kind") or "auto").lower()
+                        out.append({"path": str(x["path"]),
+                                    "kind": kind if kind in ("auto", "series", "shorts") else "auto"})
+                    elif isinstance(x, (str, Path)):
+                        out.append({"path": str(x), "kind": "auto"})
+        return out
 
     def _compose_index(self, key: str = "") -> bytes:
         """Self-contained page: inline CSS/JS so nothing can be cached separately."""

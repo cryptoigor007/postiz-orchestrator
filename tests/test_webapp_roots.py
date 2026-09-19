@@ -91,10 +91,23 @@ def test_api_roots_get_set(env, tmp_path):
     code, payload, _ = api.handle("POST", "/webapp/api/roots", headers, body)
     assert code == 200
     assert payload["roots"] == [str(root.resolve())]
+    assert payload["items"] == [{"path": str(root.resolve()), "kind": "auto"}]
 
     code, payload, _ = api.handle("GET", "/webapp/api/roots", headers, b"")
     assert payload["roots"] == [str(root.resolve())]
-    assert json.loads(db.get_setting("watch_roots")) == [str(root.resolve())]
+    assert payload["items"] == [{"path": str(root.resolve()), "kind": "auto"}]
+    assert json.loads(db.get_setting("watch_roots")) == [
+        {"path": str(root.resolve()), "kind": "auto"}
+    ]
+
+    # тип корня
+    body = json.dumps({"items": [{"path": str(root), "kind": "shorts"}]}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/roots", headers, body)
+    assert code == 200
+    assert payload["items"] == [{"path": str(root.resolve()), "kind": "shorts"}]
+    body = json.dumps({"items": [{"path": str(root), "kind": "wat"}]}).encode()
+    code, _, _ = api.handle("POST", "/webapp/api/roots", headers, body)
+    assert code == 400
 
 
 def test_api_roots_reject_missing(env, tmp_path):
@@ -275,3 +288,54 @@ def test_access_key_auth(env):
     finally:
         os.environ.pop("WEBAPP_ACCESS_KEY", None)
         os.environ["WEBAPP_DEV"] = "1"
+
+
+def test_api_schedule_settings_and_groups(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+
+    code, payload, _ = api.handle("GET", "/webapp/api/schedule_settings", headers, b"")
+    assert code == 200
+    assert payload["platforms"]
+    eff = payload["effective"]["telegram"]
+    assert eff["long"]["time"] == "16:00"
+    assert eff["thematic"]["time"] == "20:30"
+
+    # сохранить override платформы
+    body = json.dumps({"settings": {"telegram": {
+        "long": {"days": ["sun"], "time": "11:00"},
+        "thematic": {"time": "19:30"},
+        "standalone": {"days": ["mon"], "times": ["10:00"]},
+        "daily_limit": 4,
+    }}}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/schedule_settings", headers, body)
+    assert code == 200
+    code, payload, _ = api.handle("GET", "/webapp/api/schedule_settings", headers, b"")
+    eff = payload["effective"]["telegram"]
+    assert eff["long"]["time"] == "11:00"
+    assert eff["daily_limit"] == 4
+
+    # невалидное время
+    body = json.dumps({"settings": {"telegram": {"long": {"time": "99:99"}}}}).encode()
+    code, _, _ = api.handle("POST", "/webapp/api/schedule_settings", headers, body)
+    assert code == 400
+    # неизвестная платформа
+    body = json.dumps({"settings": {"myspace": {"long": {"time": "10:00"}}}}).encode()
+    code, _, _ = api.handle("POST", "/webapp/api/schedule_settings", headers, body)
+    assert code == 400
+
+    # группы
+    body = json.dumps({"groups": [{"name": "Основные", "platforms": ["telegram", "youtube"]}]}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/groups", headers, body)
+    assert code == 200
+    code, payload, _ = api.handle("GET", "/webapp/api/schedule_settings", headers, b"")
+    assert payload["groups"][0]["name"] == "Основные"
+    body = json.dumps({"groups": [{"name": "X", "platforms": ["nosuch"]}]}).encode()
+    code, _, _ = api.handle("POST", "/webapp/api/groups", headers, body)
+    assert code == 400
+    # настройки для группы
+    body = json.dumps({"settings": {"group:Основные": {"long": {"time": "18:00"}}}}).encode()
+    code, _, _ = api.handle("POST", "/webapp/api/schedule_settings", headers, body)
+    assert code == 200
+    code, payload, _ = api.handle("GET", "/webapp/api/schedule_settings", headers, b"")
+    assert payload["effective"]["youtube"]["long"]["time"] == "18:00"

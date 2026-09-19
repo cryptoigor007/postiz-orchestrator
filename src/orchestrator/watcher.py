@@ -32,17 +32,32 @@ class Watcher:
         self.max_age_days = max_age_days
         self._size_cache: dict[str, tuple[int, int]] = {}
 
-    def effective_roots(self) -> list[Path]:
-        """Roots configured via webapp (DB) take precedence over CLI defaults."""
+    def effective_root_specs(self) -> list[dict[str, str]]:
+        """Корни с типами: [{"path": ..., "kind": auto|series|shorts}] (legacy-строки → auto)."""
         raw = self.db.get_setting(WATCH_ROOTS_KEY)
+        specs: list[dict[str, str]] = []
         if raw:
             try:
                 items = json.loads(raw)
-                if isinstance(items, list) and items:
-                    return [Path(str(x)) for x in items]
             except Exception:
+                items = None
                 logger.warning("Invalid %s setting", WATCH_ROOTS_KEY)
-        return list(self.roots)
+            if isinstance(items, list):
+                for x in items:
+                    if isinstance(x, dict):
+                        path = str(x.get("path") or "").strip()
+                        kind = str(x.get("kind") or "auto").strip().lower()
+                        if path:
+                            specs.append({"path": path, "kind": kind if kind in ("auto", "series", "shorts") else "auto"})
+                    elif isinstance(x, (str, Path)):
+                        specs.append({"path": str(x), "kind": "auto"})
+        if specs:
+            return specs
+        return [{"path": str(r), "kind": "auto"} for r in self.roots]
+
+    def effective_roots(self) -> list[Path]:
+        """Roots configured via webapp (DB) take precedence over CLI defaults."""
+        return [Path(spec["path"]) for spec in self.effective_root_specs()]
 
     # ---------- helpers ----------
 
@@ -147,33 +162,41 @@ class Watcher:
     def scan(self) -> dict[str, int]:
         stats = {"long": 0, "shorts": 0, "standalone": 0}
         max_depth = getattr(self.cfg, "watch_max_depth", 5)
-        for root in self.effective_roots():
+        for spec in self.effective_root_specs():
+            root = Path(spec["path"])
+            mode = spec.get("kind", "auto")
             if not root.exists():
                 continue
             if root.name.lower().startswith("shortsmaker") or (root / ".shortsmaker").exists():
-                stats["standalone"] += self._scan_standalone_root(root)
+                if mode != "series":
+                    stats["standalone"] += self._scan_standalone_root(root)
                 continue
-            self._walk(root, 0, max_depth, stats)
+            self._walk(root, 0, max_depth, stats, mode)
         return stats
 
-    def _walk(self, d: Path, depth: int, max_depth: int, stats: dict[str, int]) -> None:
+    def _walk(self, d: Path, depth: int, max_depth: int, stats: dict[str, int],
+              mode: str = "auto") -> None:
         if depth > max_depth:
             return
         if self._is_episode(d):
-            stats["long"] += self._scan_long(d)
-            stats["shorts"] += self._scan_shorts(d)
+            if mode != "shorts":
+                stats["long"] += self._scan_long(d)
+                stats["shorts"] += self._scan_shorts(d)
+            else:
+                stats["standalone"] += self._scan_shorts(d, with_parent=False)
             return
-        if self._register_shorts_maker_short(d):
-            stats["standalone"] += 1
-            return
-        loose = self._register_loose_shorts(d)
-        if loose:
-            stats["standalone"] += loose
-            return
+        if mode != "series":
+            if self._register_shorts_maker_short(d):
+                stats["standalone"] += 1
+                return
+            loose = self._register_loose_shorts(d)
+            if loose:
+                stats["standalone"] += loose
+                return
         for child in sorted(d.iterdir()):
             if not child.is_dir() or self._is_junk_dir(child.name):
                 continue
-            self._walk(child, depth + 1, max_depth, stats)
+            self._walk(child, depth + 1, max_depth, stats, mode)
 
     def _is_episode(self, d: Path) -> bool:
         if (d / "vertical").is_dir() or (d / "wide").is_dir():
@@ -233,14 +256,14 @@ class Watcher:
         logger.info("Registered long video: %s", folder)
         return 1
 
-    def _scan_shorts(self, series: Path) -> int:
+    def _scan_shorts(self, series: Path, with_parent: bool = True) -> int:
         shorts_dir = series / "shorts"
         if not shorts_dir.is_dir():
             return 0
         parent = self.db.fetchone(
             "SELECT id FROM long_videos WHERE folder_path = ?",
             (str(series.resolve()),),
-        )
+        ) if with_parent else None
         parent_id = parent["id"] if parent else None
         count = 0
         platforms = list(self.cfg.platforms.keys())

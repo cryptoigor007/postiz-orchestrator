@@ -159,6 +159,27 @@ class Watcher:
 
     # ---------- scan ----------
 
+    def _link_orphan_shorts(self) -> int:
+        """Восстанавливает parent_video_id у шортсов, чьи серии уже есть в БД."""
+        before = self.db.fetchone(
+            "SELECT COUNT(*) AS c FROM shorts WHERE parent_video_id IS NULL")
+        self.db.execute(
+            """
+            UPDATE shorts SET parent_video_id = (
+                SELECT lv.id FROM long_videos lv
+                WHERE shorts.folder_path LIKE lv.folder_path || '/shorts/%'
+            )
+            WHERE parent_video_id IS NULL
+              AND EXISTS (
+                SELECT 1 FROM long_videos lv
+                WHERE shorts.folder_path LIKE lv.folder_path || '/shorts/%'
+              )
+            """
+        )
+        after = self.db.fetchone(
+            "SELECT COUNT(*) AS c FROM shorts WHERE parent_video_id IS NULL")
+        return max(0, (before or {}).get("c", 0) - (after or {}).get("c", 0))
+
     def scan(self) -> dict[str, int]:
         stats = {"long": 0, "shorts": 0, "standalone": 0}
         max_depth = getattr(self.cfg, "watch_max_depth", 5)
@@ -172,6 +193,9 @@ class Watcher:
                     stats["standalone"] += self._scan_standalone_root(root)
                 continue
             self._walk(root, 0, max_depth, stats, mode)
+        linked = self._link_orphan_shorts()
+        if linked:
+            logger.info("Linked orphan shorts to series: %s", linked)
         return stats
 
     def _walk(self, d: Path, depth: int, max_depth: int, stats: dict[str, int],

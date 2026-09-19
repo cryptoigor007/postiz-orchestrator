@@ -104,3 +104,39 @@ def test_reconciliation(env):
     )
     r = recon.run()
     assert r["orphans"] == 1
+
+
+def test_thematic_shorts_for_scheduled_parent(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, vertical_path, "
+        "title_text, created_at) VALUES ('videomaker', '/s1', 'S1', '/s1/v.mp4', 'T', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    for i in range(1, 3):
+        db.execute(
+            "INSERT INTO shorts (source, parent_video_id, folder_path, order_index, "
+            "video_path, title_text, created_at) VALUES ('videomaker', ?, ?, ?, ?, ?, ?)",
+            (lv["id"], f"/s1/shorts/short_00{i}", i, f"/s1/shorts/short_00{i}/s{i}.mp4",
+             f"Шорт {i}", now),
+        )
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', ?, 'telegram', 'scheduled', "
+        "'2026-03-10T13:00:00+00:00')",
+        (lv["id"],),
+    )
+    n = sched.schedule_thematic_shorts(lv["id"], "telegram")
+    assert n >= 1
+    rows = db.fetchall(
+        "SELECT status FROM entity_platform_status WHERE entity_type='short'")
+    assert rows and all(r["status"] == "scheduled" for r in rows)
+
+
+def test_pick_path_variants(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    row = {"wide_path": "/w.mp4", "vertical_path": "/v.mp4", "platform_paths": None}
+    assert sched._pick_path(row, "youtube", cfg.platforms["youtube"]) == "/w.mp4"
+    assert sched._pick_path(row, "telegram", cfg.platforms["telegram"]) == "/v.mp4"

@@ -479,7 +479,7 @@
            </div>`
         : "";
       return `<div class="row"><div class="title q-title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
-       <span class="mono meta q-time">${it.date || ""} ${it.time || ""}</span>
+       <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
          <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>

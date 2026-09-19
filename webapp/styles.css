@@ -209,3 +209,14 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 .q-plat { display: inline-flex; align-items: center; }
 .queue-col { min-width: 128px; }
 .queue-col .btn { font-size: 12px; padding: 6px 8px; }
+
+
+/* Очередь: название в несколько строк, дата над временем, крупный значок сети */
+.q-title { flex: 1 1 auto; min-width: 0; white-space: normal; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  font-size: 14px; line-height: 1.25; align-self: stretch; }
+.q-time { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.q-time .q-date { opacity: 0.75; }
+.q-time .q-clock { font-size: 13px; }
+.q-plat .pico { width: 26px; height: 26px; margin-right: 0; }
+.q-plat .pico svg { width: 26px; height: 26px; }

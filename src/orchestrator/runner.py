@@ -98,7 +98,7 @@ class Runner:
             n = n2 = 0
         pubs = self.comps["db"].fetchall(
             "SELECT entity_id, platform FROM entity_platform_status "
-            "WHERE entity_type='long_video' AND status='published'"
+            "WHERE entity_type='long_video' AND status IN ('published','scheduled')"
         )
         nt = 0
         for r in pubs:

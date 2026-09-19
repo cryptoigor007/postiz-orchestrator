@@ -209,3 +209,24 @@ def test_root_kind_shorts_only(tmp_path):
     rows = db.fetchall("SELECT title_text, parent_video_id FROM shorts")
     assert any(r["title_text"] == "Тест" for r in rows)
     assert all(r["parent_video_id"] is None for r in rows)
+
+
+def test_link_orphan_shorts(tmp_path):
+    db = Database(tmp_path / "l.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) "
+        "VALUES ('videomaker', '/s1', 'S1', '2026-01-01T00:00:00+00:00')"
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO shorts (source, parent_video_id, folder_path, video_path, created_at) "
+        "VALUES ('videomaker', NULL, '/s1/shorts/short_001', '/s1/shorts/short_001/a.mp4', "
+        "'2026-01-01T00:00:00+00:00')"
+    )
+    w = Watcher(db, cfg, clock, [])
+    linked = w._link_orphan_shorts()
+    assert linked == 1
+    row = db.fetchone("SELECT parent_video_id FROM shorts")
+    assert row["parent_video_id"] == lv["id"]

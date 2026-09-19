@@ -143,10 +143,10 @@ class Scheduler:
             (parent_id, platform),
         )
         if not parent:
-            # check default_action path
+            # опубликовано (в т.ч. без ссылки) или ещё запланировано — ставим с плейсхолдером
             parent = self.db.fetchone(
                 "SELECT * FROM entity_platform_status WHERE entity_type='long_video' "
-                "AND entity_id=? AND platform=? AND status='published'",
+                "AND entity_id=? AND platform=? AND status IN ('published','scheduled')",
                 (parent_id, platform),
             )
             if not parent:

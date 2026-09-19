@@ -92,7 +92,7 @@ def fix_db(db_path: str) -> int:
 
 def count_junk(root: str) -> int:
     bad = 0
-    for dirpath, dirnames, filenames in os.walk(root):
+    for _dirpath, dirnames, filenames in os.walk(root):
         for name in dirnames + filenames:
             if name.startswith("._"):
                 continue

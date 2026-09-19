@@ -242,3 +242,21 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 .busy-box { background: var(--panel, #fff); color: var(--text-1, #000); padding: 16px 22px; border-radius: 12px;
   font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); animation: busyPulse 1.2s ease-in-out infinite; }
 @keyframes busyPulse { 0%,100% { opacity: 1 } 50% { opacity: .6 } }
+
+
+/* Прогресс-оверлей (Emil Kowalski style: мягкие тени, ease-out) */
+.busy-box { min-width: 280px; max-width: 90vw; }
+.busy-row { display: flex; align-items: center; gap: 10px; }
+.busy-row .pico { width: 20px; height: 20px; }
+.busy-meta { justify-content: space-between; color: var(--text-2); font-size: 12px; margin-top: 6px; }
+.pbar { height: 6px; border-radius: 999px; background: var(--sep); overflow: hidden; margin-top: 10px; }
+.pbar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 300ms var(--ease-out); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.warn-text { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Доступность и размеры касания */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.btn { min-height: 34px; }
+.queue-col .btn { min-height: 30px; }

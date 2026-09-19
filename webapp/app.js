@@ -3,6 +3,9 @@
 
   const I18N = {
     ru: {
+      cancel: "Отменить", left: "осталось", sec_short: "с", min_short: "мин",
+      job_scheduling: "Планирование публикаций", job_restore: "Возврат удалённого",
+      job_cancelling: "Отменяем…", job_cancelled: "Отменено", job_done: "Готово",
       scan_date_films: "Фильмы с", scan_date_shorts: "Шортсы с", scan_run_dates: "Запустить с дат",
       t_started_async: "Запущено — посты добавляются постепенно", working: "Выполняется…",
       confirm_delete_film: "Удалить фильм, все его шортсы и посты (включая базу)? После этого скан добавит его заново.",
@@ -121,6 +124,9 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      cancel: "Cancel", left: "left", sec_short: "s", min_short: "min",
+      job_scheduling: "Scheduling posts", job_restore: "Restoring removed",
+      job_cancelling: "Cancelling…", job_cancelled: "Cancelled", job_done: "Done",
       scan_date_films: "Films from", scan_date_shorts: "Shorts from", scan_run_dates: "Start from dates",
       t_started_async: "Started — posts are being added gradually", working: "Working…",
       confirm_delete_film: "Delete the film, all its shorts and posts (including the database)? A scan can re-add it later.",
@@ -281,7 +287,9 @@
     });
   }
 
-  function busy(text) {
+  let _jobTimer = null;
+
+  function _overlay() {
     let el = document.getElementById("busy");
     if (!el) {
       el = document.createElement("div");
@@ -289,12 +297,62 @@
       el.className = "busy-overlay";
       document.body.appendChild(el);
     }
-    el.innerHTML = `<div class="busy-box">⏳ ${text || t("working")}</div>`;
+    return el;
+  }
+
+  function busy(text) {
+    const el = _overlay();
+    el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${text || t("working")}</span></div></div>`;
     el.style.display = "flex";
   }
-  function unbusy() {
-    const el = document.getElementById("busy");
-    if (el) el.style.display = "none";
+
+  function busyJob(title) {
+    const el = _overlay();
+    el.innerHTML = `<div class="busy-box">
+      <div class="busy-row">${icon("spinner", 20)}<span id="job-title">${title || t("working")}</span></div>
+      <div class="pbar"><div class="pbar-fill" id="job-fill" style="width:0%"></div></div>
+      <div class="busy-row busy-meta"><span id="job-count"></span><span id="job-eta"></span></div>
+      <div class="form-row"><button class="btn danger" data-act="job-cancel">${t("cancel")}</button></div>
+    </div>`;
+    el.style.display = "flex";
+    if (_jobTimer) clearInterval(_jobTimer);
+    _jobTimer = setInterval(_pollJob, 1000);
+    _pollJob();
+  }
+
+  function _fmtSec(n) {
+    if (n == null) return "";
+    if (n < 60) return `${n} ${t("sec_short")}`;
+    const m = Math.floor(n / 60), sec = n % 60;
+    return `${m} ${t("min_short")} ${sec} ${t("sec_short")}`;
+  }
+
+  async function _pollJob() {
+    try {
+      const r = await api("/job");
+      const j = r.job;
+      if (!j) { stopJob(); return; }
+      const fill = document.getElementById("job-fill");
+      const cnt = document.getElementById("job-count");
+      const eta = document.getElementById("job-eta");
+      const title = document.getElementById("job-title");
+      if (title && j.title) title.textContent = j.title;
+      if (fill) fill.style.width = `${j.percent || 0}%`;
+      if (cnt) cnt.textContent = j.total ? `${j.done} / ${j.total} · ${j.percent}%` : `${j.done}`;
+      if (eta) eta.textContent = j.status === "running" && j.eta ? `${t("left")} ~${_fmtSec(j.eta)}` : "";
+      if (j.status !== "running") {
+        stopJob();
+        const msg = j.status === "cancelled" ? t("job_cancelled")
+          : j.status === "failed" ? `${t("error_prefix")}: ${j.message}` : t("job_done");
+        toast(msg);
+        load();
+      }
+    } catch (e) { /* сеть — попробуем снова */ }
+  }
+
+  function stopJob() {
+    if (_jobTimer) { clearInterval(_jobTimer); _jobTimer = null; }
+    unbusy();
   }
 
   function statusText(status) {
@@ -362,6 +420,18 @@
     }
   }
 
+  const SVG = {
+    spinner: '<svg viewBox="0 0 24 24" class="spin"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.25"/><path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>',
+    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M17.6 14.2A6.2 6.2 0 0 1 21.2 20"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 2.4 20h19.2z"/><path d="M12 9.4v4.4"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13"/><path d="M4 14l3 3 3-3"/><path d="M17 20V7"/><path d="M14 10l3-3 3 3"/></svg>',
+  };
+  function icon(name, size) {
+    const sz = size || 16;
+    return `<span class="pico" style="width:${sz}px;height:${sz}px">${SVG[name] || ""}</span>`;
+  }
+
   const PLATFORM_ICONS = {
     telegram: '<svg viewBox="0 0 24 24"><path d="M21.9 4.6 18.7 19c-.2 1-.9 1.2-1.7.8l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.5-7.7c.4-.3-.1-.5-.6-.2L6.8 12.9l-4.5-1.4c-1-.3-1-1 .2-1.5l17.7-6.8c.8-.3 1.6.2 1.7 1.4z"/></svg>',
     youtube: '<svg viewBox="0 0 24 24"><path d="M23 12s0-3.8-.5-5.6c-.3-1-1-1.8-2-2C18.6 4 12 4 12 4s-6.6 0-8.5.4c-1 .2-1.7 1-2 2C1 8.2 1 12 1 12s0 3.8.5 5.6c.3 1 1 1.8 2 2 1.9.4 8.5.4 8.5.4s6.6 0 8.5-.4c1-.2 1.7-1 2-2 .5-1.8.5-5.6.5-5.6zM9.8 15.5v-7l6 3.5-6 3.5z"/></svg>',
@@ -401,7 +471,7 @@
     const roots = items
       .map((it) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${it.path}</div>
         <span class="meta">${t("kind_label")}: ${t("kind_" + (it.kind || "auto"))}</span>
-        <button class="btn secondary" data-act="folder-kind" data-p="${it.path}" title="${t("kind_label")}">⇄</button>
+        <button class="btn secondary" data-act="folder-kind" data-p="${it.path}" title="${t("kind_label")}">${icon("swap", 14)}</button>
         <button class="btn danger" data-act="folder-remove" data-p="${it.path}">${t("remove")}</button></div>`)
       .join("");
     const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
@@ -410,11 +480,11 @@
     const rsel = (b.roots || []).length > 1
       ? `<div class="form-row">${(b.roots || []).map((r) => {
           const m = metaByPath[r] || { available: true };
-          const warn = m.available ? "" : " ⚠";
+          const warn = m.available ? "" : ` ${icon("warn", 14)}`;
           return `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}"${m.available ? "" : " disabled"}>${r}${warn}</button>`;
         }).join("")}</div>`
       : "";
-    const warnRow = b.warning ? `<div class="row"><span class="meta">⚠ ${b.warning}</span></div>` : "";
+    const warnRow = b.warning ? `<div class="row"><span class="meta warn-text">${icon("warn", 14)} ${b.warning}</span></div>` : "";
     const sc = state.scan;
     const st = sc ? (sc.stats || {}) : null;
     const tot = sc ? (sc.totals || {}) : {};
@@ -437,7 +507,7 @@
       </div></div>` : "";
 
     const dirs = (b.dirs || [])
-      .map((x) => `<div class="row"><div class="title">📁 ${x.name}</div>
+      .map((x) => `<div class="row"><div class="title">${icon("folder", 15)} ${x.name}</div>
         <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button></div>`)
       .join("");
     content().innerHTML = `
@@ -510,7 +580,7 @@
              </div>
            </div>`
         : "";
-      return `<div class="row"><div class="title q-title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+      return `<div class="row"><div class="title q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
        <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
@@ -757,7 +827,7 @@
     const groups = d.groups || [];
     const plats = d.platforms || [];
     const groupRows = groups.map((g) =>
-      `<div class="row"><div class="title">👥 ${g.name}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
+      `<div class="row"><div class="title">${icon("users", 15)} ${g.name}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
         <button class="btn danger" data-act="group-remove" data-p="${g.name}">${t("group_remove")}</button></div>`).join("");
     const groupForm = `<div class="form-row"><input id="group-name" placeholder="${t("group_name")}" />
       <span class="meta">${plats.map((p) => `<label class="chk" style="margin-right:6px"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
@@ -771,7 +841,7 @@
     const eff = d.effective || {};
     const plats = d.platforms || [];
     const platformsHtml = plats.map((p) => schedBlock(p, `<span class="q-plat">${pIcon(p)}</span>`, eff[p] || {}, settings[p] || {}, true)).join("");
-    const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `👥 ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
+    const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `${icon("users", 15)} ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
     return platformsHtml + groupsHtmlBlocks;
   }
   function renderSettings(d) {
@@ -1088,13 +1158,21 @@
         return load();
       }
       if (act === "scan-restore") {
-        busy(t("working"));
-        const rr = await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
-        await api("/schedule", { method: "POST", body: JSON.stringify({ async: true }) });
-        unbusy();
-        toast(`${t("t_restored")}: ${rr.restored || 0} · ${t("t_started_async")}`);
+        busyJob(t("job_restore"));
+        try {
+          await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
+          await api("/schedule", { method: "POST", body: JSON.stringify({ async: true }) });
+        } catch (e) {
+          stopJob();
+          toast(`${t("error_prefix")}: ${e.message}`);
+        }
         state.scan = null;
-        return load();
+        return;
+      }
+      if (act === "job-cancel") {
+        await api("/job/cancel", { method: "POST", body: "{}" });
+        toast(t("job_cancelling"));
+        return;
       }
       if (act === "settings-tab") {
         state.settingsTab = el.dataset.p || "sched";
@@ -1109,12 +1187,15 @@
           if (shorts && shorts.value) body.shorts_start_date = shorts.value;
           if (!body.start_date && !body.shorts_start_date) return toast(t("t_error_date"));
         }
-        busy(t("working"));
-        const r = await api("/schedule", { method: "POST", body: JSON.stringify(body) })
-          .finally(() => unbusy());
-        toast(t("t_started_async"));
+        busyJob(t("job_scheduling"));
+        try {
+          await api("/schedule", { method: "POST", body: JSON.stringify(body) });
+        } catch (e) {
+          stopJob();
+          toast(`${t("error_prefix")}: ${e.message}`);
+        }
         state.scan = null;
-        return load();
+        return;
       }
       if (act === "pause-all") {
         await api("/pause", { method: "POST", body: "{}" });

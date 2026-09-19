@@ -18,6 +18,7 @@ from .clock import SystemClock
 from .config import load_config
 from .db import Database
 from .engines.token_broker_client import TokenBrokerClient
+from .jobs import JobRegistry
 from .link_updater import LinkUpdater
 from .manual_sources import build_manual_sources
 from .manual_uploads import ManualUploadsService
@@ -79,6 +80,7 @@ def build(args: argparse.Namespace) -> dict:
     comps = {
         "cfg": cfg,
         "db": db,
+        "jobs": JobRegistry(),
         "guard": comps_guard,
         "clock": clock,
         "postiz": postiz,

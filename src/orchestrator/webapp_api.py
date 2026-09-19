@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "50"
+WEBAPP_BUILD = "51"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -197,6 +197,14 @@ class WebAppAPI:
                 return (200, {"ok": True}, "application/json") if ok else (
                     400, {"error": "failed"}, "application/json"
                 )
+            if method == "GET" and route == "job":
+                jobs = self.comps.get("jobs")
+                snap = jobs.snapshot() if jobs is not None else None
+                return 200, {"job": snap}, "application/json"
+            if method == "POST" and route == "job/cancel":
+                jobs = self.comps.get("jobs")
+                ok = jobs.cancel() if jobs is not None else False
+                return 200, {"ok": ok}, "application/json"
             if method == "GET" and route == "roots":
                 return 200, {
                     "roots": self._roots(),
@@ -816,10 +824,18 @@ class WebAppAPI:
                     return 500, {"error": "watcher unavailable"}, "application/json"
                 stats = {"long": 0, "shorts": 0, "standalone": 0}
                 passes = max(2, int(getattr(self.cfg, "file_stability_cycles", 2)))
+                jobs = self.comps.get("jobs")
+                job = jobs.start("scan", "Сканирование папок", passes) if jobs is not None else None
                 for _ in range(passes):
+                    if job is not None and job.cancelled:
+                        break
                     st = watcher.scan()
                     for k in stats:
                         stats[k] += int(st.get(k, 0) or 0)
+                    if job is not None:
+                        job.tick(1, "Поиск фильмов и шортсов")
+                if job is not None:
+                    job.finish("done", "Сканирование завершено")
                 roots = [str(r) for r in watcher.effective_roots()]
 
                 def _under(path: str) -> bool:
@@ -1020,12 +1036,22 @@ class WebAppAPI:
                 if guard is not None and hasattr(guard, "invalidate"):
                     guard.invalidate()
 
+                jobs = self.comps.get("jobs")
+                job = jobs.start("schedule", "Планирование публикаций") if jobs is not None else None
+
                 def _run():
                     try:
+                        if sc is not None:
+                            sc.job = job
                         sc.schedule_long_videos(start_date=sd)
                         sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd)
-                    except Exception:
+                        sc.schedule_telegram_links()
+                        if job is not None:
+                            job.finish("done", "Готово")
+                    except Exception as e:
                         logger.exception("async schedule failed")
+                        if job is not None:
+                            job.finish("failed", str(e)[:200])
 
                 if data.get("async"):
                     import threading

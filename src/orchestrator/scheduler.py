@@ -29,6 +29,7 @@ class Scheduler:
         self.publisher = publisher
         self.safety = safety
         self.clock = clock
+        self.job = None  # Job для прогресса/отмены (задаётся перед запуском)
 
     def _pick_path(self, row, platform: str, pcfg=None):
         """Путь под платформу (platform_paths) или общий wide/vertical/video."""
@@ -119,6 +120,8 @@ class Scheduler:
                 continue
             limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
             for video in videos:
+                if self.job is not None and self.job.cancelled:
+                    break
                 exists = self.db.fetchone(
                     "SELECT 1 FROM entity_platform_status WHERE entity_type='long_video' "
                     "AND entity_id=? AND platform=? "
@@ -141,6 +144,8 @@ class Scheduler:
                             "long_video", video["id"], platform, path, content, slot)
                         if post:
                             count += 1
+                            if self.job is not None:
+                                self.job.tick(1, f"Фильм #{video['id']} → {platform}")
                         break
         return count
 
@@ -230,8 +235,12 @@ class Scheduler:
         pcfg = self.cfg.platforms[platform]
         if getattr(pcfg, "post_mode", "media") == "link":
             return 0
+        if self.job is not None:
+            self.job.set_total(max(self.job.state.total, len(assignments)))
         count = 0
         for sid, sched in assignments:
+            if self.job is not None and self.job.cancelled:
+                break
             short = next(s for s in shorts if s["id"] == sid)
             desc = template.format(
                 description=short["description_text"] or "",
@@ -318,6 +327,8 @@ class Scheduler:
                 (etype,),
             )
             for r in rows:
+                if self.job is not None and self.job.cancelled:
+                    break
                 exists = self.db.fetchone(
                     "SELECT 1 FROM entity_platform_status "
                     "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
@@ -352,6 +363,8 @@ class Scheduler:
                 post = self._safe_publish(etype, r["id"], "telegram", None, content, when)
                 if post:
                     count += 1
+                    if self.job is not None:
+                        self.job.tick(1, f"Ссылка в Telegram: {etype} #{r['id']}")
         return count
 
     def _backlog_slots(self, days: int = 30, start_date: str | None = None) -> list[datetime]:
@@ -475,6 +488,8 @@ class Scheduler:
             weekday_set = {DAY_MAP[d.lower()[:3]] for d in days}
             thematic = self._thematic_dates_for_platform(platform)
             for short in ready:
+                if self.job is not None and self.job.cancelled:
+                    break
                 cur = local_today
                 placed = False
                 for _ in range(28):
@@ -503,6 +518,8 @@ class Scheduler:
                                 if post:
                                     count += 1
                                     placed = True
+                                    if self.job is not None:
+                                        self.job.tick(1, f"Обычный шортс #{short['id']}")
                                 break
                         if placed:
                             break

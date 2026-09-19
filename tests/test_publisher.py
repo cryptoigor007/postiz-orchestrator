@@ -78,3 +78,27 @@ def test_dry_run(setup):
     )
     assert p is None
     assert len(postiz.posts) == 0
+
+
+def test_hourly_create_limit(setup):
+    db, cfg, clock, postiz, safety, pub = setup
+    cfg.limits.postiz_create_per_hour = 1
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, created_at) "
+        "VALUES ('v', '/hl', 't', '/hl/w.mp4', ?)",
+        (clock.now().isoformat(),),
+    )
+    vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/hl'")["id"]
+    sched = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
+    p1 = pub.publish("long_video", vid, "youtube", "/hl/w.mp4", {"title": "x"}, sched)
+    assert p1 is not None
+    vid2 = None
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, created_at) "
+        "VALUES ('v', '/hl2', 't', '/hl2/w.mp4', ?)",
+        (clock.now().isoformat(),),
+    )
+    vid2 = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/hl2'")["id"]
+    p2 = pub.publish("long_video", vid2, "youtube", "/hl2/w.mp4", {"title": "y"},
+                     datetime(2026, 3, 11, 16, 0, tzinfo=UTC))
+    assert p2 is None  # hourly limit hit

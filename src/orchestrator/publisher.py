@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .clock import Clock
@@ -91,6 +91,20 @@ class Publisher:
                         entity_type, entity_id, platform, scheduled_for)
             self.db.log(entity_type, entity_id, platform, "dry_run", str(scheduled_for))
             return None
+
+        # Postiz hourly create limit (config: limits.postiz_create_per_hour)
+        hourly = getattr(self.cfg.limits, "postiz_create_per_hour", 0) or 0
+        if hourly:
+            cutoff = (self.clock.now() - timedelta(hours=1)).isoformat()
+            row = self.db.fetchone(
+                "SELECT COUNT(*) AS c FROM publish_log "
+                "WHERE action='created' AND created_at >= ?",
+                (cutoff,),
+            )
+            if row and row["c"] >= hourly:
+                self.db.log(entity_type, entity_id, platform, "safety_block", "hourly_create_limit")
+                logger.info("Hourly create limit reached (%s)", hourly)
+                return None
 
         # 3. Upload
         pcfg = self.cfg.platforms.get(platform)

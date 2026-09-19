@@ -135,8 +135,11 @@ class ManualUploadsService:
     def scan_all(self, sources: dict) -> dict:
         """Scan every source that supports listing; return per-platform stats."""
         page = getattr(self.cfg.manual_uploads, "page_size", 50)
+        allowed = set(getattr(self.cfg.manual_uploads, "platforms", []) or [])
         stats: dict = {}
         for platform, src in (sources or {}).items():
+            if allowed and platform not in allowed:
+                continue
             caps = getattr(src, "capabilities", lambda: {})()
             if not caps.get("list", False):
                 stats[platform] = {"skipped": "engine does not support listing uploads"}
@@ -221,7 +224,10 @@ class ManualUploadsService:
             """,
             (entity_type, entity_id, row["platform"], now, row.get("url")),
         )
-        if apply_edits and engine is not None:
+        if apply_edits and engine is not None and row.get("claim_status") == "claimed":
+            self.db.execute("UPDATE platform_uploads SET edit_error=? WHERE id=?",
+                            ("blocked: claim", upload_id))
+        elif apply_edits and engine is not None:
             try:
                 ok = engine.update_metadata(
                     str(row["platform_video_id"]),

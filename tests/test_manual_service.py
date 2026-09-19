@@ -165,3 +165,36 @@ def test_scan_honors_lookback(tmp_path):
     assert stats["found"] == 1
     ids = [u["platform_video_id"] for u in db.list_uploads()]
     assert ids == ["NEW"]
+
+
+class _RecordingEngine:
+    def __init__(self): self.calls = []
+    def update_metadata(self, external_id, data):
+        self.calls.append((external_id, data)); return True
+
+
+def test_scan_all_respects_platforms_filter(tmp_path):
+    svc, db, clock = make(tmp_path)
+    svc.cfg.manual_uploads.platforms = ["youtube"]
+    sources = {
+        "youtube": _ListSource([{"external_id": "Y9", "title": "x", "published_at": None}]),
+        "telegram": _ListSource([{"external_id": "T9", "title": "y", "published_at": None}]),
+    }
+    stats = svc.scan_all(sources)
+    assert "youtube" in stats and "telegram" not in stats
+
+
+def test_confirm_blocks_edits_on_claim(tmp_path):
+    svc, db, clock = make(tmp_path)
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, title_text, created_at) "
+        "VALUES ('v','/cl','CL','/cl/w.mp4','Серия CL',?)", (now,))
+    vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/cl'")["id"]
+    up = db.upsert_upload(engine="direct", platform="youtube", external_id="CL1",
+                          url="https://youtu.be/CL1", title="Серия CL", origin="manual")
+    db.execute("UPDATE platform_uploads SET claim_status='claimed' WHERE id=?", (up["id"],))
+    eng = _RecordingEngine()
+    svc.confirm(up["id"], "long_video", vid, apply_edits=True, engine=eng)
+    assert eng.calls == []  # edits blocked by claim
+    assert db.get_upload(up["id"])["edit_error"] == "blocked: claim"

@@ -170,7 +170,8 @@ def test_scan_honors_lookback(tmp_path):
 class _RecordingEngine:
     def __init__(self): self.calls = []
     def update_metadata(self, external_id, data):
-        self.calls.append((external_id, data)); return True
+        self.calls.append((external_id, data))
+        return True
 
 
 def test_scan_all_respects_platforms_filter(tmp_path):

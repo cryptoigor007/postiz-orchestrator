@@ -86,18 +86,6 @@ class SafetyChecker:
         )
         return int(row["cnt"]) if row else 0
 
-    def _get_last_scheduled(self, platform: str) -> datetime | None:
-        row = self.db.fetchone(
-            """
-            SELECT postiz_scheduled_for FROM entity_platform_status
-            WHERE platform = ? AND postiz_scheduled_for IS NOT NULL
-              AND status IN ('scheduled', 'updating', 'published')
-            ORDER BY postiz_scheduled_for DESC LIMIT 1
-            """,
-            (platform,),
-        )
-        return _parse_dt(row["postiz_scheduled_for"]) if row else None
-
     def can_schedule(self, platform: str, scheduled_for: datetime,
                      platform_daily_limit: int) -> tuple[bool, str]:
         """Check limits and min_interval for a proposed schedule time."""

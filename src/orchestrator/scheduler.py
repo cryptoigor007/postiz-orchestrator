@@ -392,6 +392,7 @@ class Scheduler:
             days = eff.get("days") or ["mon", "wed", "thu", "sat", "sun"]
             times = eff.get("times") or ["12:00", "18:00"]
             limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
+            exceptions = set(eff.get("exception_days") or [])
             weekday_set = {DAY_MAP[d.lower()[:3]] for d in days}
             thematic = self._thematic_dates_for_platform(platform)
             for short in ready:
@@ -400,6 +401,7 @@ class Scheduler:
                 for _ in range(28):
                     if (
                         cur.weekday() in weekday_set
+                        and cur.isoformat() not in exceptions
                         and cur not in thematic
                     ):
                         for ts in times:

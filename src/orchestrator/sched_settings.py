@@ -111,6 +111,7 @@ def effective(db: Database, cfg: AppConfig, platform: str, kind: str) -> dict[st
     return {
         "days": [str(d) for d in (days or [])],
         "times": [str(t) for t in times],
+        "exception_days": list(base.get("exception_days", [])),
     }
 
 

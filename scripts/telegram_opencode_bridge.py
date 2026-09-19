@@ -120,7 +120,6 @@ def main() -> int:
             answer = _run_opencode(text)
             _send(chat, answer)
         time.sleep(1)
-    return 0
 
 
 if __name__ == "__main__":

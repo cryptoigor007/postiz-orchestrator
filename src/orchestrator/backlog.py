@@ -51,18 +51,6 @@ class BacklogManager:
     def has_backlog(self, platform: str) -> int:
         return len(self.unposted_series_shorts(platform))
 
-    def has_ready_long(self) -> bool:
-        row = self.db.fetchone(
-            """
-            SELECT COUNT(*) AS c FROM long_videos lv
-            WHERE NOT EXISTS (
-                SELECT 1 FROM entity_platform_status eps
-                WHERE eps.entity_type='long_video' AND eps.entity_id=lv.id
-                  AND eps.status IN ('scheduled','published'))
-            """
-        )
-        return bool(row and (row["c"] or 0) > 0)
-
     def _state(self, platform: str) -> dict | None:
         return self.db.fetchone(
             "SELECT pending_series_end_question, pending_series_end_at, series_tail_mode,"
@@ -99,22 +87,6 @@ class BacklogManager:
                 st["pending_series_end_at"] == slot.isoformat():
             return None
         return slot
-
-    def reminder_due(self, platform: str, now: datetime | None = None) -> bool:
-        now = now or self.clock.now()
-        st = self._state(platform)
-        if not (st and st["pending_series_end_question"] and st["pending_series_end_at"]):
-            return False
-        try:
-            slot = datetime.fromisoformat(st["pending_series_end_at"])
-        except Exception:
-            return False
-        if slot.tzinfo is None:
-            slot = slot.replace(tzinfo=UTC)
-        remind_at = slot - timedelta(minutes=self.cfg.tail.reminder_minutes_before)
-        return remind_at <= now < slot
-
-    # ---------- actions ----------
 
     def ask(self, platform: str, slot: datetime) -> None:
         now = self.clock.now().isoformat()

@@ -32,11 +32,6 @@ class Publisher:
         self.dry_run = dry_run
         self.guard = guard
 
-    def _idempotency_key(self, entity_type: str, entity_id: int, platform: str,
-                         scheduled_for: datetime | None) -> str:
-        ts = scheduled_for.isoformat() if scheduled_for else "now"
-        return f"{entity_type}:{entity_id}:{platform}:{ts}"
-
     def _already_exists(self, entity_type: str, entity_id: int, platform: str) -> str | None:
         row = self.db.fetchone(
             """

@@ -40,7 +40,8 @@ def test_platform_override(tmp_path):
     long = ss.effective(db, cfg, "youtube", "long")
     assert long["days"] == ["sun"] and long["time"] == "11:15"
     assert ss.effective(db, cfg, "youtube", "thematic")["time"] == "19:00"
-    assert ss.effective(db, cfg, "youtube", "standalone") == {"days": ["mon"], "times": ["10:00"]}
+    eff_sa = ss.effective(db, cfg, "youtube", "standalone")
+    assert eff_sa["days"] == ["mon"] and eff_sa["times"] == ["10:00"]
     assert ss.effective_daily_limit(db, cfg, "youtube") == 3
     # другая платформа не затронута
     assert ss.effective(db, cfg, "telegram", "long")["time"] == "16:00"

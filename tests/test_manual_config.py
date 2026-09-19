@@ -16,6 +16,4 @@ def test_manual_uploads_defaults_and_yaml():
     assert mu.enabled is True
     assert mu.lookback_days == 60
     assert mu.page_size == 50
-    assert mu.confidence_high > mu.confidence_medium
     assert mu.schedule_scan in ("off", "daily")
-    assert mu.claim_policy in ("warn", "block")

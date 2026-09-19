@@ -105,6 +105,13 @@ class Runner:
             nt += self.comps["scheduler"].schedule_thematic_shorts(
                 r["entity_id"], r["platform"]
             )
+        postiz = self.comps.get("postiz")
+        if postiz is not None and hasattr(postiz, "orphan_media_ids"):
+            orphans = postiz.orphan_media_ids()
+            if orphans:
+                logger.warning("Postiz orphan media (не привязаны к постам): %s", len(orphans))
+                if hasattr(postiz, "clear_orphan_media"):
+                    postiz.clear_orphan_media()
         self.metrics.incr("scheduled_long", n)
         self.metrics.incr("scheduled_short", n2 + nt)
         if n or n2 or nt:

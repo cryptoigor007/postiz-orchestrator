@@ -7,29 +7,6 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 
-class ScheduleLong(BaseModel):
-    type: str = "long_video"
-    source: str = "videomaker"
-    days: list[str]
-    time: str
-    is_cycle: bool = True
-    exception_days: list[str] = Field(default_factory=list)
-
-
-class ScheduleThematic(BaseModel):
-    type: str = "shorts_thematic"
-    source: str = "videomaker"
-    default_time: str = "20:30"
-
-
-class ScheduleStandalone(BaseModel):
-    type: str = "shorts_standalone"
-    source: str = "shortsmaker"
-    days: list[str]
-    times: list[str]
-    exception_days: list[str] = Field(default_factory=list)
-
-
 class PlatformCfg(BaseModel):
     video_variant: str = "wide"
     audio_profile: str = "default"
@@ -86,12 +63,7 @@ class ManualUploadsCfg(BaseModel):
     platforms: list[str] = Field(default_factory=list)
     lookback_days: int = 60
     page_size: int = 50
-    confidence_high: float = 0.80
-    confidence_medium: float = 0.55
-    apply_description: bool = True
-    rename_title: bool = False
     schedule_scan: str = "daily"
-    claim_policy: str = "warn"
     placement_default: str = "end"
 
 
@@ -128,7 +100,7 @@ class AppConfig(BaseModel):
 
     @field_validator("platforms", mode="before")
     @classmethod
-    def parse_platforms(cls, v: dict) -> dict:
+    def parse_platforms(_cls, v: dict) -> dict:
         return {k: PlatformCfg(**val) if isinstance(val, dict) else val for k, val in v.items()}
 
     def engine_for(self, platform: str) -> str:

@@ -50,6 +50,7 @@ def build(args: argparse.Namespace) -> dict:
     postiz = create_postiz_client(dry_run=args.dry_run)
     safety = SafetyChecker(db, cfg, clock)
     guard = ScheduleGuard(cfg, clock, sources=[("postiz", postiz_source(postiz))])
+    comps_guard = guard
     publisher = Publisher(db, cfg, postiz, safety, clock, dry_run=args.dry_run, guard=guard)
     scheduler = Scheduler(db, cfg, publisher, safety, clock)
     status_sync = StatusSync(db, postiz, clock, cfg)
@@ -72,6 +73,7 @@ def build(args: argparse.Namespace) -> dict:
     comps = {
         "cfg": cfg,
         "db": db,
+        "guard": comps_guard,
         "clock": clock,
         "postiz": postiz,
         "safety": safety,

@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "48"
+WEBAPP_BUILD = "49"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -413,6 +413,9 @@ class WebAppAPI:
                             logger.warning("queue remove: удаление поста %s не удалось", pid,
                                            exc_info=True)
 
+                guard = self.comps.get("guard")
+                if guard is not None and hasattr(guard, "invalidate"):
+                    guard.invalidate()
                 removed = 0
                 blocked: list[str] = []
                 if etype == "long_video":
@@ -1013,6 +1016,9 @@ class WebAppAPI:
                         return 400, {"error": f"{name} must be YYYY-MM-DD"}, "application/json"
                 if shr is not None:
                     sched_settings.set_shorts_start_date(self.db, shr or "")
+                guard = self.comps.get("guard")
+                if guard is not None and hasattr(guard, "invalidate"):
+                    guard.invalidate()
 
                 def _run():
                     try:

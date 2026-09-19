@@ -63,12 +63,16 @@ class ScheduleGuard:
 
     def __init__(self, cfg: AppConfig, clock: Clock,
                  sources: list[tuple[str, Callable[[str], list[datetime]]]] | None = None,
-                 ttl_sec: int = 300):
+                 ttl_sec: int = 120):
         self.cfg = cfg
         self.clock = clock
         self.sources = list(sources or [])
         self.ttl_sec = ttl_sec
         self._cache: dict[tuple[str, str], tuple[float, list[datetime]]] = {}
+
+    def invalidate(self) -> None:
+        """Сбросить кэш (после удаления/создания постов)."""
+        self._cache.clear()
 
     def _times(self, name: str, fn: Callable, platform: str) -> list[datetime]:
         key = (name, platform)

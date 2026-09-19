@@ -28,6 +28,7 @@ class TelegramTransport:
         # no_ack: не подтверждаем апдейты (offset=0), чтобы не «съедать» их у Postiz (/connect)
         self.no_ack = os.getenv("TELEGRAM_POLL_NO_ACK", "1") not in ("0", "false", "no")
         self._seen: set[int] = set()
+        self._last_update_id = 0
 
     @property
     def enabled(self) -> bool:
@@ -68,9 +69,17 @@ class TelegramTransport:
         """For tests / webhook adapter."""
         self._q.put((chat_id, text))
 
+    def _next_offset(self) -> int:
+        """В no_ack держим последние ~50 апдейтов неподтверждёнными (видны Postiz)."""
+        if not self.no_ack:
+            return self._offset
+        return max(0, self._last_update_id - 50)
+
     def _accept(self, upd: dict) -> bool:
         """Фильтр дублей в режиме no_ack; иначе двигаем offset."""
         uid = upd.get("update_id")
+        if uid is not None:
+            self._last_update_id = max(self._last_update_id, uid)
         if self.no_ack:
             if uid in self._seen:
                 return False
@@ -102,7 +111,7 @@ class TelegramTransport:
             try:
                 r = httpx.get(
                     f"{self._base}/getUpdates",
-                    params={"offset": 0 if self.no_ack else self._offset, "timeout": 25},
+                    params={"offset": self._next_offset(), "timeout": 25},
                     timeout=30,
                 )
                 if r.status_code != 200:

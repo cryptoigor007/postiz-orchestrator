@@ -162,6 +162,45 @@ class BacklogManager:
         self.db.log("system", None, platform, f"backlog_{answer}", "")
         return 0
 
+    def last_long_slot(self, now: datetime | None = None) -> datetime | None:
+        """Последний по времени слот серии (<= now)."""
+        from .slots import DAY_MAP, get_tz, local_to_utc, parse_time
+        now = now or self.clock.now()
+        sched = self.cfg.schedules.get("long_video", {})
+        days = {DAY_MAP[d.lower()[:3]] for d in sched.get("days", ["tue", "fri"])
+                if d.lower()[:3] in DAY_MAP}
+        t = sched.get("time", "16:00")
+        tz = get_tz(self.cfg.timezone)
+        local_today = now.astimezone(tz).date()
+        for i in range(0, 15):
+            d = local_today - timedelta(days=i)
+            if d.weekday() in days:
+                dt = local_to_utc(d, parse_time(t), self.cfg.timezone)
+                if dt <= now:
+                    return dt
+        return None
+
+    def missed_default(self, platform: str, now: datetime | None = None) -> int:
+        """Окно вопроса пропущено (оркестратор был недоступен) -> применяем дефолт."""
+        now = now or self.clock.now()
+        if self.awaiting(platform):
+            return 0
+        slot = self.last_long_slot(now)
+        if not slot:
+            return 0
+        if self.db.get_setting(f"backlog_slot_done_{platform}") == slot.isoformat():
+            return 0
+        if self.has_backlog(platform) == 0:
+            return 0
+        if now - slot > timedelta(hours=24):
+            return 0
+        if self.cfg.tail.default_action != "distribute":
+            self.db.set_setting(f"backlog_slot_done_{platform}", slot.isoformat())
+            return 0
+        logger.info("Backlog missed-window default for %s at %s", platform, slot)
+        self.db.set_setting(f"backlog_slot_done_{platform}", slot.isoformat())
+        return self.resolve(platform, "distribute", slot)
+
     def should_remind(self, platform: str, now: datetime | None = None) -> datetime | None:
         now = now or self.clock.now()
         st = self._state(platform)

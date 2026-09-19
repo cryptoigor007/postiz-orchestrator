@@ -115,27 +115,39 @@ class LinkUpdater:
             if r["postiz_scheduled_for"]:
                 sched = datetime.fromisoformat(r["postiz_scheduled_for"])
             try:
-                # clear old status to allow re-create
                 old_id = r["postiz_post_id"]
+                # clear old status to allow re-create
                 self.db.execute(
                     "UPDATE entity_platform_status SET postiz_post_id=NULL, status='ready' "
                     "WHERE entity_type='short' AND entity_id=? AND platform=?",
                     (r["entity_id"], platform),
                 )
-                # use scheduler's publisher if available
                 pub = getattr(scheduler, "publisher", None)
                 if pub is None:
                     continue
-                post = pub.publish(
-                    "short", r["entity_id"], platform,
-                    r["video_path"], content, sched,
-                )
-                if post and old_id:
-                    try:
-                        self.postiz.delete_post(old_id)
-                    except Exception:
-                        logger.warning("Failed to delete old post %s", old_id)
+                try:
+                    post = pub.publish(
+                        "short", r["entity_id"], platform,
+                        r["video_path"], content, sched,
+                    )
+                except Exception:
+                    post = None
+                    logger.exception("refresh thematic publish failed %s", r["entity_id"])
+                if post:
+                    if old_id:
+                        try:
+                            self.postiz.delete_post(old_id)
+                        except Exception:
+                            logger.warning("Failed to delete old post %s", old_id)
                     updated += 1
+                elif old_id:
+                    # откат: вернуть старую привязку, чтобы не потерять пост
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET postiz_post_id=?, status='scheduled', "
+                        "last_error='refresh_failed' WHERE entity_type='short' AND entity_id=? "
+                        "AND platform=?",
+                        (old_id, r["entity_id"], platform),
+                    )
             except Exception:
                 logger.exception("refresh thematic short %s", r["entity_id"])
         return updated

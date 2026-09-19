@@ -65,7 +65,9 @@ class Publisher:
         # jitter
         if scheduled_for and self.cfg.safety.jitter_seconds:
             from .slots import apply_jitter
-            scheduled_for = apply_jitter(scheduled_for, self.cfg.safety.jitter_seconds)
+            jittered = apply_jitter(scheduled_for, self.cfg.safety.jitter_seconds)
+            if jittered > self.clock.now():
+                scheduled_for = jittered
 
         # 1. Idempotency first (prevent self min_interval block)
         existing = self._already_exists(entity_type, entity_id, platform)

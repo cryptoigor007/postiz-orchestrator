@@ -31,6 +31,7 @@ def run_backup(db: Database, cfg: AppConfig, backup_dir: str | Path) -> Path | N
                 mdir = Path(mirror)
                 mdir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(dest, mdir / dest.name)
+                _cleanup(mdir, cfg.backup.keep_days)
                 logger.info("Backup mirrored: %s", mdir / dest.name)
             except Exception:
                 logger.exception("Backup mirror failed")

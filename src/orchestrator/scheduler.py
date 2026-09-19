@@ -28,6 +28,14 @@ class Scheduler:
         self.safety = safety
         self.clock = clock
 
+    def _safe_publish(self, *args, **kwargs):
+        """Публикация с изоляцией: сбой одного поста не ломает весь цикл."""
+        try:
+            return self.publisher.publish(*args, **kwargs)
+        except Exception:
+            logger.exception("publish failed (%s / %s)", args[0] if args else "", args[1] if len(args) > 1 else "")
+            return None
+
     def _backlog_active(self, platform: str) -> bool:
         """True, если для платформы идёт распределение неопубликованного остатка."""
         row = self.db.fetchone(
@@ -88,7 +96,7 @@ class Scheduler:
                             "description": video["description_text"] or "",
                             "hashtags": video["hashtags_text"] or "",
                         }
-                        post = self.publisher.publish(
+                        post = self._safe_publish(
                             "long_video", video["id"], platform, path, content, slot)
                         if post:
                             count += 1
@@ -186,7 +194,7 @@ class Scheduler:
             final_slot = self.safety.find_next_slot(platform, sched, pcfg.daily_limit)
             if not final_slot:
                 continue
-            post = self.publisher.publish(
+            post = self._safe_publish(
                 "short", sid, platform, path, content, final_slot
             )
             if post:
@@ -227,7 +235,7 @@ class Scheduler:
                     "description": s["description_text"] or "",
                     "hashtags": s["hashtags_text"] or "",
                 }
-                post = self.publisher.publish(
+                post = self._safe_publish(
                     "short", s["id"], platform, s["video_path"], content, slot
                 )
                 if post:
@@ -366,7 +374,7 @@ class Scheduler:
                                     "description": short["description_text"] or "",
                                     "hashtags": short["hashtags_text"] or "",
                                 }
-                                post = self.publisher.publish(
+                                post = self._safe_publish(
                                     "short", short["id"], platform,
                                     short["video_path"], content, candidate,
                                 )

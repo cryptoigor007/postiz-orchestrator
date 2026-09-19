@@ -128,6 +128,9 @@ class Runner:
                     rslot = bl.should_remind(platform)
                     if rslot:
                         bl.mark_reminded(platform, rslot)
+                    continue
+                if bl.missed_default(platform):
+                    logger.info("Backlog distributed after missed window on %s", platform)
             except Exception:
                 logger.exception("backlog check failed for %s", platform)
 

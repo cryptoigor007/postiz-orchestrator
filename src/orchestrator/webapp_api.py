@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -284,6 +285,10 @@ class WebAppAPI:
                     if not src:
                         stats[p] = {"error": "no source configured"}
                         continue
+                    caps = getattr(src, "capabilities", lambda: {})()
+                    if not caps.get("list", False):
+                        stats[p] = {"skipped": "engine does not support listing uploads"}
+                        continue
                     try:
                         uploads = src.list_uploads()
                     except Exception as e:
@@ -315,11 +320,16 @@ class WebAppAPI:
                     eid = data.get("entity_id")
                     if not et or eid is None:
                         return 400, {"error": "entity_type/entity_id required"}, "application/json"
-                    ok = manual.confirm(
-                        uid, et, int(eid),
-                        apply_edits=bool(data.get("apply_edits")) if action == "confirm" else False,
-                        engine=engine,
-                    )
+                    try:
+                        ok = manual.confirm(
+                            uid, et, int(eid),
+                            apply_edits=bool(data.get("apply_edits")) if action == "confirm" else False,
+                            engine=engine,
+                        )
+                    except sqlite3.IntegrityError:
+                        return 409, {
+                            "error": "this entity is already linked to another upload on this platform"
+                        }, "application/json"
                     return 200, {"ok": ok}, "application/json"
                 if action == "reject" and method == "POST":
                     return 200, {"ok": manual.reject(uid)}, "application/json"

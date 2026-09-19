@@ -28,12 +28,20 @@ class FakeSource:
         self.uploads = uploads
         self.deleted = []
 
+    def capabilities(self):
+        return {"list": True}
+
     def list_uploads(self, params=None):
         return list(self.uploads)
 
     def delete(self, external_id):
         self.deleted.append(external_id)
         return True
+
+
+class NoListSource:
+    def capabilities(self):
+        return {"list": False}
 
 
 def env(tmp_path):
@@ -57,9 +65,35 @@ def env(tmp_path):
         "cfg": cfg, "db": db, "clock": clock, "safety": safety,
         "scheduler": sched, "link_upd": link, "publisher": pub,
         "watcher": watcher, "postiz": postiz, "manual": manual,
-        "manual_sources": {"youtube": source},
+        "manual_sources": {"youtube": source, "telegram": NoListSource()},
     }
     return WebAppAPI(comps), db, clock, cfg, source
+
+
+def test_scan_skips_engine_without_list(tmp_path):
+    api, db, clock, cfg, source = env(tmp_path)
+    h = {"X-Telegram-Init-Data": "dev"}
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/manual/scan", h,
+        json.dumps({"platform": "telegram"}).encode())
+    assert code == 200
+    assert payload["stats"]["telegram"].get("skipped")
+
+
+def test_confirm_conflict_returns_409(tmp_path):
+    api, db, clock, cfg, source = env(tmp_path)
+    h = {"X-Telegram-Init-Data": "dev"}
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, title_text, created_at) "
+        "VALUES ('videomaker','/s9','S9','/s9/w.mp4','Ser',?)", (now,))
+    vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/s9'")["id"]
+    u1 = db.upsert_upload(engine="direct", platform="youtube", external_id="X1", origin="manual")
+    u2 = db.upsert_upload(engine="direct", platform="youtube", external_id="X2", origin="manual")
+    body = json.dumps({"entity_type": "long_video", "entity_id": vid}).encode()
+    assert api.handle("POST", f"/webapp/api/manual/uploads/{u1['id']}/confirm", h, body)[0] == 200
+    code, payload, _ = api.handle("POST", f"/webapp/api/manual/uploads/{u2['id']}/confirm", h, body)
+    assert code == 409
 
 
 def test_manual_scan_and_plan(tmp_path):

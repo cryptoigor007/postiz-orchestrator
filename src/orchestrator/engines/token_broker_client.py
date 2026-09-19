@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Callable
@@ -9,9 +10,17 @@ def _urllib_http(method: str, url: str, params: dict, headers: dict) -> dict:
     if params:
         url += "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=20) as r:
-        body = r.read().decode()
-        return json.loads(body) if body else {}
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read().decode()
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode()
+        try:
+            msg = json.loads(raw).get("error", raw)
+        except Exception:
+            msg = raw
+        raise RuntimeError(f"token broker: {msg}") from e
 
 
 class TokenBrokerClient:

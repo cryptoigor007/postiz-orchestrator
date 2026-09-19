@@ -22,3 +22,19 @@ def test_token_broker_client_request_shape():
     assert calls[0][1] == "http://host:9000/token"
     assert calls[0][2] == {"platform": "youtube"}
     assert calls[0][3]["X-Broker-Secret"] == "S3CRET"
+
+
+def test_token_broker_error_message(monkeypatch):
+    import io
+    import urllib.error
+    import urllib.request
+    import pytest
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(
+            req.full_url, 404, "Not Found", {},
+            io.BytesIO(b'{"error":"no token for youtube"}'))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(RuntimeError, match="token broker"):
+        TokenBrokerClient("http://x:9099", "s").get("youtube")

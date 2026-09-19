@@ -62,7 +62,7 @@ class MediaCfg(BaseModel):
     symlink_mode: bool = True          # не копировать файлы сервера в Postiz (симлинк)
     local_prefix: str = "/mnt/video/"
     cache_dir: str = "/mnt/video/.orch_cache"
-    telegram_max_mb: int = 49           # лимит Bot API; больше — авто-сжатие
+    telegram_max_mb: int = 0            # 0 = сжатие выключено (как просил пользователь)
 
 
 class ManualUploadsCfg(BaseModel):

@@ -22,7 +22,10 @@ def maybe_compress(path: str, platform: str, cfg: AppConfig) -> str:
     media_cfg = getattr(cfg, "media", None)
     if not media_cfg or platform != "telegram":
         return path
-    limit = int(getattr(media_cfg, "telegram_max_mb", 49)) * 1024 * 1024
+    limit_mb = int(getattr(media_cfg, "telegram_max_mb", 0))
+    if limit_mb <= 0:
+        return path
+    limit = limit_mb * 1024 * 1024
     try:
         size = os.path.getsize(path)
     except OSError:

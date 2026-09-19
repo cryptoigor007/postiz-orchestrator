@@ -11,10 +11,11 @@ from orchestrator.media import make_media, maybe_compress
 CFG = Path(__file__).resolve().parents[1] / "config.yaml"
 
 
-def test_maybe_compress_skips_small(tmp_path):
+def test_maybe_compress_disabled_by_default(tmp_path):
     cfg = load_config(CFG)
     f = tmp_path / "small.mp4"
     f.write_bytes(b"x" * 1024)
+    assert cfg.media.telegram_max_mb == 0
     assert maybe_compress(str(f), "telegram", cfg) == str(f)
 
 

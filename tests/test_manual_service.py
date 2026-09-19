@@ -94,3 +94,56 @@ def test_reject_and_candidates(tmp_path):
     assert cands and cands[0]["entity_type"] == "long_video"
     svc.reject(up["id"])
     assert db.get_upload(up["id"])["match_status"] == "rejected"
+
+
+class _ListSource:
+    def __init__(self, uploads): self.uploads = uploads
+    def capabilities(self): return {"list": True}
+    def list_uploads(self, params=None): return self.uploads
+
+
+class _NoList:
+    def capabilities(self): return {"list": False}
+
+
+class _Boom:
+    def capabilities(self): return {"list": True}
+    def list_uploads(self, params=None): raise RuntimeError("net down")
+
+
+def test_scan_all_handles_mixed_sources(tmp_path):
+    svc, db, clock = make(tmp_path)
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, title_text, created_at) "
+        "VALUES ('videomaker','/sa','SA','/sa/w.mp4','Серия SA',?)", (now,))
+    sources = {
+        "youtube": _ListSource([{"external_id": "Y1", "title": "Серия SA",
+                                 "published_at": "2026-09-19T11:00:00+00:00"}]),
+        "telegram": _NoList(),
+        "x": _Boom(),
+    }
+    stats = svc.scan_all(sources)
+    assert stats["youtube"]["manual"] == 1
+    assert stats["telegram"]["skipped"]
+    assert "net down" in stats["x"]["error"]
+
+
+def test_runner_manual_cycle(tmp_path):
+    from orchestrator.runner import Runner
+    svc, db, clock = make(tmp_path)
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, title_text, created_at) "
+        "VALUES ('videomaker','/rc','RC','/rc/w.mp4','Серия RC',?)", (now,))
+    comps = {
+        "cfg": svc.cfg, "db": db, "clock": clock, "manual": svc,
+        "manual_sources": {"youtube": _ListSource([
+            {"external_id": "RC1", "title": "Серия RC",
+             "published_at": "2026-09-19T11:00:00+00:00"}])},
+    }
+    r = Runner(comps, dry_run=True, health_port=0)
+    r._cycle_manual()
+    import json as _json
+    saved = _json.loads(db.get_setting("manual_last_scan"))
+    assert saved["stats"]["youtube"]["manual"] == 1

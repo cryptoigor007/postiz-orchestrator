@@ -118,6 +118,22 @@ class ManualUploadsService:
                         "title": r["title"], "created_at": r["created_at"]})
         return out
 
+    def scan_all(self, sources: dict) -> dict:
+        """Scan every source that supports listing; return per-platform stats."""
+        stats: dict = {}
+        for platform, src in (sources or {}).items():
+            caps = getattr(src, "capabilities", lambda: {})()
+            if not caps.get("list", False):
+                stats[platform] = {"skipped": "engine does not support listing uploads"}
+                continue
+            try:
+                uploads = src.list_uploads()
+            except Exception as e:
+                stats[platform] = {"error": str(e)}
+                continue
+            stats[platform] = self.scan(platform, uploads, engine=self.cfg.engine_for(platform))
+        return stats
+
     def candidates(self, upload_id: int) -> list[dict]:
         up = self.db.get_upload(upload_id)
         if not up:

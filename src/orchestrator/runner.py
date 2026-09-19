@@ -42,6 +42,8 @@ class Runner:
         s_int = self.cfg.status_sync_interval_sec
         r_int = self.cfg.reconciliation_interval_hours * 3600
         b_int = self.cfg.backup.interval_hours * 3600
+        m_int = 86400 if self.cfg.manual_uploads.schedule_scan == "daily" else 0
+        last_manual = time.monotonic()  # next manual scan after the interval
 
         logger.info(
             "Runner started (watch=%ss sync=%ss recon=%sh backup=%sh dry_run=%s)",
@@ -64,6 +66,9 @@ class Runner:
                 if now - last_backup >= b_int:
                     self._cycle_backup()
                     last_backup = now
+                if m_int and now - last_manual >= m_int:
+                    self._cycle_manual()
+                    last_manual = now
             except Exception as e:
                 self.metrics.incr("errors")
                 self.metrics.set("last_error", str(e))
@@ -130,6 +135,18 @@ class Runner:
         logger.info("Reconciliation: %s", r)
         if r.get("orphans") or r.get("missing"):
             self.comps["tg"].broadcast(f"Reconciliation alert: {r}")
+
+    def _cycle_manual(self) -> None:
+        manual = self.comps.get("manual")
+        sources = self.comps.get("manual_sources") or {}
+        if not manual or not self.cfg.manual_uploads.enabled or not sources:
+            return
+        import json as _json
+
+        stats = manual.scan_all(sources)
+        self.comps["db"].set_setting("manual_last_scan", _json.dumps(
+            {"at": self.comps["clock"].now().isoformat(), "stats": stats}))
+        logger.info("Manual scan: %s", stats)
 
     def _cycle_backup(self) -> None:
         from pathlib import Path

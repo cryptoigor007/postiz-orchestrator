@@ -220,3 +220,13 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 .q-time .q-clock { font-size: 13px; }
 .q-plat .pico { width: 26px; height: 26px; margin-right: 0; }
 .q-plat .pico svg { width: 26px; height: 26px; }
+
+
+/* Аккуратный текст без наложений */
+.row { flex-wrap: wrap; }
+.row > .btn { flex: 0 0 auto; }
+.row .title { overflow-wrap: anywhere; line-height: 1.3; }
+.row .mono { white-space: nowrap; }
+.pico { flex: 0 0 auto; }
+.panel-header .q-plat .pico { width: 22px; height: 22px; }
+.panel-header .q-plat .pico svg { width: 22px; height: 22px; }

@@ -363,7 +363,7 @@
       })
       .join("");
     const plats = (d.platforms || [])
-      .map((p) => `<div class="row"><div class="title">${p.name}</div>${
+      .map((p) => `<div class="row"><div class="title q-plat">${pIcon(p.name)}</div>${
         p.paused ? pill("paused") : pill("ok")
       }<span class="meta">${t("limit")} ${p.daily_limit}</span></div>`)
       .join("");
@@ -450,7 +450,7 @@
         const link = it.url ? ` <a href="${it.url}" target="_blank" rel="noopener">↗</a>` : "";
         return `<div class="row"><span class="mono">${it.time || ""}</span>
           <div class="title">${title}${link}</div>
-          <span class="meta">${pIcon(it.platform)}${it.platform || ""}</span>${pill(it.status)}</div>`;
+          <span class="meta q-plat">${pIcon(it.platform)}</span>${pill(it.status)}</div>`;
       }).join("");
       return `<div class="panel"><div class="panel-header">${day.date} <span class="meta">${day.count || 0}</span></div>${rows}</div>`;
     }).join("");
@@ -494,7 +494,7 @@
 
   function renderPlatforms(d) {
     const rows = (d.platforms || []).map((p) => `
-      <div class="row"><div class="title">${pIcon(p.name)}${p.name}</div>
+      <div class="row"><div class="title q-plat">${pIcon(p.name)}</div>
         ${p.enabled ? pill("ok") : pill("off")}${p.paused ? pill("paused") : ""}
         <span class="meta">${t("limit")} ${p.daily_limit}</span>
         <button class="btn secondary" data-act="resume-one" data-p="${p.name}">${t("resume")}</button>
@@ -520,7 +520,7 @@
         ? pill(t("backlog_awaiting"))
         : (p.tail_mode ? pill(t("backlog_on")) : pill(t("backlog_off")));
       const slot = p.slot ? `<span class="mono meta">${String(p.slot).slice(0, 16).replace("T", " ")}</span>` : "";
-      return `<div class="row"><div class="title">${pIcon(p.platform)}${p.platform}</div>
+      return `<div class="row"><div class="title q-plat">${pIcon(p.platform)}</div>
           <span class="meta">${t("backlog_unposted")}: ${p.count}</span>
           ${state}${slot}</div>
         <div class="form-row">
@@ -738,7 +738,7 @@
     const groups = d.groups || [];
     const eff = d.effective || {};
     const plats = d.platforms || [];
-    const platformsHtml = plats.map((p) => schedBlock(p, pIcon(p) + p, eff[p] || {}, settings[p] || {}, true)).join("");
+    const platformsHtml = plats.map((p) => schedBlock(p, `<span class="q-plat">${pIcon(p)}</span>`, eff[p] || {}, settings[p] || {}, true)).join("");
     const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `👥 ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
     return platformsHtml + groupsHtmlBlocks;
   }

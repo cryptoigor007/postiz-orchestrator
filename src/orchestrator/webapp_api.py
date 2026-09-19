@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "32"
+WEBAPP_BUILD = "33"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -288,13 +288,19 @@ class WebAppAPI:
                 dirs = []
                 warning = ""
                 try:
-                    for child in sorted(base.iterdir()):
-                        if child.is_dir() and not child.name.startswith("."):
-                            dirs.append({"name": child.name, "path": str(child.resolve())})
+                    children = sorted(base.iterdir())
                 except PermissionError:
                     return 403, {"error": "permission denied"}, "application/json"
                 except OSError:
+                    children = []
                     warning = "папка недоступна (диск отключён?)"
+                for child in children:
+                    if not child.is_dir() or child.name.startswith("."):
+                        continue
+                    try:
+                        dirs.append({"name": child.name, "path": str(child.resolve())})
+                    except (PermissionError, OSError):
+                        continue
                 cur = next((m for m in metas if m["path"] == str(root)), None)
                 if cur and not cur["available"]:
                     warning = cur["note"]
@@ -313,9 +319,13 @@ class WebAppAPI:
                 if not watcher:
                     return 500, {"error": "watcher unavailable"}, "application/json"
                 stats = watcher.scan()
+                last = self.db.fetchone(
+                    "SELECT MAX(postiz_scheduled_for) AS m FROM entity_platform_status "
+                    "WHERE postiz_scheduled_for IS NOT NULL")
                 return 200, {
                     "ok": True,
                     "stats": stats,
+                    "last_scheduled": (last or {}).get("m") if last else None,
                     "roots": [str(r) for r in watcher.effective_roots()],
                 }, "application/json"
             if route == "manual/plan" and method == "GET":
@@ -481,9 +491,14 @@ class WebAppAPI:
                 return 200, {"ok": True, "path": str(p) if p else None}, "application/json"
             if method == "POST" and route == "schedule":
                 sc = self.comps.get("scheduler")
-                n = sc.schedule_long_videos() if sc else 0
-                n2 = sc.schedule_standalone_shorts(self.comps.get("tail")) if sc else 0
-                return 200, {"ok": True, "long": n, "standalone": n2}, "application/json"
+                sd = str(data.get("start_date") or "").strip() or None
+                if sd:
+                    import re as _re
+                    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", sd):
+                        return 400, {"error": "start_date must be YYYY-MM-DD"}, "application/json"
+                n = sc.schedule_long_videos(start_date=sd) if sc else 0
+                n2 = sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd) if sc else 0
+                return 200, {"ok": True, "long": n, "standalone": n2, "start_date": sd}, "application/json"
             if method == "POST" and route == "pause_platform":
                 p = (data.get("platform") or "").strip()
                 if p not in self.cfg.platforms:
@@ -672,25 +687,52 @@ class WebAppAPI:
             })
         return {"counts": counts, "platforms": platforms}
 
+    def _to_local(self, value: str) -> tuple[str, str]:
+        """ISO (UTC) -> (локальная дата, HH:MM) в таймзоне конфига."""
+        from datetime import UTC
+        from datetime import datetime as _dt
+
+        from .slots import get_tz
+        try:
+            dt = _dt.fromisoformat(str(value).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            local = dt.astimezone(get_tz(self.cfg.timezone))
+            return local.date().isoformat(), local.strftime("%H:%M")
+        except Exception:
+            raw = str(value)
+            return raw[:10], raw[11:16]
+
     def _calendar(self) -> dict:
         entries: list[dict] = []
         seen: set[str] = set()
         rows = self.db.fetchall(
             """
-            SELECT platform, postiz_post_id, postiz_scheduled_for, entity_type, entity_id, status
-            FROM entity_platform_status
-            WHERE postiz_scheduled_for IS NOT NULL
-            ORDER BY postiz_scheduled_for LIMIT 500
+            SELECT eps.platform, eps.postiz_post_id, eps.postiz_scheduled_for,
+                   eps.entity_type, eps.entity_id, eps.status,
+                   COALESCE(lv.title_text, lv.title, sh.title_text) AS title
+            FROM entity_platform_status eps
+            LEFT JOIN long_videos lv
+                   ON eps.entity_type='long_video' AND lv.id = eps.entity_id
+            LEFT JOIN shorts sh
+                   ON eps.entity_type='short' AND sh.id = eps.entity_id
+            WHERE eps.postiz_scheduled_for IS NOT NULL
+            ORDER BY eps.postiz_scheduled_for LIMIT 500
             """
         )
         for r in rows:
             pid = r.get("postiz_post_id")
             if pid:
                 seen.add(str(pid))
+            date_l, time_l = self._to_local(r["postiz_scheduled_for"])
+            kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+            title = (r.get("title") or "").strip() or f'{kind} #{r["entity_id"]}'
             entries.append({
                 "scheduled_for": r["postiz_scheduled_for"] or "",
+                "date": date_l,
+                "time": time_l,
                 "platform": r["platform"],
-                "title": f'{r["entity_type"]}#{r["entity_id"]}',
+                "title": f"{kind}: {title}"[:140],
                 "status": r["status"],
                 "source": "db",
             })
@@ -698,15 +740,23 @@ class WebAppAPI:
         if postiz is not None and hasattr(postiz, "list_scheduled"):
             try:
                 for p in postiz.list_scheduled():
+                    state = str(getattr(p, "status", "") or "").lower()
+                    if state in ("draft", "drafts"):
+                        continue
                     if str(p.id) in seen:
                         continue
                     seen.add(str(p.id))
                     content = p.content.get("text") if isinstance(p.content, dict) else ""
+                    iso = p.scheduled_for.isoformat() if p.scheduled_for else ""
+                    date_l, time_l = self._to_local(iso)
                     entries.append({
-                        "scheduled_for": p.scheduled_for.isoformat() if p.scheduled_for else "",
+                        "scheduled_for": iso,
+                        "date": date_l,
+                        "time": time_l,
                         "platform": p.platform,
-                        "title": (content or "").strip()[:90] or f"Postiz {str(p.id)[:8]}",
-                        "status": p.status,
+                        "title": (content or "").strip().splitlines()[0][:90]
+                                 or f"Postiz {str(p.id)[:8]}",
+                        "status": state,
                         "source": "postiz",
                         "url": p.release_url,
                     })
@@ -714,11 +764,11 @@ class WebAppAPI:
                 logger.debug("postiz calendar failed", exc_info=True)
         by: dict[str, list] = defaultdict(list)
         for e in entries:
-            sched = e.get("scheduled_for") or ""
-            e["time"] = sched[11:16]
-            by[sched[:10]].append(e)
+            d = e.get("date") or ""
+            if d:
+                by[d].append(e)
         days = []
-        for d in sorted(k for k in by if k):
+        for d in sorted(by):
             items = sorted(by[d], key=lambda x: x.get("time") or "")
             days.append({"date": d, "count": len(items), "items": items})
         return {"days": days, "total": len(entries)}

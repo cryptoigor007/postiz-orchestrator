@@ -69,9 +69,25 @@ class Scheduler:
             (platform,))
         return bool(cnt and (cnt["c"] or 0) > 0)
 
-    def schedule_long_videos(self) -> int:
+    def _start_ref(self, start_date: str | None):
+        """UTC-момент «за минуту до начала даты» для генерации слотов с указанной даты."""
+        if not start_date:
+            return None
+        try:
+            from datetime import timedelta
+
+            from .slots import get_tz
+            y, m, d = (int(x) for x in str(start_date).split("-"))
+            tz = get_tz(self.cfg.timezone)
+            dt = datetime(y, m, d, tzinfo=tz) - timedelta(minutes=1)
+            return dt.astimezone(UTC)
+        except Exception:
+            return None
+
+    def schedule_long_videos(self, start_date: str | None = None) -> int:
         """Place ready long videos into future slots (per platform, effective settings)."""
         now = self.clock.now()
+        ref = self._start_ref(start_date) or now
         videos = self.db.fetchall(
             "SELECT id, wide_path, vertical_path, platform_paths, title_text, description_text, hashtags_text "
             "FROM long_videos ORDER BY created_at"
@@ -86,7 +102,7 @@ class Scheduler:
             future_slots = next_long_video_dates(
                 eff.get("days") or ["tue", "fri"],
                 eff.get("time") or "16:00",
-                now, count=20,
+                ref, count=20,
                 exception_days=eff.get("exception_days", []),
                 tz_name=self.cfg.timezone,
             )
@@ -329,7 +345,7 @@ class Scheduler:
             occupied |= thematic_days_set(long_dt, next_dt, self.cfg.timezone)
         return occupied
 
-    def schedule_standalone_shorts(self, tail_manager=None) -> int:
+    def schedule_standalone_shorts(self, tail_manager=None, start_date: str | None = None) -> int:
         """Schedule ShortsMaker standalone shorts on free (non-thematic) days."""
         from datetime import timedelta
 
@@ -338,6 +354,13 @@ class Scheduler:
         now = self.clock.now()
         tz = get_tz(self.cfg.timezone)
         local_today = now.astimezone(tz).date()
+        if start_date:
+            try:
+                from datetime import date as _date
+                y, m, d = (int(x) for x in str(start_date).split("-"))
+                local_today = _date(y, m, d)
+            except Exception:
+                pass
 
         ready = self.db.fetchall(
             """

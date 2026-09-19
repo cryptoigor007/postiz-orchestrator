@@ -3,6 +3,12 @@
 
   const I18N = {
     ru: {
+      settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
+      scan_found: "Найдено", scan_films: "фильмов", scan_shorts: "шортсов", scan_standalone: "самостоятельных шортсов",
+      scan_last: "Последнее запланированное видео", scan_none: "нет",
+      scan_run_q: "Запускать последовательно?", scan_run_now: "Да, запустить", scan_run_from: "С даты", scan_run_go: "Запустить с даты",
+      t_sched_started: "Запущено", t_error_date: "Выбери дату",
+      cal_film: "Фильм", cal_short: "Шортс",
       nav_settings: "Настройки", title_settings: "Настройки",
       sched_title: "Расписание постинга",
       sched_explain: "Настройки постинга по каждой соцсети отдельно: серии (фильмы), шортсы серии (тематические) и обычные шортсы. Группы задают общий таймер — соцсети из одной группы публикуются одновременно.",
@@ -107,6 +113,12 @@
       help_st_off: "Выключено.",
     },
     en: {
+      settings_tab_sched: "Groups and schedule", settings_tab_errors: "Errors", settings_tab_help: "Help",
+      scan_found: "Found", scan_films: "films", scan_shorts: "shorts", scan_standalone: "standalone shorts",
+      scan_last: "Last scheduled video", scan_none: "none",
+      scan_run_q: "Start sequentially?", scan_run_now: "Yes, start", scan_run_from: "From date", scan_run_go: "Start from date",
+      t_sched_started: "Started", t_error_date: "Pick a date",
+      cal_film: "Film", cal_short: "Short",
       nav_settings: "Settings", title_settings: "Settings",
       sched_title: "Posting schedule",
       sched_explain: "Posting settings per network: series (films), series shorts (thematic) and regular shorts. Groups share one timer — networks in one group publish simultaneously.",
@@ -348,6 +360,18 @@
         }).join("")}</div>`
       : "";
     const warnRow = b.warning ? `<div class="row"><span class="meta">⚠ ${b.warning}</span></div>` : "";
+    const sc = state.scan;
+    const st = sc ? (sc.stats || {}) : null;
+    const scanPanel = sc ? `<div class="panel"><div class="panel-header">${t("scan")}</div>
+      <div class="row"><span class="meta">${t("scan_found")}: ${t("scan_films")} ${st.long || 0} · ${t("scan_shorts")} ${st.shorts || 0} · ${t("scan_standalone")} ${st.standalone || 0}</span></div>
+      <div class="row"><span class="meta">${t("scan_last")}: ${(sc.last_scheduled || "").slice(0, 16).replace("T", " ") || t("scan_none")}</span></div>
+      <div class="row"><span class="meta">${t("scan_run_q")}</span></div>
+      <div class="form-row">
+        <button class="btn primary" data-act="scan-start">${t("scan_run_now")}</button>
+        <label class="meta">${t("scan_run_from")} <input id="scan-date" type="date" /></label>
+        <button class="btn secondary" data-act="scan-start-date">${t("scan_run_go")}</button>
+      </div></div>` : "";
+
     const dirs = (b.dirs || [])
       .map((x) => `<div class="row"><div class="title">📁 ${x.name}</div>
         <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button></div>`)
@@ -369,7 +393,8 @@
           <button class="btn success" data-act="folder-scan">${t("scan")}</button>
         </div>
         ${dirs || `<div class="empty">${t("no_subfolders")}</div>`}
-      </div>`;
+      </div>
+      ${scanPanel}`;
   }
 
   async function browseTo(path) {
@@ -658,14 +683,18 @@
     return platformsHtml + groupsHtmlBlocks;
   }
   function renderSettings(d) {
+    const tab = state.settingsTab || "sched";
     const sched = d.sched || {};
-    content().innerHTML = `<div class="view-enter">
-      ${groupsHtml(sched)}
-      <div class="panel"><div class="panel-header">${t("sched_title")}</div><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>
-      ${scheduleHtml(sched)}
-      ${failedHtml(d.failed || {})}
-      ${helpHtml()}
-    </div>`;
+    const tabs = [["sched", t("settings_tab_sched")], ["errors", t("settings_tab_errors")], ["help", t("settings_tab_help")]];
+    const tabBtns = `<div class="panel"><div class="form-row">${tabs.map(([k, label]) =>
+      `<button class="btn ${tab === k ? "primary" : "secondary"}" data-act="settings-tab" data-p="${k}">${label}</button>`).join("")}</div></div>`;
+    let body = "";
+    if (tab === "errors") body = failedHtml(d.failed || {});
+    else if (tab === "help") body = helpHtml();
+    else body = groupsHtml(sched)
+      + `<div class="panel"><div class="panel-header">${t("sched_title")}</div><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>`
+      + scheduleHtml(sched);
+    content().innerHTML = `<div class="view-enter">${tabBtns}${body}</div>`;
   }
   function helpHtml() {
     return [
@@ -893,9 +922,27 @@
       }
       if (act === "folder-scan") {
         const r = await api("/scan", { method: "POST", body: "{}" });
+        state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
-        return;
+        return load();
+      }
+      if (act === "settings-tab") {
+        state.settingsTab = el.dataset.p || "sched";
+        return render();
+      }
+      if (act === "scan-start" || act === "scan-start-date") {
+        const body = {};
+        if (act === "scan-start-date") {
+          const input = document.getElementById("scan-date");
+          const v = input ? input.value : "";
+          if (!v) return toast(t("t_error_date"));
+          body.start_date = v;
+        }
+        const r = await api("/schedule", { method: "POST", body: JSON.stringify(body) });
+        toast(`${t("t_sched_started")}: ${r.long || 0}/${r.standalone || 0}`);
+        state.scan = null;
+        return load();
       }
       if (act === "pause-all") {
         await api("/pause", { method: "POST", body: "{}" });

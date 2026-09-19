@@ -339,3 +339,37 @@ def test_api_schedule_settings_and_groups(env, tmp_path):
     assert code == 200
     code, payload, _ = api.handle("GET", "/webapp/api/schedule_settings", headers, b"")
     assert payload["effective"]["youtube"]["long"]["time"] == "18:00"
+
+
+def test_api_calendar_titles_and_local_time(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, title_text, created_at) "
+        "VALUES ('videomaker', ?, ?, ?, ?)",
+        (str(tmp_path / "series"), "s1", "Мой фильм", "2026-01-01T00:00:00+00:00"),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for, postiz_post_id) VALUES ('long_video', ?, 'telegram', "
+        "'scheduled', '2026-09-22T12:59:40+00:00', 'pid1')",
+        (lv["id"],),
+    )
+    code, payload, _ = api.handle("GET", "/webapp/api/calendar", headers, b"")
+    assert code == 200
+    items = payload["days"][0]["items"]
+    assert items[0]["title"] == "Фильм: Мой фильм"
+    assert items[0]["time"] == "15:59"  # UTC -> Europe/Moscow
+    assert items[0]["date"] == "2026-09-22"
+
+
+def test_api_schedule_start_date_validation(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    body = json.dumps({"start_date": "22-09-2026"}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/schedule", headers, body)
+    assert code == 400
+    body = json.dumps({"start_date": "2026-09-25"}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/schedule", headers, body)
+    assert code == 200 and payload["start_date"] == "2026-09-25"

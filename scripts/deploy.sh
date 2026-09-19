@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 if [ -z "$HOST" ]; then
   # Авто-выбор доступного адреса: Tailscale, затем LAN.
-  for cand in root@100.95.225.71 root@192.168.100.50; do
+  for cand in root@100.95.225.71 root@192.168.100.50 root@192.168.100.40; do
     if ssh -o ConnectTimeout=5 -o BatchMode=yes "$cand" true 2>/dev/null; then
       HOST="$cand"; break
     fi

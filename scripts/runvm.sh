@@ -10,7 +10,7 @@ if ssh -o ConnectTimeout=5 -o BatchMode=yes postiz@192.168.100.60 'true' 2>/dev/
 fi
 b64=$(printf '%s' "$CMD" | base64)
 PVE=""
-for cand in root@100.95.225.71 root@192.168.100.50; do
+for cand in root@100.95.225.71 root@192.168.100.50 root@192.168.100.40; do
   if ssh -o ConnectTimeout=5 -o BatchMode=yes "$cand" true 2>/dev/null; then PVE="$cand"; break; fi
 done
 [ -n "$PVE" ] || { echo "ERROR: pve недоступен (ни tailscale, ни LAN)" >&2; exit 1; }

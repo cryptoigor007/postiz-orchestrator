@@ -50,6 +50,22 @@ class Watcher:
                 out[p] = str(f.resolve())
         return out
 
+    def _read_text(self, path: Path) -> str:
+        try:
+            return path.read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            return ""
+
+    def _meta_kv(self, path: Path) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for line in self._read_text(path).splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                k, v = k.strip().lower(), v.strip()
+                if k and v:
+                    out.setdefault(k, v)
+        return out
+
     def _is_fresh_enough(self, path: Path) -> bool:
         if self.max_age_days <= 0:
             return True
@@ -84,6 +100,10 @@ class Watcher:
             if root.name.lower().startswith("shortsmaker") or (root / ".shortsmaker").exists():
                 stats["standalone"] += self._scan_standalone_root(root)
                 continue
+            # root сам может быть серией (vertical/wide внутри)
+            if (root / "vertical").is_dir() or (root / "wide").is_dir():
+                stats["long"] += self._scan_long(root)
+                stats["shorts"] += self._scan_shorts(root)
             for series in root.iterdir():
                 if not series.is_dir() or series.name.startswith("."):
                     continue
@@ -113,11 +133,19 @@ class Watcher:
             return 0
 
         title = series.name
-        meta = series / "info_metadata.txt"
-        title_text = desc = tags = ""
-        if meta.exists():
-            text = meta.read_text(encoding="utf-8", errors="ignore")
-            title_text = text[:200]
+        meta_kv = self._meta_kv(series / "info_metadata.txt")
+        title_text = meta_kv.get("package_title") or self._read_text(
+            series / "info_metadata.txt"
+        )[:200]
+        desc_text = (
+            self._read_text(series / "vertical" / f"{series.name}_description.txt")
+            or self._read_text(series / "wide" / f"{series.name}_description.txt")
+        )
+        tags_text = (
+            meta_kv.get("package_hashtags")
+            or self._read_text(series / "vertical" / f"{series.name}_hashtags.txt")
+            or self._read_text(series / "wide" / f"{series.name}_hashtags.txt")
+        )
 
         now = self.clock.now().isoformat()
         self.db.execute(
@@ -131,7 +159,7 @@ class Watcher:
                 folder, title,
                 str(wide) if wide.exists() else None,
                 str(vert) if vert.exists() else None,
-                title_text, desc, tags,
+                title_text, desc_text, tags_text,
                 (json.dumps(pmap) if pmap else None), now,
             ),
         )
@@ -165,20 +193,29 @@ class Watcher:
             folder = str(short_dir.resolve())
             if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (folder,)):
                 continue
-            cover = next(short_dir.glob("cover*"), None)
+            name = short_dir.name
+            title_text = self._read_text(short_dir / f"{name}_title.txt") or name
+            desc_text = self._read_text(short_dir / f"{name}_description.txt")
+            tags_text = self._read_text(short_dir / f"{name}_hashtags.txt")
+            hook_text = self._read_text(short_dir / f"{name}_hook.txt")
+            upload_text = self._read_text(short_dir / f"{name}_upload.txt")
+            cover = next(short_dir.glob("cover*"), None) or next(
+                short_dir.glob("*_cover.*"), None
+            )
             now = self.clock.now().isoformat()
             self.db.execute(
                 """
                 INSERT INTO shorts
                     (source, parent_video_id, folder_path, order_index,
                      video_path, cover_path, title_text, description_text,
-                     hashtags_text, platform_paths, created_at)
-                VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     hashtags_text, hook_text, upload_text, platform_paths, created_at)
+                VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     parent_id, folder, i,
                     str(video), str(cover) if cover else None,
-                    short_dir.name, "", "",
+                    title_text, desc_text, tags_text,
+                    hook_text, upload_text,
                     (json.dumps(pmap) if pmap else None), now,
                 ),
             )

@@ -21,6 +21,17 @@ ssh root@100.95.225.71 'systemctl is-active orchestrator.service token-broker.se
 
 ---
 
+## 0.2 Оперативная сводка (2026-09-19, вечер)
+- Сервер доступен по Wi-Fi **192.168.100.40** (USB-сетевой адаптер выдернут пользователем → у Postiz-VM нет
+  интернета; **публикации не уйдут, пока адаптер не вернут**). Батарея ноутбука садится — нужна зарядка.
+- SSD физически подключён к серверу, смонтирован ro в `/mnt/ssd_src` (utf8). Копирование на сервер
+  приостановлено на 80 ГБ / ~292 ГБ: продолжение — `systemd-run --unit=ssd-backup bash /root/ssd_backup.sh`.
+- В панели: обзор SSD (`WEBAPP_BROWSE_ROOT=/mnt/ssd_src,/mnt/video`), root может быть контейнером или серией.
+- Watcher читает метаданные серий/шортсов (package_title, short_*_title.txt и т.д.) — посты с нормальными
+  заголовками. Дальше: переформатировать SSD и вернуть данные (обсудить ФС).
+
+---
+
 ## 1. TL;DR (состояние на сейчас)
 
 - Система **работает и задеплоена**. Все сервисы active, тесты зелёные, GitHub синхронизирован.
@@ -69,7 +80,7 @@ flowchart TD
 
 | Что | Значение |
 |---|---|
-| PVE-хост | `ssh root@100.95.225.71` (tailscale) / `192.168.100.50` (LAN), hostname `pve`. **Если на Mac Tailscale выключен** — работает LAN-адрес; `deploy.sh`/`runvm.sh` выбирают доступный сами |
+| PVE-хост | `ssh root@100.95.225.71` (tailscale) / `192.168.100.50` (LAN/USB-NIC) / `192.168.100.40` (Wi-Fi), hostname `pve`. **Если на Mac Tailscale выключен** — работает LAN-адрес; `deploy.sh`/`runvm.sh` перебирают все три сами |
 | VM Postiz | прямой `ssh postiz@192.168.100.60` с Mac (docker + passwordless sudo работают); хелпер `./scripts/runvm.sh '<cmd>'`; либо `qm guest exec 120 -- ...` с pve |
 | Docker-стек | `postiz`, `postiz-nginx-https-1`, `postiz-db`, `postiz-redis`, `postiz-temporal`, `postiz-media` |
 | Оркестратор | `/opt/orchestrator` на `pve`, пользователь `orchestrator` (systemd) |

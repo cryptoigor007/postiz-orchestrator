@@ -45,3 +45,49 @@ def test_watcher_registers(env):
     assert "my_series" in row["folder_path"]
     shorts = db.fetchall("SELECT * FROM shorts")
     assert len(shorts) >= 1
+
+
+def test_watcher_parses_meta(env):
+    db, cfg, clock, root, series = env
+    (series / "info_metadata.txt").write_text(
+        "series: my_series\n"
+        "package_title: НАСТОЯЩИЙ ЗАГОЛОВОК\n"
+        "package_hook: hook line\n"
+        "package_hashtags: #tag1 #tag2\n",
+        encoding="utf-8",
+    )
+    (series / "vertical" / "my_series_description.txt").write_text(
+        "Настоящее описание", encoding="utf-8"
+    )
+    short = series / "shorts" / "short_001"
+    (short / "short_001_title.txt").write_text("Куда пропали друзья?", encoding="utf-8")
+    (short / "short_001_description.txt").write_text("Описание шортса", encoding="utf-8")
+    (short / "short_001_hashtags.txt").write_text("#shorts #test", encoding="utf-8")
+    (short / "short_001_hook.txt").write_text("Хук!", encoding="utf-8")
+    (short / "short_001_upload.txt").write_text("upload info", encoding="utf-8")
+    (short / "short_001_cover.jpg").write_bytes(b"jpg")
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    lv = db.fetchone("SELECT * FROM long_videos")
+    assert lv["title_text"] == "НАСТОЯЩИЙ ЗАГОЛОВОК"
+    assert lv["description_text"] == "Настоящее описание"
+    assert lv["hashtags_text"] == "#tag1 #tag2"
+    s = db.fetchone("SELECT * FROM shorts")
+    assert s["title_text"] == "Куда пропали друзья?"
+    assert s["description_text"] == "Описание шортса"
+    assert s["hashtags_text"] == "#shorts #test"
+    assert s["hook_text"] == "Хук!"
+    assert s["upload_text"] == "upload info"
+    assert s["cover_path"].endswith("short_001_cover.jpg")
+
+
+def test_watcher_root_can_be_series(env):
+    db, cfg, clock, root, series = env
+    w = Watcher(db, cfg, clock, [str(series)])
+    for _ in range(4):
+        w.scan()
+    lv = db.fetchone("SELECT * FROM long_videos")
+    assert lv is not None
+    shorts = db.fetchall("SELECT * FROM shorts")
+    assert len(shorts) >= 1

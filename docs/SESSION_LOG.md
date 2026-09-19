@@ -45,3 +45,11 @@
   3) брокер-клиент даёт понятную ошибку (`token broker: …`);
   4) удалён мёртвый код (health.py, calendar_view.py) + чистка тестов.
 - Открытые риски: YouTube не подключён; клеймы через API ограничены; browser — экспериментальный; n8n требует N8N_URL.
+
+## 2026-09-19 — Самостоятельные доработки (после аудита)
+- config: секция `manual_uploads` (лимиты/порог/расписание).
+- runner: ежедневный скан ручных загрузок (`scan_all`), пишет `manual_last_scan`.
+- security: IP-allowlist у токен-брокера (только pve/localhost), rate-limit webapp API (env `WEBAPP_RATE_LIMIT`).
+- tooling: ruff-конфиг, авто-фиксы (линт чист), `scripts/check.sh` + `.githooks/pre-commit`.
+- i18n: справка по разделу «Ручные»; сборка b22.
+- Tests: 110 passed. Деплой: rsync --delete (IDENTICAL) + restart, все сервисы active.

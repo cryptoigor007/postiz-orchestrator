@@ -111,3 +111,26 @@ def test_backlog_api(tmp_path):
     code, payload, _ = api.handle("POST", "/webapp/api/backlog/answer", h,
                                   json.dumps({"platform": "youtube", "answer": "distribute"}).encode())
     assert code == 200 and payload["scheduled"] == 2
+
+
+def test_schedule_backlog_from_date(tmp_path):
+    db, cfg, clock, mgr, sched, postiz = make(tmp_path, datetime(2026, 3, 10, 14, 0, tzinfo=UTC))
+    seed_series(db, clock)
+    n = sched.schedule_backlog("youtube", start_date="2026-03-20")
+    assert n == 2
+    rows = db.fetchall(
+        "SELECT postiz_scheduled_for FROM entity_platform_status "
+        "WHERE entity_type='short' AND postiz_scheduled_for IS NOT NULL ORDER BY postiz_scheduled_for")
+    assert rows
+    assert all(r["postiz_scheduled_for"][:10] >= "2026-03-19" for r in rows)  # локальная дата >= 20.03 MSK
+
+
+def test_transport_no_ack_dedupe():
+    from orchestrator.telegram_transport import TelegramTransport
+    tr = TelegramTransport(token="x", on_message=lambda c, t: None)
+    tr.no_ack = True
+    upd = {"update_id": 5, "message": {"chat": {"id": 1}, "text": "hi"}}
+    assert tr._accept(upd) is True
+    assert tr._accept(upd) is False  # дубликат не обрабатываем
+    upd2 = {"update_id": 6, "message": {"chat": {"id": 1}, "text": "hi2"}}
+    assert tr._accept(upd2) is True

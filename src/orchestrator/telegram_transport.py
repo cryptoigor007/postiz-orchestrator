@@ -25,6 +25,9 @@ class TelegramTransport:
         self._q: queue.Queue = queue.Queue()
         self._base = f"https://api.telegram.org/bot{self.token}" if self.token else ""
         self.mode = os.getenv("TELEGRAM_MODE", "poll")  # poll | off
+        # no_ack: не подтверждаем апдейты (offset=0), чтобы не «съедать» их у Postiz (/connect)
+        self.no_ack = os.getenv("TELEGRAM_POLL_NO_ACK", "1") not in ("0", "false", "no")
+        self._seen: set[int] = set()
 
     @property
     def enabled(self) -> bool:
@@ -65,6 +68,21 @@ class TelegramTransport:
         """For tests / webhook adapter."""
         self._q.put((chat_id, text))
 
+    def _accept(self, upd: dict) -> bool:
+        """Фильтр дублей в режиме no_ack; иначе двигаем offset."""
+        uid = upd.get("update_id")
+        if self.no_ack:
+            if uid in self._seen:
+                return False
+            if uid is not None:
+                self._seen.add(uid)
+                if len(self._seen) > 5000:
+                    self._seen = set(sorted(self._seen)[-2000:])
+            return True
+        if uid is not None:
+            self._offset = uid + 1
+        return True
+
     def _worker(self) -> None:
         while not self._stop:
             item = self._q.get()
@@ -84,14 +102,15 @@ class TelegramTransport:
             try:
                 r = httpx.get(
                     f"{self._base}/getUpdates",
-                    params={"offset": self._offset, "timeout": 25},
+                    params={"offset": 0 if self.no_ack else self._offset, "timeout": 25},
                     timeout=30,
                 )
                 if r.status_code != 200:
                     time.sleep(3)
                     continue
                 for upd in r.json().get("result", []):
-                    self._offset = upd["update_id"] + 1
+                    if not self._accept(upd):
+                        continue
                     msg = upd.get("message") or upd.get("edited_message")
                     if not msg:
                         cb = upd.get("callback_query")

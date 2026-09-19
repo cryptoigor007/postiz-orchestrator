@@ -18,7 +18,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "27"
+WEBAPP_BUILD = "28"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -390,7 +390,15 @@ class WebAppAPI:
                 ans = (data.get("answer") or "").strip()
                 if not bl or p not in self.cfg.platforms or ans not in ("distribute", "wait", "skip"):
                     return 400, {"error": "platform/answer invalid"}, "application/json"
-                n = bl.resolve(p, ans)
+                if ans == "distribute" and data.get("from_date"):
+                    n = bl.scheduler.schedule_backlog(p, start_date=str(data["from_date"])) \
+                        if bl.scheduler else 0
+                    bl.db.execute(
+                        "UPDATE platform_queue_state SET pending_series_end_question=0, "
+                        "pending_series_end_at=NULL, series_tail_mode=1 WHERE platform=?", (p,))
+                    bl.db.log("system", None, p, "backlog_distribute", str(n))
+                else:
+                    n = bl.resolve(p, ans)
                 return 200, {"ok": True, "scheduled": n}, "application/json"
             if method == "POST" and route == "sync":
                 ss = self.comps.get("status_sync")

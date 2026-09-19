@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +25,15 @@ def run_backup(db: Database, cfg: AppConfig, backup_dir: str | Path) -> Path | N
         with sqlite3.connect(db.path) as src:
             src.execute(f"VACUUM INTO '{dest}'")
         logger.info("Backup created: %s", dest)
+        mirror = os.getenv("ORCH_BACKUP_MIRROR", "").strip()
+        if mirror:
+            try:
+                mdir = Path(mirror)
+                mdir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dest, mdir / dest.name)
+                logger.info("Backup mirrored: %s", mdir / dest.name)
+            except Exception:
+                logger.exception("Backup mirror failed")
         _cleanup(backup_dir, cfg.backup.keep_days)
         return dest
     except Exception as e:

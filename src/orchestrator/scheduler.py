@@ -177,7 +177,7 @@ class Scheduler:
 
 
 
-    def schedule_backlog(self, platform: str) -> int:
+    def schedule_backlog(self, platform: str, start_date: str | None = None) -> int:
         """Публикует остаток (неопубликованные шортсы серий) по свободным слотам."""
         pcfg = self.cfg.platforms.get(platform)
         if not pcfg or not pcfg.enabled:
@@ -197,7 +197,7 @@ class Scheduler:
         )
         if not shorts:
             return 0
-        slots = self._backlog_slots()
+        slots = self._backlog_slots(start_date=start_date)
         count = 0
         for s in shorts:
             for slot in slots:
@@ -217,7 +217,7 @@ class Scheduler:
                     break
         return count
 
-    def _backlog_slots(self, days: int = 30) -> list[datetime]:
+    def _backlog_slots(self, days: int = 30, start_date: str | None = None) -> list[datetime]:
         """Свободные слоты: слот серии + обычные шортсы + тематические."""
         from datetime import timedelta
 
@@ -235,6 +235,13 @@ class Scheduler:
 
         now = self.clock.now()
         local_today = now.astimezone(tz).date()
+        if start_date:
+            try:
+                from datetime import date as _date
+                y, m, d = (int(x) for x in start_date.split("-"))
+                local_today = _date(y, m, d)
+            except Exception:
+                pass
         out: list[datetime] = []
         for i in range(days):
             d = local_today + timedelta(days=i)

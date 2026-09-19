@@ -17,7 +17,7 @@
       net_root: "Сеть · /mnt/video", local_root: "Локально · /",
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
       backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
-      backlog_skip: "Не публиковать", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
+      backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
       calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто",
       resume: "Возобновить", pause_all: "Пауза всем", resume_all: "Возобновить все", none: "Нет",
       tail_title: "Остаток шортсов серии", tail_explain: "Шортсы уже нарезаны для серии, но ещё не опубликованы. Когда новых серий больше нет, система распределяет остаток по слотам (в слот основной серии — обычные шортсы, в 20:30 — шортсы к другим сериям), и только после этого запускается следующая серия. Перед запуском она спросит подтверждение.", enable: "Включить", disable: "Выключить",
@@ -109,7 +109,7 @@
       net_root: "Network · /mnt/video", local_root: "Local · /",
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
-      backlog_skip: "Do not publish", backlog_on: "distribution on", backlog_off: "distribution off",
+      backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
       calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty",
       resume: "Resume", pause_all: "Pause all", resume_all: "Resume all", none: "None",
       tail_title: "Unposted series shorts", tail_explain: "Shorts already cut for the series but not published yet. When no new episodes appear, the system distributes the backlog into slots (standard shorts in the main-series slot, other series' shorts at 20:30) and only then starts the next series. It asks for confirmation first.", enable: "Enable", disable: "Disable",
@@ -388,6 +388,8 @@
   }
 
   function renderTail(d) {
+    const dateRow = `<div class="form-row"><label class="meta">${t("backlog_from")}
+        <input id="backlog-date" type="date" /></label></div>`;
     const rows = (d.backlog || []).map((p) => {
       const state = p.awaiting
         ? pill(t("backlog_awaiting"))

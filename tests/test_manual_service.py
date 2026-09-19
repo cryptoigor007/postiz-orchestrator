@@ -199,3 +199,25 @@ def test_confirm_blocks_edits_on_claim(tmp_path):
     svc.confirm(up["id"], "long_video", vid, apply_edits=True, engine=eng)
     assert eng.calls == []  # edits blocked by claim
     assert db.get_upload(up["id"])["edit_error"] == "blocked: claim"
+
+
+def test_backup_mirror(tmp_path, monkeypatch):
+    from orchestrator.backup import run_backup
+    svc, db, clock = make(tmp_path)
+    mirror = tmp_path / "mirror"
+    monkeypatch.setenv("ORCH_BACKUP_MIRROR", str(mirror))
+    dest = run_backup(db, svc.cfg, tmp_path / "backups")
+    assert dest is not None
+    assert (mirror / dest.name).exists()
+
+
+def test_infra_watchdog_cooldown(tmp_path, monkeypatch):
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import infra_watchdog as w
+
+    w.COOLDOWN_SEC = 60
+    now = 1000.0
+    assert w._should_alert({}, "webapp", now) is True
+    assert w._should_alert({"webapp": now - 30}, "webapp", now) is False
+    assert w._should_alert({"webapp": now - 120}, "webapp", now) is True

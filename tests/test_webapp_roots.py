@@ -159,14 +159,14 @@ def test_composed_index_inlines_assets_and_key(env):
     api, db, clock, cfg, watcher = env
     os.environ["WEBAPP_ACCESS_KEY"] = "s3cret"
     try:
-        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/21/", {}, b"")
+        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/22/", {}, b"")
         assert code == 200
         assert ctype.startswith("text/html")
         assert b'src="app.js' not in body
         assert b"__WEBAPP_KEY__" in body
         assert b'"s3cret"' in body
         assert b"gate-msg" in body
-        code, body, _ = api.handle("GET", "/webapp/b/21/", {}, b"")
+        code, body, _ = api.handle("GET", "/webapp/b/22/", {}, b"")
         assert b'__WEBAPP_KEY__=""' in body
     finally:
         os.environ.pop("WEBAPP_ACCESS_KEY", None)
@@ -174,10 +174,10 @@ def test_composed_index_inlines_assets_and_key(env):
 
 def test_build_path_serves_app_and_assets(env):
     api, db, clock, cfg, watcher = env
-    code, body, _ = api.handle("GET", "/webapp/b/21/", {}, b"")
+    code, body, _ = api.handle("GET", "/webapp/b/22/", {}, b"")
     assert code == 200
     assert b"Orchestrator" in body
-    code, body, ctype = api.handle("GET", "/webapp/b/21/app.js", {}, b"")
+    code, body, ctype = api.handle("GET", "/webapp/b/22/app.js", {}, b"")
     assert code == 200
     assert ctype.startswith("application/javascript")
 

@@ -294,8 +294,8 @@ class Database:
     def set_upload_match(
         self,
         upload_id: int,
-        entity_type: str,
-        entity_id: int,
+        entity_type: str | None,
+        entity_id: int | None,
         confidence: float | None = None,
         status: str = "confirmed",
     ) -> None:

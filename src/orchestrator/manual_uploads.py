@@ -71,3 +71,139 @@ def match_score(upload: dict[str, Any], entity: dict[str, Any]) -> tuple[float, 
     weight = sum(w for w, _ in parts)
     score = sum(w * s for w, s in parts) / weight
     return score, why
+
+
+class ManualUploadsService:
+    """Scan -> match -> confirm/reject for manually uploaded videos."""
+
+    def __init__(self, db: Any, cfg: Any, clock: Any):
+        self.db = db
+        self.cfg = cfg
+        self.clock = clock
+
+    def _known_ids(self, platform: str) -> set[str]:
+        ids = {r["postiz_post_id"] for r in self.db.fetchall(
+            "SELECT postiz_post_id FROM entity_platform_status "
+            "WHERE platform=? AND postiz_post_id IS NOT NULL", (platform,))}
+        ids |= {r["platform_video_id"] for r in self.db.fetchall(
+            "SELECT platform_video_id FROM platform_uploads "
+            "WHERE platform=? AND origin='postiz'", (platform,))}
+        return ids
+
+    def _entities(self, platform: str) -> list[dict]:
+        out: list[dict] = []
+        longs = self.db.fetchall(
+            """
+            SELECT lv.id, COALESCE(lv.title_text, lv.title) AS title, lv.created_at
+            FROM long_videos lv
+            WHERE NOT EXISTS (
+                SELECT 1 FROM entity_platform_status eps
+                WHERE eps.entity_type='long_video' AND eps.entity_id=lv.id
+                  AND eps.platform=? AND eps.status IN ('scheduled','published'))
+            """, (platform,))
+        for r in longs:
+            out.append({"_type": "long_video", "_id": r["id"],
+                        "title": r["title"], "created_at": r["created_at"]})
+        shorts = self.db.fetchall(
+            """
+            SELECT s.id, COALESCE(s.title_text, s.folder_path) AS title, s.created_at
+            FROM shorts s
+            WHERE NOT EXISTS (
+                SELECT 1 FROM entity_platform_status eps
+                WHERE eps.entity_type='short' AND eps.entity_id=s.id
+                  AND eps.platform=? AND eps.status IN ('scheduled','published'))
+            """, (platform,))
+        for r in shorts:
+            out.append({"_type": "short", "_id": r["id"],
+                        "title": r["title"], "created_at": r["created_at"]})
+        return out
+
+    def candidates(self, upload_id: int) -> list[dict]:
+        up = self.db.get_upload(upload_id)
+        if not up:
+            return []
+        scored = []
+        for e in self._entities(up["platform"]):
+            s, why = match_score(up, e)
+            scored.append((s, e, why))
+        scored.sort(key=lambda x: -x[0])
+        res = []
+        for s, e, why in scored[:5]:
+            if s <= 0:
+                continue
+            res.append({"entity_type": e["_type"], "entity_id": e["_id"],
+                        "title": e["title"], "score": round(s, 3), "reasons": why})
+        return res
+
+    def scan(self, platform: str, uploads: list[dict], engine: str = "direct") -> dict:
+        known = self._known_ids(platform)
+        stats = {"found": 0, "manual": 0, "postiz": 0, "suggested": 0}
+        for u in uploads:
+            ext = str(u.get("external_id") or "")
+            if not ext:
+                continue
+            origin = "postiz" if ext in known else "manual"
+            row = self.db.upsert_upload(
+                engine=engine, platform=platform, external_id=ext,
+                url=u.get("url"), title=u.get("title"), description=u.get("description"),
+                published_at=u.get("published_at"), duration_sec=u.get("duration_sec"),
+                width=u.get("width"), height=u.get("height"),
+                thumbnail_url=u.get("thumbnail_url"), origin=origin,
+            )
+            stats["found"] += 1
+            stats[origin] += 1
+            if origin == "manual" and row["match_status"] == "unmatched":
+                cands = self.candidates(row["id"])
+                if cands:
+                    best = cands[0]
+                    self.db.set_upload_match(
+                        row["id"], best["entity_type"], best["entity_id"],
+                        best["score"], "suggested")
+                    stats["suggested"] += 1
+        return stats
+
+    def confirm(self, upload_id: int, entity_type: str, entity_id: int,
+                confidence: float | None = None, apply_edits: bool = False,
+                engine: Any = None) -> bool:
+        row = self.db.get_upload(upload_id)
+        if not row:
+            return False
+        if confidence is None:
+            confidence = row.get("confidence")
+        self.db.set_upload_match(upload_id, entity_type, entity_id, confidence, "confirmed")
+        now = self.clock.now().isoformat()
+        self.db.execute(
+            """
+            INSERT INTO entity_platform_status
+                (entity_type, entity_id, platform, status, published_at, release_url)
+            VALUES (?, ?, ?, 'published', ?, ?)
+            ON CONFLICT(entity_type, entity_id, platform) DO UPDATE SET
+                status='published',
+                published_at=excluded.published_at,
+                release_url=COALESCE(excluded.release_url, entity_platform_status.release_url)
+            """,
+            (entity_type, entity_id, row["platform"], now, row.get("url")),
+        )
+        if apply_edits and engine is not None:
+            try:
+                ok = engine.update_metadata(
+                    str(row["platform_video_id"]),
+                    {"description": row.get("description") or ""},
+                )
+                if not ok:
+                    self.db.execute("UPDATE platform_uploads SET edit_error=? WHERE id=?",
+                                    ("update_metadata failed", upload_id))
+            except Exception as e:  # keep the match, record the edit failure
+                self.db.execute("UPDATE platform_uploads SET edit_error=? WHERE id=?",
+                                (str(e), upload_id))
+        self.db.log(entity_type, entity_id, row["platform"], "manual_confirmed",
+                    str(row["platform_video_id"]))
+        return True
+
+    def reject(self, upload_id: int) -> bool:
+        self.db.set_upload_match(upload_id, None, None, None, "rejected")
+        return True
+
+    def ignore(self, upload_id: int) -> bool:
+        self.db.set_upload_match(upload_id, None, None, None, "ignored")
+        return True

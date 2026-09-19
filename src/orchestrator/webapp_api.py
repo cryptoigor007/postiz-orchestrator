@@ -622,8 +622,7 @@ class WebAppAPI:
             return meta
         if os.path.ismount(path):
             src = self._mount_source(path)
-            name = src.rsplit("/", 1)[-1] if src else ""
-            if src.startswith("/dev/") and name and not Path("/sys/class/block", name).exists():
+            if src.startswith("/dev/") and not Path(src).exists():
                 meta.update(available=False, note="диск отключён — подключи его или выбери другой корень")
         return meta
 

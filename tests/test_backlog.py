@@ -134,3 +134,45 @@ def test_transport_no_ack_dedupe():
     assert tr._accept(upd) is False  # дубликат не обрабатываем
     upd2 = {"update_id": 6, "message": {"chat": {"id": 1}, "text": "hi2"}}
     assert tr._accept(upd2) is True
+
+
+def test_backlog_blocks_next_series(tmp_path):
+    """Пока остаток не выложен, планировщик не ставит новое длинное видео на этой платформе."""
+    db, cfg, clock, mgr, sched, postiz = make(tmp_path, datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    seed_series(db, clock)
+    # новая серия готова (нет eps)
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, vertical_path, created_at) "
+        "VALUES ('videomaker','/S2','Сериал 2','/S2/w.mp4','/S2/v.mp4',?)",
+        (clock.now().isoformat(),))
+    # включаем режим распределения остатка
+    db.execute("UPDATE platform_queue_state SET series_tail_mode=1 WHERE platform='youtube'")
+    s2 = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/S2'")["id"]
+    n = sched.schedule_long_videos()
+    blocked = db.fetchone(
+        "SELECT 1 FROM entity_platform_status WHERE entity_type='long_video' "
+        "AND entity_id=? AND platform='youtube'", (s2,))
+    assert blocked is None     # youtube заблокирован остатком
+    assert n >= 0
+    # telegram не в режиме остатка -> может планировать
+    # распределяем остаток -> после опустошения режим снимается
+    clock.set(datetime(2026, 3, 10, 13, 0, tzinfo=UTC))
+    mgr.resolve("youtube", "distribute")
+    st = db.fetchone("SELECT series_tail_mode FROM platform_queue_state WHERE platform='youtube'")
+    assert st["series_tail_mode"] == 0
+    n2 = sched.schedule_long_videos()
+    now_row = db.fetchone(
+        "SELECT 1 FROM entity_platform_status WHERE entity_type='long_video' "
+        "AND entity_id=? AND platform='youtube'", (s2,))
+    assert now_row                      # теперь новая серия планируется
+    assert n2 >= 1
+
+
+def test_question_even_if_new_episode_ready(tmp_path):
+    db, cfg, clock, mgr, sched, postiz = make(tmp_path, datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    seed_series(db, clock)
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, created_at) "
+        "VALUES ('videomaker','/S2','Сериал 2','/S2/w.mp4',?)", (clock.now().isoformat(),))
+    slot = mgr.needs_question("youtube", clock.now())
+    assert slot is not None  # остаток важнее старта новой серии

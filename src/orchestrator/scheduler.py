@@ -28,39 +28,58 @@ class Scheduler:
         self.safety = safety
         self.clock = clock
 
+    def _backlog_active(self, platform: str) -> bool:
+        """True, если для платформы идёт распределение неопубликованного остатка."""
+        row = self.db.fetchone(
+            "SELECT series_tail_mode FROM platform_queue_state WHERE platform=?",
+            (platform,))
+        if not row or not row["series_tail_mode"]:
+            return False
+        cnt = self.db.fetchone(
+            """
+            SELECT COUNT(*) AS c FROM shorts s
+            WHERE s.parent_video_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM entity_platform_status eps
+                  WHERE eps.entity_type='short' AND eps.entity_id=s.id
+                    AND eps.platform=? AND eps.status IN ('scheduled','published','skipped'))
+            """,
+            (platform,))
+        return bool(cnt and (cnt["c"] or 0) > 0)
+
     def schedule_long_videos(self) -> int:
-        """Place ready long videos into future slots."""
+        """Place ready long videos into future slots (per platform)."""
         sched = self.cfg.schedules.get("long_video", {})
         days = sched.get("days", ["tue", "fri"])
         time_str = sched.get("time", "16:00")
         exceptions = sched.get("exception_days", [])
         now = self.clock.now()
 
-        future_slots = next_long_video_dates(days, time_str, now, count=20, exception_days=exceptions, tz_name=self.cfg.timezone)
+        future_slots = next_long_video_dates(days, time_str, now, count=20,
+                                             exception_days=exceptions, tz_name=self.cfg.timezone)
         if not future_slots:
             return 0
 
-        ready = self.db.fetchall(
-            """
-            SELECT lv.id, lv.wide_path, lv.vertical_path, lv.title_text, lv.description_text, lv.hashtags_text
-            FROM long_videos lv
-            WHERE NOT EXISTS (
-                SELECT 1 FROM entity_platform_status eps
-                WHERE eps.entity_type='long_video' AND eps.entity_id=lv.id
-                  AND eps.status IN ('scheduled', 'published')
-            )
-            ORDER BY lv.created_at
-            """
+        videos = self.db.fetchall(
+            "SELECT id, wide_path, vertical_path, title_text, description_text, hashtags_text "
+            "FROM long_videos ORDER BY created_at"
         )
         count = 0
-        for video in ready:
+        for video in videos:
             for platform, pcfg in self.cfg.platforms.items():
                 if not pcfg.enabled:
+                    continue
+                if self._backlog_active(platform):
+                    continue  # сначала выкладываем остаток предыдущей серии
+                exists = self.db.fetchone(
+                    "SELECT 1 FROM entity_platform_status WHERE entity_type='long_video' "
+                    "AND entity_id=? AND platform=? AND status IN ('scheduled','published')",
+                    (video["id"], platform))
+                if exists:
                     continue
                 path = video["wide_path"] if pcfg.video_variant == "wide" else video["vertical_path"]
                 if not path:
                     continue
-                # find free slot for this platform
                 for slot in future_slots:
                     ok, _ = self.safety.can_schedule(platform, slot, pcfg.daily_limit)
                     if ok:
@@ -70,8 +89,7 @@ class Scheduler:
                             "hashtags": video["hashtags_text"] or "",
                         }
                         post = self.publisher.publish(
-                            "long_video", video["id"], platform, path, content, slot
-                        )
+                            "long_video", video["id"], platform, path, content, slot)
                         if post:
                             count += 1
                         break

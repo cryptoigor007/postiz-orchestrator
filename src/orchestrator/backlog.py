@@ -92,8 +92,6 @@ class BacklogManager:
         ask_at = slot - timedelta(minutes=self.cfg.tail.ask_minutes_before)
         if not (ask_at <= now < slot):
             return None
-        if self.has_ready_long():
-            return None
         if self.has_backlog(platform) == 0:
             return None
         st = self._state(platform)
@@ -142,6 +140,11 @@ class BacklogManager:
             n = 0
             if self.scheduler is not None:
                 n = self.scheduler.schedule_backlog(platform)
+            if self.has_backlog(platform) == 0:
+                # остаток разложен — снимаем режим, можно запускать следующую серию
+                self.db.execute(
+                    "UPDATE platform_queue_state SET series_tail_mode=0, updated_at=? WHERE platform=?",
+                    (now, platform))
             self.db.log("system", None, platform, "backlog_distribute", str(n))
             if self.notifier is not None:
                 try:

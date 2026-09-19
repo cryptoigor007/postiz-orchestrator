@@ -570,6 +570,8 @@
     }
 
     document.documentElement.lang = state.lang;
+    const langParam = new URLSearchParams(location.search).get("lang");
+    if (langParam && I18N[langParam]) state.lang = langParam;
 
     function applyViewportHeight() {
       const h = (tg && (tg.viewportStableHeight || tg.viewportHeight)) || window.innerHeight;

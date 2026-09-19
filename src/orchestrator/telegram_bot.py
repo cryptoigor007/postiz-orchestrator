@@ -183,6 +183,8 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         safety.resume_platform(p)
         return f"Resumed {p}"
 
+    WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
     def _fmt_local(iso: str) -> str:
         from datetime import UTC, datetime
         from zoneinfo import ZoneInfo
@@ -190,7 +192,8 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
             dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
-            return dt.astimezone(ZoneInfo(cfg.timezone)).strftime("%d.%m %H:%M")
+            local = dt.astimezone(ZoneInfo(cfg.timezone))
+            return f"{WEEKDAYS[local.weekday()]} {local.strftime('%d.%m %H:%M')}"
         except Exception:
             return str(iso or "")[:16]
 

@@ -44,6 +44,18 @@ TOOLS = [
     ("orch_force_link", "Вручную обновить ссылку на пост",
      {"entity_id": {"type": "integer"}, "platform": {"type": "string"}, "url": {"type": "string"}},
      "POST", "/webapp/api/force_link"),
+    ("orch_manual_plan", "Отчёт по ручным загрузкам", {}, "GET", "/webapp/api/manual/plan"),
+    ("orch_manual_list", "Список ручных загрузок",
+     {"status": {"type": "string"}, "platform": {"type": "string"}},
+     "GET", "/webapp/api/manual/uploads"),
+    ("orch_manual_scan", "Найти ручные загрузки",
+     {"platform": {"type": "string"}}, "POST", "/webapp/api/manual/scan"),
+    ("orch_manual_confirm", "Подтвердить сопоставление ручной загрузки",
+     {"id": {"type": "integer"}, "entity_type": {"type": "string"},
+      "entity_id": {"type": "integer"}, "apply_edits": {"type": "boolean"}},
+     "POST", "/webapp/api/manual/uploads/{id}/confirm"),
+    ("orch_manual_reject", "Отклонить ручную загрузку",
+     {"id": {"type": "integer"}}, "POST", "/webapp/api/manual/uploads/{id}/reject"),
 ]
 
 
@@ -99,7 +111,12 @@ def _tools_call(name: str, args: dict) -> dict:
     if not tool:
         return {"isError": True, "content": [{"type": "text", "text": f"unknown tool: {name}"}]}
     _, _, _, method, path = tool
-    ok, result = _call(method, path, args or {})
+    args = dict(args or {})
+    if "{id}" in path:
+        if "id" not in args:
+            return {"isError": True, "content": [{"type": "text", "text": "id is required"}]}
+        path = path.replace("{id}", str(args.pop("id")))
+    ok, result = _call(method, path, args)
     text = json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result
     return {"isError": not ok, "content": [{"type": "text", "text": text}]}
 

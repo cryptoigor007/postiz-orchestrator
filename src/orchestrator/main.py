@@ -6,6 +6,7 @@ except ImportError:
     pass
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from .clock import SystemClock
 from .config import load_config
 from .db import Database
 from .link_updater import LinkUpdater
+from .manual_sources import build_manual_sources
+from .manual_uploads import ManualUploadsService
 from .overflow import move_excess_shorts
 from .postiz_factory import create_postiz_client
 from .publisher import Publisher
@@ -51,6 +54,8 @@ def build(args: argparse.Namespace) -> dict:
     tg = TelegramNotifier(cfg, db, clock)
     tail = TailManager(db, cfg, clock, tg)
     link_upd = LinkUpdater(db, cfg, postiz, clock, tg)
+    manual = ManualUploadsService(db, cfg, clock)
+    manual_sources = build_manual_sources(cfg, postiz, os.environ)
 
     comps = {
         "cfg": cfg,
@@ -66,6 +71,8 @@ def build(args: argparse.Namespace) -> dict:
         "tg": tg,
         "tail": tail,
         "link_upd": link_upd,
+        "manual": manual,
+        "manual_sources": manual_sources,
     }
     setup_commands(tg, comps)
     transport = TelegramTransport(on_message=tg.handle_update)

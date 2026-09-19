@@ -9,7 +9,7 @@ from .config import AppConfig
 from .db import Database
 
 logger = logging.getLogger(__name__)
-from .telegram_transport import split_text  # noqa: E402
+from .telegram_transport import HTML_PREFIX  # noqa: E402  (split_text — для тестов)
 
 
 class TelegramNotifier:
@@ -37,13 +37,10 @@ class TelegramNotifier:
         if not self.is_allowed(chat_id):
             logger.warning("Blocked message to unauthorized chat %s", chat_id)
             return
-        chunks = split_text(text, 3800)
-        for i, chunk in enumerate(chunks):
-            markup = reply_markup if i == len(chunks) - 1 else None
-            if self.transport:
-                self.transport.send_message(chat_id, chunk, markup)
-            else:
-                logger.info("[TG -> %s] %s", chat_id, chunk[:200])
+        if self.transport:
+            self.transport.send_message(chat_id, text, reply_markup)
+        else:
+            logger.info("[TG -> %s] %s", chat_id, (text or "")[:200])
 
     def broadcast(self, text: str) -> None:
         targets = self.cfg.telegram.allowed_chat_ids or (
@@ -214,28 +211,60 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
             (limit,),
         )
 
-    def _item_lines(limit: int = 30, max_groups: int = 14) -> list[str]:
-        """Строки «когда · Фильм/Шортс: название · платформы» (одна на видео-время)."""
+    PLATFORM_COLORS = {
+        "youtube": "🟥", "telegram": "🟦", "instagram": "🟪",
+        "tiktok": "⬛", "facebook": "🔷",
+    }
+    MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня",
+                  "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+
+    def _item_lines(limit: int = 30, max_groups: int = 30) -> str:
+        """Строки очереди: дни разделены, у платформ цветовые маркеры (HTML-разметка)."""
+        import html as _html
         rows = _upcoming_rows(limit)
         grouped: dict[tuple, dict] = {}
         for r in rows:
-            when = _fmt_local(r["postiz_scheduled_for"])
-            key = (r["entity_type"], r["entity_id"], when)
+            dt = None
+            try:
+                from datetime import UTC, datetime
+                from zoneinfo import ZoneInfo
+                dt = datetime.fromisoformat(str(r["postiz_scheduled_for"]).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                dt = dt.astimezone(ZoneInfo(cfg.timezone))
+            except Exception:
+                dt = None
+            day = f"{WEEKDAYS[dt.weekday()]}, {dt.day} {MONTHS_GEN[dt.month - 1]}" if dt else "—"
+            hhmm = dt.strftime("%H:%M") if dt else str(r["postiz_scheduled_for"])[:16]
+            key = (r["entity_type"], r["entity_id"], day, hhmm)
             kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
             title = (r.get("title") or "").strip() or f"#{r['entity_id']}"
-            g = grouped.setdefault(key, {"when": when, "label": f"{kind}: {title}", "plats": []})
+            g = grouped.setdefault(key, {"day": day, "time": hhmm,
+                                         "label": f"{kind}: {title}", "plats": []})
             g["plats"].append(r["platform"])
-        out = []
-        for g in list(grouped.values())[:max_groups]:
-            plats = ", ".join(dict.fromkeys(g["plats"]))
-            out.append(f"{g['when']} · {g['label']} · {plats}")
-        return out
+        lines: list[str] = []
+        last_day = None
+        shown = 0
+        for g in grouped.values():
+            if shown >= max_groups:
+                break
+            if g["day"] != last_day:
+                if last_day is not None:
+                    lines.append("")
+                lines.append(f"📅 <b>{g['day']}</b>")
+                last_day = g["day"]
+            marks = " ".join(
+                f"{PLATFORM_COLORS.get(p, '▪️')}" for p in dict.fromkeys(g["plats"])
+            )
+            lines.append(f"{marks} <code>{g['time']}</code> · {_html.escape(g['label'])}")
+            shown += 1
+        return "\n".join(lines)
 
     def cmd_queue(chat_id: int, arg: str) -> str:
-        lines = _item_lines(limit=30)
-        if not lines:
+        body = _item_lines(limit=30, max_groups=17)
+        if not body:
             return "Очередь пуста."
-        return "Очередь публикаций:\n" + "\n".join(lines)
+        return HTML_PREFIX + "Очередь публикаций:\n\n" + body
 
     def cmd_failed(chat_id: int, arg: str) -> str:
         rows = db.fetchall(
@@ -283,10 +312,10 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         return f"Distributed long videos: {n}"
 
     def cmd_calendar(chat_id: int, arg: str) -> str:
-        lines = _item_lines(limit=60, max_groups=20)
-        if not lines:
+        body = _item_lines(limit=60, max_groups=30)
+        if not body:
             return "Календарь пуст."
-        return "Ближайшие публикации:\n" + "\n".join(lines)
+        return HTML_PREFIX + "Ближайшие публикации:\n\n" + body
 
     def cmd_series_end(chat_id: int, arg: str) -> str:
         p = arg.strip().lower() or "youtube"

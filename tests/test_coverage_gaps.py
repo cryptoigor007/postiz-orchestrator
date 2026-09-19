@@ -290,8 +290,9 @@ def test_tg_bot_queue_with_titles(tmp_path):
     )
     own = cfg.telegram.allowed_chat_ids[0]
     out = bot.handle_update(own, "/queue")
-    assert "Очередь" in out and "Мой фильм" in out and "telegram" in out and "22.09" in out
-    assert "Вт 22.09" in out  # сокращённый день недели
+    assert "Очередь" in out and "Мой фильм" in out
+    assert "📅 <b>Вт, 22 сентября</b>" in out   # день визуально выделен
+    assert "🟦" in out                            # цветовой маркер telegram
 
 
 def test_hourly_limit_ignores_deleted(tmp_path):

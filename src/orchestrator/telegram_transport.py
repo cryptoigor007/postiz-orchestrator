@@ -11,6 +11,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+HTML_PREFIX = "\x00html\x00"
+
 
 def split_text(text: str, limit: int = 3800) -> list[str]:
     """Разбивает длинный текст по строкам на части (лимит Telegram 4096)."""
@@ -72,9 +74,15 @@ class TelegramTransport:
         if not self.token:
             logger.info("[TG-mock -> %s] %s", chat_id, (text or "")[:200])
             return
+        parse_mode = None
+        if text and text.startswith(HTML_PREFIX):
+            parse_mode = "HTML"
+            text = text[len(HTML_PREFIX):]
         chunks = split_text(text or "")
         for i, chunk in enumerate(chunks):
             payload: dict = {"chat_id": chat_id, "text": chunk}
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
             if reply_markup and i == len(chunks) - 1:
                 payload["reply_markup"] = reply_markup
             try:

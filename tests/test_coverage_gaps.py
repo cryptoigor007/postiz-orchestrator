@@ -229,3 +229,23 @@ def test_tg_transport_no_ack_persistent_watermark():
     assert t2._accept({"update_id": 100}) is False
     assert t2._accept({"update_id": 101}) is True
     assert store["v"] == 101
+
+
+def test_tg_bot_ack_and_help(tmp_path):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from orchestrator.clock import FakeClock
+    from orchestrator.config import load_config
+    from orchestrator.db import Database
+    from orchestrator.telegram_bot import TelegramNotifier, setup_commands
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    db = Database(tmp_path / "tg.sqlite")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    bot = TelegramNotifier(cfg, db, clock)
+    setup_commands(bot, {})
+    own = cfg.telegram.allowed_chat_ids[0]
+    assert "Принято" in bot.handle_update(own, "привет")
+    assert "Неизвестная" in bot.handle_update(own, "/nosuchcmd")
+    assert "Команды" in bot.handle_update(own, "/help")

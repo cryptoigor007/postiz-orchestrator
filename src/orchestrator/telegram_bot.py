@@ -61,13 +61,13 @@ class TelegramNotifier:
             return self._resolve_dialog(chat_id, text)
 
         if not text.startswith("/"):
-            return None
+            return "✅ Принято. Список команд: /help"
         parts = text.split(maxsplit=1)
         cmd = parts[0].lstrip("/").split("@")[0]
         arg = parts[1] if len(parts) > 1 else ""
         handler = self._handlers.get(cmd)
         if not handler:
-            return f"Unknown command: /{cmd}"
+            return f"Неизвестная команда: /{cmd}. Список: /help"
         return handler(chat_id, arg)
 
     def ask_series_end(self, platform: str) -> None:
@@ -369,6 +369,21 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
             m.resolve(p, "skip")
         return f"Остаток не публикуем ({p})."
 
+    def cmd_help(chat_id: int, arg: str) -> str:
+        return (
+            "Команды:\n"
+            "/app — открыть панель\n"
+            "/status — статус и счётчики\n"
+            "/queue — очередь публикаций\n"
+            "/calendar — календарь\n"
+            "/failed — ошибки публикаций\n"
+            "/platforms — платформы и лимиты\n"
+            "/pause, /resume — пауза / возобновить всё\n"
+            "/distribute — разложить по слотам\n"
+            "/tail — остаток шортсов серии"
+        )
+
+    bot.register("help", cmd_help)
     bot.register("backlog_distribute", cmd_backlog_distribute)
     bot.register("backlog_wait", cmd_backlog_wait)
     bot.register("backlog_skip", cmd_backlog_skip)

@@ -22,6 +22,7 @@ class Publisher:
         safety: SafetyChecker,
         clock: Clock,
         dry_run: bool = False,
+        guard: Any = None,
     ):
         self.db = db
         self.cfg = cfg
@@ -29,6 +30,7 @@ class Publisher:
         self.safety = safety
         self.clock = clock
         self.dry_run = dry_run
+        self.guard = guard
 
     def _idempotency_key(self, entity_type: str, entity_id: int, platform: str,
                          scheduled_for: datetime | None) -> str:
@@ -84,6 +86,14 @@ class Publisher:
             if not ok:
                 self.db.log(entity_type, entity_id, platform, "safety_block", reason)
                 logger.info("Safety block %s/%s %s: %s", entity_type, entity_id, platform, reason)
+                return None
+
+        if self.guard is not None and scheduled_for is not None:
+            reason = self.guard.conflict(platform, scheduled_for)
+            if reason:
+                self.db.log(entity_type, entity_id, platform, "safety_block", reason)
+                logger.info("Schedule conflict %s/%s %s: %s",
+                            entity_type, entity_id, platform, reason)
                 return None
 
         if self.dry_run:

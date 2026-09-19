@@ -24,6 +24,7 @@ from .overflow import move_excess_shorts
 from .postiz_factory import create_postiz_client
 from .publisher import Publisher
 from .safety import SafetyChecker
+from .schedule_guard import ScheduleGuard, n8n_source, postiz_source
 from .scheduler import Scheduler
 from .status_sync import Reconciliation, StatusSync
 from .tail import TailManager
@@ -48,7 +49,8 @@ def build(args: argparse.Namespace) -> dict:
     clock = SystemClock()
     postiz = create_postiz_client(dry_run=args.dry_run)
     safety = SafetyChecker(db, cfg, clock)
-    publisher = Publisher(db, cfg, postiz, safety, clock, dry_run=args.dry_run)
+    guard = ScheduleGuard(cfg, clock, sources=[("postiz", postiz_source(postiz))])
+    publisher = Publisher(db, cfg, postiz, safety, clock, dry_run=args.dry_run, guard=guard)
     scheduler = Scheduler(db, cfg, publisher, safety, clock)
     status_sync = StatusSync(db, postiz, clock, cfg)
     recon = Reconciliation(db, postiz, clock)
@@ -58,6 +60,13 @@ def build(args: argparse.Namespace) -> dict:
     link_upd = LinkUpdater(db, cfg, postiz, clock, tg)
     manual = ManualUploadsService(db, cfg, clock)
     manual_sources = build_manual_sources(cfg, postiz, os.environ)
+    try:
+        from .engines.n8n_engine import N8nEngine
+        for _p, _eng in manual_sources.items():
+            if isinstance(_eng, N8nEngine):
+                guard.sources.append((f"n8n:{_p}", n8n_source(_eng)))
+    except Exception:
+        pass
     backlog = BacklogManager(db, cfg, clock, scheduler=scheduler, notifier=tg)
 
     comps = {

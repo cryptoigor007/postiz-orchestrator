@@ -65,6 +65,7 @@ class LinkUpdateCfg(BaseModel):
 
 class SafetyCfg(BaseModel):
     min_interval_minutes: int = 25
+    conflict_window_minutes: int = 0  # 0 = использовать min_interval_minutes
     jitter_seconds: int = 90
     warmup_days: int = 12
     warmup_daily_limit: int = 2

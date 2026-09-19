@@ -148,3 +148,20 @@ def test_runner_manual_cycle(tmp_path):
     import json as _json
     saved = _json.loads(db.get_setting("manual_last_scan"))
     assert saved["stats"]["youtube"]["manual"] == 1
+
+
+def test_scan_honors_lookback(tmp_path):
+    svc, db, clock = make(tmp_path)
+    svc.cfg.manual_uploads.lookback_days = 10
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, title_text, created_at) "
+        "VALUES ('v','/lb','LB','/lb/w.mp4','Серия LB',?)", (now,))
+    uploads = [
+        {"external_id": "OLD", "title": "Серия LB", "published_at": "2026-01-01T00:00:00+00:00"},
+        {"external_id": "NEW", "title": "Серия LB", "published_at": "2026-09-18T00:00:00+00:00"},
+    ]
+    stats = svc.scan("youtube", uploads)
+    assert stats["found"] == 1
+    ids = [u["platform_video_id"] for u in db.list_uploads()]
+    assert ids == ["NEW"]

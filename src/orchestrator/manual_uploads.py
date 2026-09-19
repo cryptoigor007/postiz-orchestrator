@@ -48,6 +48,19 @@ def _dur_score(a: float | None, b: float | None) -> float | None:
     return max(0.0, 1.0 - abs(a - b) / gap)
 
 
+def _within_lookback(published_at: str | None, days: int, now: Any) -> bool:
+    if not published_at:
+        return True
+    dt = _parse(published_at)
+    if dt is None:
+        return True
+    try:
+        now_dt = now if getattr(now, "tzinfo", None) else now.replace(tzinfo=timezone.utc)
+    except Exception:
+        now_dt = now
+    return (now_dt - dt).total_seconds() <= days * 86400
+
+
 def match_score(upload: dict[str, Any], entity: dict[str, Any]) -> tuple[float, dict]:
     parts: list[tuple[float, float]] = []
     why: dict[str, float] = {}
@@ -121,6 +134,7 @@ class ManualUploadsService:
 
     def scan_all(self, sources: dict) -> dict:
         """Scan every source that supports listing; return per-platform stats."""
+        page = getattr(self.cfg.manual_uploads, "page_size", 50)
         stats: dict = {}
         for platform, src in (sources or {}).items():
             caps = getattr(src, "capabilities", lambda: {})()
@@ -128,7 +142,10 @@ class ManualUploadsService:
                 stats[platform] = {"skipped": "engine does not support listing uploads"}
                 continue
             try:
-                uploads = src.list_uploads()
+                try:
+                    uploads = src.list_uploads({"max_results": page})
+                except TypeError:
+                    uploads = src.list_uploads()
             except Exception as e:
                 stats[platform] = {"error": str(e)}
                 continue
@@ -154,10 +171,13 @@ class ManualUploadsService:
 
     def scan(self, platform: str, uploads: list[dict], engine: str = "direct") -> dict:
         known = self._known_ids(platform)
+        lookback = getattr(self.cfg.manual_uploads, "lookback_days", 0) or 0
         stats = {"found": 0, "manual": 0, "postiz": 0, "suggested": 0}
         for u in uploads:
             ext = str(u.get("external_id") or "")
             if not ext:
+                continue
+            if lookback and not _within_lookback(u.get("published_at"), lookback, self.clock.now()):
                 continue
             origin = "postiz" if ext in known else "manual"
             row = self.db.upsert_upload(

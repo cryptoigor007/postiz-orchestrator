@@ -19,7 +19,9 @@
       resume: "Возобновить", pause_all: "Пауза всем", resume_all: "Возобновить все", none: "Нет",
       tail_title: "Хвост серии", enable: "Включить", disable: "Выключить",
       tail_on: "хвост вкл", tail_off: "выкл", no_errors: "Ошибок нет",
-      quick_actions: "Быстрые действия", distribute: "Распределить длинные", refresh_data: "Обновить данные",
+      quick_actions: "Быстрые действия", act_sync: "Синхронизировать",
+      act_reconcile: "Реконсиляция", act_backup: "Бэкап", act_schedule: "Разложить по слотам",
+      pa_pause: "Пауза", distribute: "Распределить длинные", refresh_data: "Обновить данные",
       force_link_title: "Обновить ссылку вручную", save: "Сохранить",
       m_uptime: "Аптайм", m_cycles: "Циклов сканирования", m_queue_now: "В очереди сейчас",
       m_cycle_errors: "Сбоев цикла", m_publications: "Публикации", m_published: "Опубликовано",
@@ -97,7 +99,9 @@
       resume: "Resume", pause_all: "Pause all", resume_all: "Resume all", none: "None",
       tail_title: "Series tail", enable: "Enable", disable: "Disable",
       tail_on: "tail ON", tail_off: "off", no_errors: "No errors",
-      quick_actions: "Quick actions", distribute: "Distribute long", refresh_data: "Refresh data",
+      quick_actions: "Quick actions", act_sync: "Sync now",
+      act_reconcile: "Reconcile", act_backup: "Backup", act_schedule: "Schedule now",
+      pa_pause: "Pause", distribute: "Distribute long", refresh_data: "Refresh data",
       force_link_title: "Update link manually", save: "Save",
       m_uptime: "Uptime", m_cycles: "Scan cycles", m_queue_now: "In queue now",
       m_cycle_errors: "Loop errors", m_publications: "Publications", m_published: "Published",
@@ -333,6 +337,7 @@
         ${p.enabled ? pill("ok") : pill("off")}${p.paused ? pill("paused") : ""}
         <span class="meta">${t("limit")} ${p.daily_limit}</span>
         <button class="btn secondary" data-act="resume-one" data-p="${p.name}">${t("resume")}</button>
+        <button class="btn danger" data-act="pause-one" data-p="${p.name}">${t("pa_pause")}</button>
       </div>`).join("");
     content().innerHTML = `
       <div class="panel">
@@ -365,21 +370,27 @@
       rows || `<div class="empty">${t("no_errors")}</div>`}</div>`;
   }
 
-  function renderActions() {
+  function renderActions(d) {
+    const opts = ((d && d.platforms) || [])
+      .map((p) => `<option>${p.name}</option>`).join("")
+      || `<option>youtube</option>`;
     content().innerHTML = `
       <div class="panel"><div class="panel-header">${t("quick_actions")}</div>
         <div class="form-row">
           <button class="btn primary" data-act="distribute">${t("distribute")}</button>
+          <button class="btn secondary" data-act="schedule">${t("act_schedule")}</button>
+        </div>
+        <div class="form-row">
+          <button class="btn secondary" data-act="sync">${t("act_sync")}</button>
+          <button class="btn secondary" data-act="reconcile">${t("act_reconcile")}</button>
+          <button class="btn secondary" data-act="backup">${t("act_backup")}</button>
           <button class="btn secondary" data-act="refresh">${t("refresh_data")}</button>
         </div>
       </div>
       <div class="panel"><div class="panel-header">${t("force_link_title")}</div>
         <div class="form-row">
           <input id="fl-id" type="number" placeholder="entity_id" style="width:100px" />
-          <select id="fl-p">
-            <option>youtube</option><option>instagram</option>
-            <option>tiktok</option><option>facebook</option>
-          </select>
+          <select id="fl-p">${opts}</select>
           <input id="fl-url" type="url" placeholder="https://..." style="flex:1;min-width:140px" />
           <button class="btn primary" data-act="force-link">${t("save")}</button>
         </div>
@@ -547,7 +558,7 @@
     else if (state.view === "platforms") renderPlatforms(d);
     else if (state.view === "tail") renderTail(d);
     else if (state.view === "failed") renderFailed(d);
-    else if (state.view === "actions") renderActions();
+    else if (state.view === "actions") renderActions(d);
     else if (state.view === "metrics") renderMetrics(d);
     else if (state.view === "manual") renderManual(d);
     else if (state.view === "help") renderHelp();
@@ -580,6 +591,32 @@
   async function onAction(act, el) {
     try {
       if (act === "refresh") return load();
+      if (act === "pause-one") {
+        await api("/pause_platform", { method: "POST", body: JSON.stringify({ platform: el.dataset.p }) });
+        toast(`${t("pa_pause")} · ${el.dataset.p}`);
+        return load();
+      }
+      if (act === "sync") {
+        const r = await api("/sync", { method: "POST", body: "{}" });
+        toast(`${t("act_sync")}: ${r.updates ?? 0}`);
+        return load();
+      }
+      if (act === "reconcile") {
+        const r = await api("/reconcile", { method: "POST", body: "{}" });
+        const res = r.result || {};
+        toast(`${t("act_reconcile")}: missing ${res.missing ?? 0}, orphans ${res.orphans ?? 0}`);
+        return load();
+      }
+      if (act === "backup") {
+        const r = await api("/backup", { method: "POST", body: "{}" });
+        toast(`${t("act_backup")}: ${r.path ? "ok" : "skip"}`);
+        return load();
+      }
+      if (act === "schedule") {
+        const r = await api("/schedule", { method: "POST", body: "{}" });
+        toast(`${t("act_schedule")}: ${r.long ?? 0}/${r.standalone ?? 0}`);
+        return load();
+      }
       if (act === "manual-scan-all") {
         await api("/manual/scan", { method: "POST", body: "{}" });
         toast(t("t_scan"));

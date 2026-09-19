@@ -18,7 +18,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "22"
+WEBAPP_BUILD = "23"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -361,6 +361,34 @@ class WebAppAPI:
                             (uid,))
                     return 200, {"ok": True}, "application/json"
                 return 404, {"error": "unknown manual action"}, "application/json"
+            if method == "POST" and route == "sync":
+                ss = self.comps.get("status_sync")
+                n = ss.sync() if ss else 0
+                n2 = ss.sync(fresh_only=True) if ss else 0
+                lu = self.comps.get("link_upd")
+                if lu:
+                    lu.check_missing_urls()
+                return 200, {"ok": True, "updates": (n or 0) + (n2 or 0)}, "application/json"
+            if method == "POST" and route == "reconcile":
+                rec = self.comps.get("recon")
+                return 200, {"ok": True, "result": rec.run() if rec else {}}, "application/json"
+            if method == "POST" and route == "backup":
+                from .backup import run_backup
+
+                bdir = Path(self.db.path).parent.parent / "backups"
+                p = run_backup(self.db, self.cfg, bdir)
+                return 200, {"ok": True, "path": str(p) if p else None}, "application/json"
+            if method == "POST" and route == "schedule":
+                sc = self.comps.get("scheduler")
+                n = sc.schedule_long_videos() if sc else 0
+                n2 = sc.schedule_standalone_shorts(self.comps.get("tail")) if sc else 0
+                return 200, {"ok": True, "long": n, "standalone": n2}, "application/json"
+            if method == "POST" and route == "pause_platform":
+                p = (data.get("platform") or "").strip()
+                if p not in self.cfg.platforms:
+                    return 400, {"error": "unknown platform"}, "application/json"
+                self.comps["safety"].pause_platform(p, "webapp")
+                return 200, {"ok": True}, "application/json"
             return 404, {"error": "unknown route"}, "application/json"
         except Exception as e:
             logger.exception("webapp api")

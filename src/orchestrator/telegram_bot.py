@@ -211,9 +211,9 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
             (limit,),
         )
 
-    PLATFORM_COLORS = {
-        "youtube": "🟥", "telegram": "🟦", "instagram": "🟪",
-        "tiktok": "⬛", "facebook": "🔷",
+    PLATFORM_ICONS = {
+        "youtube": "▶️", "telegram": "✈️", "instagram": "📸",
+        "tiktok": "🎵", "facebook": "📘", "vk": "🅥",
     }
     MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня",
                   "июля", "августа", "сентября", "октября", "ноября", "декабря"]
@@ -254,7 +254,7 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
                 lines.append(f"📅 <b>{g['day']}</b>")
                 last_day = g["day"]
             marks = " ".join(
-                f"{PLATFORM_COLORS.get(p, '▪️')}" for p in dict.fromkeys(g["plats"])
+                f"{PLATFORM_ICONS.get(p, '▪️')}" for p in dict.fromkeys(g["plats"])
             )
             lines.append(f"{marks} <code>{g['time']}</code> · {_html.escape(g['label'])}")
             shown += 1

@@ -292,7 +292,7 @@ def test_tg_bot_queue_with_titles(tmp_path):
     out = bot.handle_update(own, "/queue")
     assert "Очередь" in out and "Мой фильм" in out
     assert "📅 <b>Вт, 22 сентября</b>" in out   # день визуально выделен
-    assert "🟦" in out                            # цветовой маркер telegram
+    assert "✈️" in out                            # значок Telegram
 
 
 def test_hourly_limit_ignores_deleted(tmp_path):

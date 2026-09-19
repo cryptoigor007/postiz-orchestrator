@@ -24,3 +24,12 @@
   - `.env` оркестратора: TOKEN_BROKER_URL/SECRET.
   - Доступен с Mac и с pve.
 - Предусловие для реального YouTube: подключить YouTube-канал в Postiz.
+
+## 2026-09-19 — Plans 2/3 (ядро фичи)
+- manual service scan/confirm/reject (tests) → commit.
+- webapp `/manual/*` API (plan/uploads/scan/confirm/reassign/reject/ignore/claim-action) + tests.
+- UI раздел «Manual» (scan/confirm/reject/ignore/клеймы), i18n RU/EN, nav.
+- engines n8n + browser(experimental), source factory (only enabled platforms), wired in build.
+- Deploy: rsync + restart; проверено: health ok, manual/plan platforms=[telegram,youtube], scan youtube → 404 (нет подключённого канала).
+- Tests: 103 passed.
+- Prerequisite live YouTube: подключить YouTube-канал в Postiz (broker отдаёт токен).

@@ -19,3 +19,8 @@
 - matching score (title/date/duration) + tests (4) → commit 7df4fac.
 - Full suite: 92 passed.
 - Next: token broker (доступ к OAuth-токену YouTube из Postiz), scan/confirm service, UI/API/MCP.
+- token broker: client + server + unit (commit), установлен на VM 120, `token-broker.service` active.
+  - health 200; чужой секрет 401; `platform=youtube` → 404 (канал ещё не подключён) — корректно.
+  - `.env` оркестратора: TOKEN_BROKER_URL/SECRET.
+  - Доступен с Mac и с pve.
+- Предусловие для реального YouTube: подключить YouTube-канал в Postiz.

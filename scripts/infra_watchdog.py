@@ -84,18 +84,29 @@ def _notify(token: str, chat: str, text: str) -> None:
         pass
 
 
+def _health_ok(url: str, headers: dict | None = None, tries: int = 3,
+               delay: float = 10.0) -> bool:
+    """Несколько попыток, чтобы короткий рестарт сервиса не поднимал ложную тревогу."""
+    for i in range(max(1, tries)):
+        if _get(url, headers) == 200:
+            return True
+        if i + 1 < tries:
+            time.sleep(delay)
+    return False
+
+
 def main() -> int:
     env = _env()
     problems: list[str] = []
 
-    if _get("http://127.0.0.1:8080/health") != 200:
+    if not _health_ok("http://127.0.0.1:8080/health"):
         problems.append("webapp/оркестратор: /health не отвечает")
     broker = env.get("TOKEN_BROKER_URL", "")
     if broker:
-        code = _get(broker.rstrip("/") + "/health",
-                    {"X-Broker-Secret": env.get("TOKEN_BROKER_SECRET", "")})
-        if code != 200:
-            problems.append(f"токен-брокер: /health -> {code}")
+        if not _health_ok(broker.rstrip("/") + "/health",
+                          {"X-Broker-Secret": env.get("TOKEN_BROKER_SECRET", "")},
+                          tries=2, delay=5.0):
+            problems.append("токен-брокер: /health не отвечает")
     if not _service_active("cloudflared-webapp.service"):
         problems.append("туннель cloudflared: сервис не active")
     if not Path("/var/lib/cloudflared-webapp.url").is_file():

@@ -161,7 +161,7 @@ class Runner:
     def _cycle_recon(self) -> None:
         r = self.comps["recon"].run()
         logger.info("Reconciliation: %s", r)
-        if r.get("orphans") or r.get("missing"):
+        if r.get("missing"):
             self.comps["tg"].broadcast(f"Reconciliation alert: {r}")
 
     def _cycle_manual(self) -> None:

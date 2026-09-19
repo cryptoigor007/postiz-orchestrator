@@ -102,12 +102,15 @@ class Reconciliation:
                 )
                 missing += 1
 
-        # 2. Postiz scheduled not in our DB
+        # 2. Postiz scheduled not in our DB (черновики не считаем — они паркуются осознанно)
         postiz_posts = self.postiz.list_scheduled()
         known_ids = {r["postiz_post_id"] for r in our}
         orphans = 0
         for p in postiz_posts:
             if p.id not in known_ids:
+                state = (getattr(p, "status", "") or "").lower()
+                if state in ("draft", "drafts"):
+                    continue
                 orphans += 1
                 self.db.log("system", None, p.platform, "orphan_detected", p.id)
                 logger.warning("Orphan post in Postiz: %s (%s)", p.id, p.platform)

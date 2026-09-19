@@ -7,6 +7,20 @@
 
 ---
 
+## 0. Первые 5 минут (bootstrap новой сессии)
+
+```bash
+cd /Users/dreamstore/Downloads/orchestrator
+git pull && ./scripts/check.sh                      # 151 тест, линт
+ssh root@100.95.225.71 'systemctl is-active orchestrator.service token-broker.service 2>/dev/null; echo ---; curl -s http://127.0.0.1:8080/health'
+./scripts/runvm.sh 'systemctl is-active token-broker.service'   # хелпер к VM (см. §3)
+```
+
+Затем прочитать: `docs/HANDOFF.md` (этот файл) → `docs/SESSION_LOG.md` → `docs/VERIFICATION.md`.
+И проверить актуальный URL панели: `ssh root@100.95.225.71 'cat /var/lib/cloudflared-webapp.url'`.
+
+---
+
 ## 1. TL;DR (состояние на сейчас)
 
 - Система **работает и задеплоена**. Все сервисы active, тесты зелёные, GitHub синхронизирован.
@@ -56,7 +70,7 @@ flowchart TD
 | Что | Значение |
 |---|---|
 | PVE-хост | `ssh root@100.95.225.71` (tailscale) / `192.168.100.50` (LAN), hostname `pve` |
-| VM Postiz | `192.168.100.60`, доступ через `ssh postiz@192.168.100.60` или `qm guest exec 120 -- ...` |
+| VM Postiz | прямой `ssh postiz@192.168.100.60` с Mac (docker + passwordless sudo работают); хелпер `./scripts/runvm.sh '<cmd>'`; либо `qm guest exec 120 -- ...` с pve |
 | Docker-стек | `postiz`, `postiz-nginx-https-1`, `postiz-db`, `postiz-redis`, `postiz-temporal`, `postiz-media` |
 | Оркестратор | `/opt/orchestrator` на `pve`, пользователь `orchestrator` (systemd) |
 | Compose Postiz | `/home/postiz/postiz/docker-compose.yml` (бэкапы `.bak.*`) |
@@ -73,6 +87,12 @@ flowchart TD
 - `VM:/home/postiz/postiz/docker-compose.yml` — пароли БД/Redis, `JWT_SECRET`,
   `YOUTUBE_CLIENT_ID/SECRET`.
 - GitHub-доступ на Mac — в связке ключей (osxkeychain), remote HTTPS.
+
+### MCP для ИИ (opencode)
+- Конфиг: `~/.config/opencode/opencode.jsonc`, серверы **`orchestrator`** (`ORCH_URL`, `ORCH_KEY`)
+  и **`postiz`** (`POSTIZ_URL`, `POSTIZ_KEY`, `POSTIZ_VERIFY_TLS`).
+- Серверы: `scripts/mcp_server.py` (27 инструментов оркестратора), `scripts/postiz_mcp_server.py` (Postiz).
+- После смены ключа в `/opt/orchestrator/.env` обновить и `ORCH_KEY` в конфиге MCP.
 
 ---
 
@@ -131,7 +151,9 @@ journalctl -u orchestrator.service -f
 curl -s http://127.0.0.1:8080/health
 cat /var/lib/cloudflared-webapp.url
 
-# на VM
+# на VM (с Mac, напрямую или через хелпер)
+./scripts/runvm.sh 'systemctl status token-broker.service'
+ssh postiz@192.168.100.60
 systemctl status token-broker.service
 docker ps
 ```

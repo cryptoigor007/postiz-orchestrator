@@ -53,3 +53,9 @@
 - tooling: ruff-конфиг, авто-фиксы (линт чист), `scripts/check.sh` + `.githooks/pre-commit`.
 - i18n: справка по разделу «Ручные»; сборка b22.
 - Tests: 110 passed. Деплой: rsync --delete (IDENTICAL) + restart, все сервисы active.
+
+## 2026-09-19 — Полный обзор + README
+- Проверено всё: 110 тестов, линт чист, сервисы active (orchestrator, cloudflared, sync-timer,
+  watchdog, token-broker), health ok, manual API отвечает.
+- Написан подробный README.md (архитектура, пайплайн, конфиг, движки, ручные загрузки, MCP,
+  Telegram, деплой, эксплуатация, диагностика, БД, ограничения).

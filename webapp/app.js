@@ -4,10 +4,10 @@
   const I18N = {
     ru: {
       nav_status: "Статус", nav_folders: "Папки", nav_calendar: "Календарь", nav_queue: "Очередь",
-      nav_platforms: "Платформы", nav_tail: "Серия", nav_failed: "Ошибки", nav_metrics: "Метрики",
+      nav_platforms: "Платформы", nav_tail: "Остаток", nav_failed: "Ошибки", nav_metrics: "Метрики",
       nav_actions: "Действия", nav_help: "Справка",
       title_status: "Статус", title_folders: "Папки с видео", title_calendar: "Календарь",
-      title_queue: "Очередь", title_platforms: "Платформы", title_tail: "Завершение серии",
+      title_queue: "Очередь", title_platforms: "Платформы", title_tail: "Остаток шортсов серии",
       title_failed: "Ошибки", title_actions: "Действия", title_metrics: "Метрики", title_help: "Справка",
       loading: "Загрузка…", error_prefix: "Ошибка", refresh: "Обновить", no_data: "Нет данных",
       platforms: "Платформы", no_platforms: "Нет платформ", limit: "лимит",
@@ -15,9 +15,9 @@
       scan: "Сканировать", no_subfolders: "Нет подпапок", folders_to_scan: "Папки для сканирования",
       folders_none: "Папки не выбраны", browse: "Обзор папок",
       net_root: "Сеть · /mnt/video", local_root: "Локально · /",
-      calendar_empty: "Календарь пуст", queue_empty: "Пусто",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто",
       resume: "Возобновить", pause_all: "Пауза всем", resume_all: "Возобновить все", none: "Нет",
-      tail_title: "Завершение серии", tail_explain: "Режим завершения серии: если новые длинные видео не выходят заданное число дней, система предлагает завершить серию — добивает её оставшимися шортсами и задействует все слоты. На время завершения автономные шортсы ставятся на паузу.", enable: "Включить", disable: "Выключить",
+      tail_title: "Остаток шортсов серии", tail_explain: "Шортсы уже нарезаны для серии, но ещё не опубликованы. Когда новых серий больше нет, система распределяет остаток по слотам (в слот основной серии — обычные шортсы, в 20:30 — шортсы к другим сериям), и только после этого запускается следующая серия. Перед запуском она спросит подтверждение.", enable: "Включить", disable: "Выключить",
       tail_on: "хвост вкл", tail_off: "выкл", no_errors: "Ошибок нет",
       quick_actions: "Быстрые действия", act_sync: "Обновить статусы",
       act_reconcile: "Сверка с Postiz", act_backup: "Резервная копия", act_schedule: "Разложить по слотам",
@@ -31,7 +31,7 @@
       m_sync: "Обновлений статуса из Postiz", m_err_pill: "Ошибка", m_no_err: "Сбоев не было",
       t_folder_added: "Папка добавлена", t_folder_removed: "Папка убрана",
       t_paused: "Все платформы на паузе", t_resumed: "Все платформы возобновлены",
-      t_resume: "Возобновлено", t_tail_on: "Хвост включён", t_tail_off: "Хвост выключен",
+      t_resume: "Возобновлено", t_tail_on: "Распределение остатка включено", t_tail_off: "Распределение остатка выключено",
       t_distributed: "Распределено", t_saved: "Ссылка сохранена", t_scan: "Скан",
       fl_hint: "Укажи ID видео (номер из «Очереди» или «Календаря»), платформу и ссылку — она подставится в описания.",
       fl_id_ph: "ID видео",
@@ -52,14 +52,14 @@
       mu_from: "источник",
       gate_msg: "Откройте приложение из Telegram-бота.",
       help: "Справка", help_nav: "Навигация", help_folders: "Раздел «Папки»",
-      help_platforms: "Раздел «Платформы»", help_tail: "Раздел «Серия» (завершение)",
+      help_platforms: "Раздел «Платформы»", help_tail: "Раздел «Остаток»",
       help_actions: "Раздел «Действия»", help_common: "Общее", help_status: "Статусы",
       help_nav_status: "Сводка: сколько постов в каждом статусе и состояние платформ.",
       help_nav_folders: "Выбор папок с видео и запуск сканирования.",
       help_nav_calendar: "Что и когда запланировано к публикации.",
       help_nav_queue: "Посты, которые ждут отправки.",
       help_nav_platforms: "Каналы (Telegram/YouTube/…), лимиты и пауза.",
-      help_nav_tail: "Завершение серии: когда новых длинных видео нет N дней, система добивает серию оставшимися шортсами и задействует все слоты.",
+      help_nav_tail: "Остаток шортсов: неопубликованные шортсы серии. Когда серия закончилась, система распределяет их по слотам перед запуском следующей серии.",
       help_nav_failed: "Посты, которые не отправились, и текст ошибки.",
       help_nav_metrics: "Показатели работы оркестратора и очереди.",
       help_nav_actions: "Ручные операции: распределить, обновить ссылку.",
@@ -80,8 +80,8 @@
       help_a_pause_all: "Поставить все платформы на паузу (публикации временно прекращаются).",
       help_a_resume_all: "Снять паузу со всех платформ.",
       help_a_resume: "Снять паузу с одной платформы.",
-      help_a_tail_on: "Включить завершение серии для платформы.",
-      help_a_tail_off: "Выключить завершение серии.",
+      help_a_tail_on: "Разрешить распределять остаток шортсов этой серии.",
+      help_a_tail_off: "Не распределять остаток (ждать ручного решения).",
       help_a_distribute: "Разложить длинные видео по свободным слотам расписания.",
       help_a_refresh: "Перечитать данные с сервера.",
       help_a_save: "Сохранить ссылку на полное видео для указанного поста (entity_id + платформа).",
@@ -93,10 +93,10 @@
     },
     en: {
       nav_status: "Status", nav_folders: "Folders", nav_calendar: "Calendar", nav_queue: "Queue",
-      nav_platforms: "Platforms", nav_tail: "Series", nav_failed: "Errors", nav_metrics: "Metrics",
+      nav_platforms: "Platforms", nav_tail: "Backlog", nav_failed: "Errors", nav_metrics: "Metrics",
       nav_actions: "Actions", nav_help: "Help",
       title_status: "Status", title_folders: "Video folders", title_calendar: "Calendar",
-      title_queue: "Queue", title_platforms: "Platforms", title_tail: "Series wrap-up",
+      title_queue: "Queue", title_platforms: "Platforms", title_tail: "Unposted series shorts",
       title_failed: "Errors", title_actions: "Actions", title_metrics: "Metrics", title_help: "Help",
       loading: "Loading…", error_prefix: "Error", refresh: "Refresh", no_data: "No data",
       platforms: "Platforms", no_platforms: "No platforms", limit: "limit",
@@ -104,9 +104,9 @@
       scan: "Scan", no_subfolders: "No subfolders", folders_to_scan: "Folders to scan",
       folders_none: "No folders selected", browse: "Browse",
       net_root: "Network · /mnt/video", local_root: "Local · /",
-      calendar_empty: "Calendar is empty", queue_empty: "Empty",
+      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty",
       resume: "Resume", pause_all: "Pause all", resume_all: "Resume all", none: "None",
-      tail_title: "Series wrap-up", tail_explain: "Wrap-up mode: if no new long videos appear for the configured number of days, the system offers to finish the series — posting the remaining shorts and using all slots. Standalone shorts are paused during wrap-up.", enable: "Enable", disable: "Disable",
+      tail_title: "Unposted series shorts", tail_explain: "Shorts already cut for the series but not published yet. When no new episodes appear, the system distributes the backlog into slots (standard shorts in the main-series slot, other series' shorts at 20:30) and only then starts the next series. It asks for confirmation first.", enable: "Enable", disable: "Disable",
       tail_on: "tail ON", tail_off: "off", no_errors: "No errors",
       quick_actions: "Quick actions", act_sync: "Sync now",
       act_reconcile: "Check against Postiz", act_backup: "Backup now", act_schedule: "Schedule now",
@@ -141,14 +141,14 @@
       mu_from: "source",
       gate_msg: "Open the app from the Telegram bot.",
       help: "Help", help_nav: "Navigation", help_folders: "“Folders” section",
-      help_platforms: "“Platforms” section", help_tail: "“Series” section (wrap-up)",
+      help_platforms: "“Platforms” section", help_tail: "“Backlog” section",
       help_actions: "“Actions” section", help_common: "Common", help_status: "Statuses",
       help_nav_status: "Overview: post counts per status and platform state.",
       help_nav_folders: "Pick video folders and run a scan.",
       help_nav_calendar: "What is scheduled and when.",
       help_nav_queue: "Posts waiting to be sent.",
       help_nav_platforms: "Channels (Telegram/YouTube/…), limits and pause.",
-      help_nav_tail: "Series wrap-up: with no new long videos for N days, the system finishes the series with remaining shorts using all slots.",
+      help_nav_tail: "Unposted series shorts: the backlog of a finished series. The system distributes it before starting the next series.",
       help_nav_failed: "Posts that failed, with the error text.",
       help_nav_metrics: "Orchestrator and queue metrics.",
       help_nav_actions: "Manual operations: distribute, update link.",
@@ -169,8 +169,8 @@
       help_a_pause_all: "Pause all platforms (publications stop temporarily).",
       help_a_resume_all: "Resume all platforms.",
       help_a_resume: "Resume a single platform.",
-      help_a_tail_on: "Enable tail mode for a platform.",
-      help_a_tail_off: "Disable tail mode.",
+      help_a_tail_on: "Allow distributing this series' unposted shorts.",
+      help_a_tail_off: "Do not distribute the backlog (wait for a manual decision).",
       help_a_distribute: "Spread long videos into free schedule slots.",
       help_a_refresh: "Reload data from the server.",
       help_a_save: "Save the full-video link for a given post (entity_id + platform).",
@@ -329,12 +329,14 @@
   }
 
   function renderCalendar(d) {
+    const legend = `<div class="panel"><div class="panel-header">${t("title_calendar")}</div>
+      <div class="row"><span class="meta">${t("calendar_explain")}</span></div></div>`;
     const days = d.days || [];
     if (!days.length) {
-      content().innerHTML = `<div class="panel"><div class="empty">${t("calendar_empty")}</div></div>`;
+      content().innerHTML = legend + `<div class="panel"><div class="empty">${t("calendar_empty")}</div></div>`;
       return;
     }
-    content().innerHTML = days.map((day) => {
+    content().innerHTML = legend + days.map((day) => {
       const rows = (day.items || []).map((it) => {
         const title = it.title || it.platform || "";
         const link = it.url ? ` <a href="${it.url}" target="_blank" rel="noopener">↗</a>` : "";

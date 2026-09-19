@@ -16,7 +16,9 @@ def build_manual_sources(cfg: Any, postiz: Any, env: dict) -> dict[str, Any]:
     n8n_url = env.get("N8N_URL")
 
     out: dict[str, Any] = {}
-    for platform in cfg.platforms:
+    for platform, pcfg in cfg.platforms.items():
+        if not getattr(pcfg, "enabled", True):
+            continue
         engine = cfg.engine_for(platform)
         if engine == "postiz":
             out[platform] = PostizEngine(postiz)

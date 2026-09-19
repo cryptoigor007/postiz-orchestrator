@@ -26,3 +26,9 @@ def test_build_sources_without_broker():
     sources = build_manual_sources(cfg, MockPostizClient(), {})
     assert "youtube" not in sources  # direct requires broker
     assert isinstance(sources["telegram"], PostizEngine)
+
+
+def test_disabled_platforms_excluded():
+    cfg = load_config(ROOT / "config.yaml")
+    sources = build_manual_sources(cfg, MockPostizClient(), {"TOKEN_BROKER_URL": "x", "TOKEN_BROKER_SECRET": "s"})
+    assert "instagram" not in sources

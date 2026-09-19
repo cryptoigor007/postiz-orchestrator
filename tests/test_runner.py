@@ -12,7 +12,7 @@ from orchestrator.db import Database
 from orchestrator.link_updater import LinkUpdater
 from orchestrator.postiz import MockPostizClient
 from orchestrator.publisher import Publisher
-from orchestrator.runner import Runner
+from orchestrator.runner import Runner  # noqa: F401
 from orchestrator.safety import SafetyChecker
 from orchestrator.scheduler import Scheduler
 from orchestrator.status_sync import Reconciliation, StatusSync
@@ -52,3 +52,26 @@ def test_runner_builds(tmp_path):
     r._cycle_sync()
     r._cycle_recon()
     assert True
+
+
+def test_reconciliation_alert_in_russian(tmp_path):
+    db = Database(tmp_path / "rr.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+
+    sent = []
+
+    class Recon:
+        def run(self):
+            return {"missing": 3, "orphans": 1}
+
+    class TG:
+        def broadcast(self, text):
+            sent.append(text)
+
+    runner = Runner.__new__(Runner)
+    runner.comps = {"recon": Recon(), "tg": TG(), "cfg": cfg, "db": db, "clock": clock}
+    runner._cycle_recon()
+    assert sent and "Сверка с Postiz" in sent[0]
+    assert "3" in sent[0] and "пропали" in sent[0]
+    assert "missing" not in sent[0] and "orphans" not in sent[0]

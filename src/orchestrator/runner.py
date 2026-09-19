@@ -176,8 +176,25 @@ class Runner:
     def _cycle_recon(self) -> None:
         r = self.comps["recon"].run()
         logger.info("Reconciliation: %s", r)
-        if r.get("missing"):
-            self.comps["tg"].broadcast(f"Reconciliation alert: {r}")
+        missing = int(r.get("missing") or 0)
+        orphans = int(r.get("orphans") or 0)
+        if not missing:
+            return
+        lines = [
+            "⚠️ Сверка с Postiz нашла расхождение:",
+            f"• {missing} запланированных постов пропали из Postiz "
+            "(в нашей базе они есть, а в Postiz их нет).",
+        ]
+        if orphans:
+            lines.append(
+                f"• Ещё {orphans} пост(ов) есть в Postiz, но их нет в нашей базе "
+                "(возможно, созданы вручную или остались от старых правок)."
+            )
+        lines.append(
+            "Что делать: открой панель → «Очередь» и «Действия» → «Разложить по слотам» — "
+            "система поставит пропавшие посты заново."
+        )
+        self.comps["tg"].broadcast("\n".join(lines))
 
     def _cycle_manual(self) -> None:
         manual = self.comps.get("manual")

@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "41"
+WEBAPP_BUILD = "42"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -378,10 +378,45 @@ class WebAppAPI:
                 if platform:
                     sql += " AND platform=?"
                     params.append(platform)
-                rows = self.db.fetchall(sql, tuple(params))
+                rows = list(self.db.fetchall(sql, tuple(params)))
+                # каскад: удаление фильма убирает и его шортсы (все платформы или выбранную)
+                if etype == "long_video":
+                    child_sql = ("SELECT s.id AS entity_id, eps.platform, eps.postiz_post_id, "
+                                 "eps.status FROM shorts s "
+                                 "JOIN entity_platform_status eps "
+                                 "  ON eps.entity_type='short' AND eps.entity_id = s.id "
+                                 "WHERE s.parent_video_id=? "
+                                 "AND eps.status IN ('scheduled','updating','ready','error')")
+                    child_params: list = [eid]
+                    if platform:
+                        child_sql += " AND eps.platform=?"
+                        child_params.append(platform)
+                    for c in self.db.fetchall(child_sql, tuple(child_params)):
+                        rows.append({"platform": c["platform"],
+                                     "postiz_post_id": c["postiz_post_id"],
+                                     "status": c["status"],
+                                     "_child_short": c["entity_id"]})
                 postiz = self.comps.get("postiz")
                 removed = 0
                 for r in rows:
+                    child_id = r.get("_child_short")
+                    if child_id is not None:
+                        pid = r.get("postiz_post_id")
+                        if pid and postiz is not None and hasattr(postiz, "set_status"):
+                            try:
+                                postiz.set_status(str(pid), "draft")
+                            except Exception:
+                                logger.warning("queue remove: не удалось отменить %s", pid,
+                                               exc_info=True)
+                        self.db.execute(
+                            "UPDATE entity_platform_status SET status='skipped', "
+                            "last_error='removed_by_user' WHERE entity_type='short' "
+                            "AND entity_id=? AND platform=?",
+                            (child_id, r["platform"]),
+                        )
+                        self.db.log("short", child_id, r["platform"], "queue_remove", str(pid or ""))
+                        removed += 1
+                        continue
                     pid = r.get("postiz_post_id")
                     if pid and postiz is not None and hasattr(postiz, "set_status"):
                         try:

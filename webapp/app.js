@@ -482,7 +482,7 @@
        <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
-         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
+         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}">${t("queue_remove")}</button>
          ${statusBtn(it.status)}
          <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
@@ -1030,7 +1030,6 @@
           body: JSON.stringify({
             entity_type: el.dataset.et,
             entity_id: Number(el.dataset.eid),
-            platform: el.dataset.p,
           }),
         });
         toast(`${t("queue_removed")}: ${r.removed || 0}`);

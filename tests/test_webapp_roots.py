@@ -399,3 +399,38 @@ def test_api_queue_remove(env, tmp_path):
     # очередь больше не показывает
     code, payload, _ = api.handle("GET", "/webapp/api/queue", headers, b"")
     assert all(i["status"] != "skipped" for i in payload["items"])
+
+
+def test_api_queue_remove_cascade_to_shorts(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) "
+        "VALUES ('videomaker', '/s1', 'S1', '2026-01-01T00:00:00+00:00')"
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO shorts (source, parent_video_id, folder_path, video_path, created_at) "
+        "VALUES ('videomaker', ?, '/s1/shorts/short_001', '/s1/shorts/s1.mp4', "
+        "'2026-01-01T00:00:00+00:00')",
+        (lv["id"],),
+    )
+    sh = db.fetchone("SELECT id FROM shorts")
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for, postiz_post_id) VALUES ('long_video', ?, 'telegram', "
+        "'scheduled', '2026-09-22T13:00:00+00:00', 'p-long')",
+        (lv["id"],),
+    )
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for, postiz_post_id) VALUES ('short', ?, 'telegram', "
+        "'scheduled', '2026-09-22T17:30:00+00:00', 'p-short')",
+        (sh["id"],),
+    )
+    body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"]}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
+    assert code == 200
+    assert payload["removed"] == 2  # фильм + его шортс
+    rows = db.fetchall("SELECT entity_type, status FROM entity_platform_status")
+    assert all(r["status"] == "skipped" for r in rows)

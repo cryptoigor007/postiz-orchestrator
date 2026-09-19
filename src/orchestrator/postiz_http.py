@@ -226,8 +226,8 @@ class HttpPostizClient:
         from datetime import timedelta
         now = datetime.now(timezone.utc)
         params = {
-            "startDate": (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "endDate": (now + timedelta(days=120)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDate": (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDate": (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
         r = self._client.get(self.path_posts, params=params)
         r.raise_for_status()

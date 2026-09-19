@@ -371,3 +371,54 @@ def test_jobs_progress_and_cancel():
     # после завершения и паузы (>60с) snapshot скрывается
     job.state.finished_at = time.time() - 120
     assert reg.snapshot() is None
+
+
+def test_tg_split_long_text():
+    from orchestrator.telegram_bot import split_text
+
+    text = "\n".join(f"строка номер {i} с некоторым текстом" for i in range(300))
+    parts = split_text(text, 500)
+    assert len(parts) > 1
+    assert all(len(p) <= 500 for p in parts)
+    assert "\n".join(parts) == text
+
+
+def test_tg_queue_no_truncation(tmp_path):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from orchestrator.clock import FakeClock
+    from orchestrator.config import load_config
+    from orchestrator.db import Database
+    from orchestrator.telegram_bot import TelegramNotifier, setup_commands
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    db = Database(tmp_path / "long.sqlite")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    bot = TelegramNotifier(cfg, db, clock)
+
+    class _Comps(dict):
+        def __missing__(self, key):
+            return None
+
+    comps = _Comps()
+    comps["db"] = db
+    comps["cfg"] = cfg
+    comps["clock"] = clock
+    setup_commands(bot, comps)
+    long_title = "Очень длинное название фильма, которое раньше обрезалось многоточием в очереди"
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, title_text, created_at) "
+        "VALUES ('videomaker', '/lt', 'lt', ?, '2026-01-01T00:00:00+00:00')",
+        (long_title,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', ?, 'youtube', 'scheduled', "
+        "'2026-09-22T13:00:00+00:00')",
+        (lv["id"],),
+    )
+    out = bot.handle_update(cfg.telegram.allowed_chat_ids[0], "/queue")
+    assert long_title in out
+    assert "…" not in out

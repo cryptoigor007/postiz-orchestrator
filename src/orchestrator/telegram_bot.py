@@ -11,6 +11,30 @@ from .db import Database
 logger = logging.getLogger(__name__)
 
 
+def split_text(text: str, limit: int = 3800) -> list[str]:
+    """Разбивает длинный текст по строкам на части (лимит Telegram 4096)."""
+    text = text or ""
+    if len(text) <= limit:
+        return [text]
+    parts: list[str] = []
+    cur = ""
+    for line in text.splitlines():
+        while len(line) > limit:
+            if cur:
+                parts.append(cur)
+                cur = ""
+            parts.append(line[:limit])
+            line = line[limit:]
+        if len(cur) + len(line) + 1 > limit:
+            parts.append(cur)
+            cur = line
+        else:
+            cur = (cur + "\n" + line) if cur else line
+    if cur:
+        parts.append(cur)
+    return parts
+
+
 class TelegramNotifier:
     """Abstract notifier + command router. Real transport plugged later."""
 
@@ -32,14 +56,17 @@ class TelegramNotifier:
             return chat_id == self._owner_chat_id
         return chat_id in allowed
 
-    def send(self, chat_id: int, text: str) -> None:
+    def send(self, chat_id: int, text: str, reply_markup: dict | None = None) -> None:
         if not self.is_allowed(chat_id):
             logger.warning("Blocked message to unauthorized chat %s", chat_id)
             return
-        if self.transport:
-            self.transport.send_message(chat_id, text)
-        else:
-            logger.info("[TG -> %s] %s", chat_id, text[:200])
+        chunks = split_text(text, 3800)
+        for i, chunk in enumerate(chunks):
+            markup = reply_markup if i == len(chunks) - 1 else None
+            if self.transport:
+                self.transport.send_message(chat_id, chunk, markup)
+            else:
+                logger.info("[TG -> %s] %s", chat_id, chunk[:200])
 
     def broadcast(self, text: str) -> None:
         targets = self.cfg.telegram.allowed_chat_ids or (
@@ -216,8 +243,6 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
             key = (r["entity_type"], r["entity_id"], when)
             kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
             title = (r.get("title") or "").strip() or f"#{r['entity_id']}"
-            if len(title) > 44:
-                title = title[:43] + "…"
             g = grouped.setdefault(key, {"when": when, "label": f"{kind}: {title}", "plats": []})
             g["plats"].append(r["platform"])
         out = []
@@ -251,8 +276,6 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         for r in rows:
             kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
             title = (r.get("title") or "").strip() or f"#{r['entity_id']}"
-            if len(title) > 40:
-                title = title[:39] + "…"
             out.append(f"{kind}: {title} · {r['platform']} · {r['last_error'] or '—'}")
         return "\n".join(out)
 

@@ -84,22 +84,6 @@ def test_min_interval(db, safety):
     assert ok2
 
 
-def test_find_next_slot(db, safety):
-    platform = "youtube"
-    t0 = datetime(2026, 3, 11, 16, 0, tzinfo=UTC)
-    db.execute(
-        """
-        INSERT INTO entity_platform_status
-            (entity_type, entity_id, platform, status, postiz_scheduled_for)
-        VALUES ('long_video', 1, ?, 'scheduled', ?)
-        """,
-        (platform, t0.isoformat()),
-    )
-    slot = safety.find_next_slot(platform, t0, 7)
-    assert slot is not None
-    assert (slot - t0).total_seconds() >= 25 * 60
-
-
 def test_pause(safety, db):
     safety.pause_platform("youtube", "test")
     assert safety.is_platform_paused("youtube")

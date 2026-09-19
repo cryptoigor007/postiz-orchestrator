@@ -189,3 +189,42 @@ def test_telegram_link_post_after_youtube(env):
     assert row is not None and row["postiz_post_id"]
     # повторно не создаём
     assert sched.schedule_telegram_links() == 0
+
+
+def test_thematic_short_exact_time_and_busy_slot_skipped(env):
+    from orchestrator.slots import get_tz, local_to_utc, parse_time
+
+    db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "media"
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, title_text, created_at) "
+        "VALUES ('videomaker', '/ex', 'EX', 'T', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    for i in (1, 2):
+        db.execute(
+            "INSERT INTO shorts (source, parent_video_id, folder_path, order_index, "
+            "video_path, title_text, created_at) VALUES "
+            "('videomaker', ?, ?, ?, ?, ?, ?)",
+            (lv["id"], f"/ex/shorts/s{i}", i, f"/ex/shorts/s{i}/v.mp4", f"S{i}", now),
+        )
+    long_dt = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', ?, 'telegram', 'scheduled', ?)",
+        (lv["id"], long_dt.isoformat()),
+    )
+    n = sched.schedule_thematic_shorts(lv["id"], "telegram")
+    assert n == 1  # ровно один слот 20:30
+    row = db.fetchone(
+        "SELECT postiz_scheduled_for FROM entity_platform_status "
+        "WHERE entity_type='short' AND platform='telegram'")
+    tz = get_tz(cfg.timezone)
+    want = local_to_utc(long_dt.astimezone(tz).date(), parse_time("20:30"), cfg.timezone)
+    assert row["postiz_scheduled_for"][:16] == want.isoformat()[:16]
+    # повторный запуск не добавляет второй шорт в тот же слот (без сдвига на 20:55/21:20)
+    assert sched.schedule_thematic_shorts(lv["id"], "telegram") == 0
+    assert len(db.fetchall(
+        "SELECT 1 FROM entity_platform_status WHERE entity_type='short'")) == 1

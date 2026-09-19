@@ -131,22 +131,6 @@ class SafetyChecker:
 
         return True, "ok"
 
-    def find_next_slot(self, platform: str, base_time: datetime,
-                       platform_daily_limit: int,
-                       max_attempts: int = 48) -> datetime | None:
-        """Find nearest time >= base_time that satisfies limits and min_interval."""
-        candidate = base_time
-        if candidate.tzinfo is None:
-            candidate = candidate.replace(tzinfo=UTC)
-        interval = timedelta(minutes=self.safety.min_interval_minutes)
-
-        for _ in range(max_attempts):
-            ok, _ = self.can_schedule(platform, candidate, platform_daily_limit)
-            if ok:
-                return candidate
-            candidate += interval
-        return None
-
     def record_post(self, platform: str, scheduled_for: datetime) -> None:
         now = self.clock.now().isoformat()
         date_str = scheduled_for.date().isoformat()

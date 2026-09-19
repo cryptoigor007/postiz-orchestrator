@@ -231,8 +231,19 @@ class Scheduler:
             return 0
 
         short_ids = [s["id"] for s in shorts]
-        # один шорт на день-слот (ровно в 20:30); остаток уходит в «Остаток»
-        assignments = list(zip(short_ids, slots, strict=False))
+        # один шорт на слот ровно в 20:30; занятые слоты пропускаем (остаток -> «Остаток»)
+        taken = set()
+        for r in self.db.fetchall(
+            "SELECT postiz_scheduled_for FROM entity_platform_status "
+            "WHERE platform=? AND postiz_scheduled_for IS NOT NULL "
+            "AND status IN ('scheduled','updating','published')",
+            (platform,),
+        ):
+            ts = r["postiz_scheduled_for"]
+            if ts:
+                taken.add(str(ts)[:16])
+        free_slots = [sl for sl in slots if sl.isoformat()[:16] not in taken]
+        assignments = list(zip(short_ids, free_slots, strict=False))
 
         pcfg = self.cfg.platforms[platform]
         if getattr(pcfg, "post_mode", "media") == "link":
@@ -256,13 +267,8 @@ class Scheduler:
             path = self._pick_path(short, platform) or short["video_path"]
             if not path:
                 continue
-            # adjust slot if needed for safety
-            final_slot = self.safety.find_next_slot(platform, sched, pcfg.daily_limit)
-            if not final_slot:
-                continue
-            post = self._safe_publish(
-                "short", sid, platform, path, content, final_slot
-            )
+            # публикуем ровно в слот (без сдвигов на 25 минут)
+            post = self._safe_publish("short", sid, platform, path, content, sched)
             if post:
                 count += 1
         return count

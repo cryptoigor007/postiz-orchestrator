@@ -204,3 +204,15 @@ def scheduling_mode(db: Database) -> str:
 
 def set_scheduling_mode(db: Database, mode: str) -> None:
     db.set_setting(SCHEDULING_MODE_KEY, "auto" if mode == "auto" else "manual")
+
+
+SHORTS_START_KEY = "shorts_start_date"
+
+
+def shorts_start_date(db: Database) -> str:
+    raw = db.get_setting(SHORTS_START_KEY)
+    return str(raw or "").strip()
+
+
+def set_shorts_start_date(db: Database, value: str) -> None:
+    db.set_setting(SHORTS_START_KEY, str(value or "").strip())

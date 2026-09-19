@@ -83,14 +83,13 @@ def test_thematic_after_publish(env):
              f"Short {i}", f"Desc {i}", now),
         )
     n = sched.schedule_thematic_shorts(vid, "youtube")
-    assert n >= 2
+    # один шорт на день-слот (ровно в 20:30); в окне один день -> один шорт
+    assert n == 1
     rows = db.fetchall(
         "SELECT * FROM entity_platform_status WHERE entity_type='short' AND platform='youtube'"
     )
-    assert len(rows) >= 2
-    # check descriptions contain link
-    # (content is in postiz mock)
-    assert len(postiz.posts) >= 2
+    assert len(rows) == 1
+    assert len(postiz.posts) == 1
 
 
 def test_reconciliation(env):
@@ -129,7 +128,7 @@ def test_thematic_shorts_for_scheduled_parent(env):
         (lv["id"],),
     )
     n = sched.schedule_thematic_shorts(lv["id"], "telegram")
-    assert n >= 1
+    assert n == 1
     rows = db.fetchall(
         "SELECT status FROM entity_platform_status WHERE entity_type='short'")
     assert rows and all(r["status"] == "scheduled" for r in rows)

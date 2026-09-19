@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "47"
+WEBAPP_BUILD = "48"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -1003,15 +1003,33 @@ class WebAppAPI:
                 p = run_backup(self.db, self.cfg, bdir)
                 return 200, {"ok": True, "path": str(p) if p else None}, "application/json"
             if method == "POST" and route == "schedule":
+                import re as _re
+
                 sc = self.comps.get("scheduler")
                 sd = str(data.get("start_date") or "").strip() or None
-                if sd:
-                    import re as _re
-                    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", sd):
-                        return 400, {"error": "start_date must be YYYY-MM-DD"}, "application/json"
+                shr = str(data.get("shorts_start_date") or "").strip() or None
+                for name, val in (("start_date", sd), ("shorts_start_date", shr)):
+                    if val and not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", val):
+                        return 400, {"error": f"{name} must be YYYY-MM-DD"}, "application/json"
+                if shr is not None:
+                    sched_settings.set_shorts_start_date(self.db, shr or "")
+
+                def _run():
+                    try:
+                        sc.schedule_long_videos(start_date=sd)
+                        sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd)
+                    except Exception:
+                        logger.exception("async schedule failed")
+
+                if data.get("async"):
+                    import threading
+                    threading.Thread(target=_run, daemon=True).start()
+                    return 200, {"ok": True, "started": True, "start_date": sd,
+                                 "shorts_start_date": shr}, "application/json"
                 n = sc.schedule_long_videos(start_date=sd) if sc else 0
                 n2 = sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd) if sc else 0
-                return 200, {"ok": True, "long": n, "standalone": n2, "start_date": sd}, "application/json"
+                return 200, {"ok": True, "long": n, "standalone": n2, "start_date": sd,
+                             "shorts_start_date": shr}, "application/json"
             if method == "POST" and route == "pause_platform":
                 p = (data.get("platform") or "").strip()
                 if p not in self.cfg.platforms:

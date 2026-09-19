@@ -3,6 +3,8 @@
 
   const I18N = {
     ru: {
+      scan_date_films: "Фильмы с", scan_date_shorts: "Шортсы с", scan_run_dates: "Запустить с дат",
+      t_started_async: "Запущено — посты добавляются постепенно", working: "Выполняется…",
       confirm_delete_film: "Удалить фильм, все его шортсы и посты (включая базу)? После этого скан добавит его заново.",
       scan_none_new_hint: "Новых не найдено: всё уже в базе. Если хочешь добавить заново — удали из очереди (кнопка «Убрать» удаляет и из базы).",
       scan_empty_hint: "В этих папках видео не найдено. Проверь структуру: серия/vertical+wide, серия/shorts/short_001, или папка шортсов.",
@@ -119,6 +121,8 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      scan_date_films: "Films from", scan_date_shorts: "Shorts from", scan_run_dates: "Start from dates",
+      t_started_async: "Started — posts are being added gradually", working: "Working…",
       confirm_delete_film: "Delete the film, all its shorts and posts (including the database)? A scan can re-add it later.",
       scan_none_new_hint: "Nothing new: everything is already in the database. To re-add, delete from the queue (Remove also deletes from the database).",
       scan_empty_hint: "No videos found in these folders. Check the structure: series/vertical+wide, series/shorts/short_001, or a shorts folder.",
@@ -277,6 +281,22 @@
     });
   }
 
+  function busy(text) {
+    let el = document.getElementById("busy");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "busy";
+      el.className = "busy-overlay";
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `<div class="busy-box">⏳ ${text || t("working")}</div>`;
+    el.style.display = "flex";
+  }
+  function unbusy() {
+    const el = document.getElementById("busy");
+    if (el) el.style.display = "none";
+  }
+
   function statusText(status) {
     const s = (status || "").toLowerCase();
     const key = "st_" + s;
@@ -408,8 +428,11 @@
       <div class="row"><span class="meta">${t("scan_run_q")}</span></div>
       <div class="form-row">
         <button class="btn primary" data-act="scan-start">${t("scan_run_now")}</button>
-        <label class="meta">${t("scan_run_from")} <input id="scan-date" type="date" /></label>
-        <button class="btn secondary" data-act="scan-start-date">${t("scan_run_go")}</button>
+      </div>
+      <div class="form-row">
+        <label class="meta">${t("scan_date_films")} <input id="scan-date-films" type="date" /></label>
+        <label class="meta">${t("scan_date_shorts")} <input id="scan-date-shorts" type="date" /></label>
+        <button class="btn secondary" data-act="scan-start-dates">${t("scan_run_dates")}</button>
         ${(sc.skipped || 0) > 0 ? `<button class="btn secondary" data-act="scan-restore">${t("scan_restore_btn")} (${sc.skipped})</button>` : ""}
       </div></div>` : "";
 
@@ -997,7 +1020,8 @@
         return load();
       }
       if (act === "folder-scan") {
-        const r = await api("/scan", { method: "POST", body: "{}" });
+        busy(t("working"));
+        const r = await api("/scan", { method: "POST", body: "{}" }).finally(() => unbusy());
         state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
@@ -1016,6 +1040,7 @@
           const n = document.getElementById(id);
           return n ? n.value : "";
         };
+        busy(t("working"));
         const r = await api("/queue/edit", {
           method: "POST",
           body: JSON.stringify({
@@ -1029,6 +1054,7 @@
             time: val("qe-time"),
           }),
         });
+        unbusy();
         state.queueEdit = null;
         toast(`${t("t_saved")}: ${r.updated || 0}/${r.recreated || 0}`);
         return load();
@@ -1045,13 +1071,14 @@
           }
           if (!ok) return;
         }
+        busy(t("working"));
         const r = await api("/queue/remove", {
           method: "POST",
           body: JSON.stringify({
             entity_type: el.dataset.et,
             entity_id: Number(el.dataset.eid),
           }),
-        });
+        }).finally(() => unbusy());
         toast(`${t("queue_removed")}: ${r.removed || 0}`);
         return load();
       }
@@ -1061,9 +1088,11 @@
         return load();
       }
       if (act === "scan-restore") {
+        busy(t("working"));
         const rr = await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
-        const rs = await api("/schedule", { method: "POST", body: "{}" });
-        toast(`${t("t_restored")}: ${rr.restored || 0} · ${t("t_sched_started")}: ${rs.long || 0}/${rs.standalone || 0}`);
+        await api("/schedule", { method: "POST", body: JSON.stringify({ async: true }) });
+        unbusy();
+        toast(`${t("t_restored")}: ${rr.restored || 0} · ${t("t_started_async")}`);
         state.scan = null;
         return load();
       }
@@ -1071,16 +1100,19 @@
         state.settingsTab = el.dataset.p || "sched";
         return render();
       }
-      if (act === "scan-start" || act === "scan-start-date") {
-        const body = {};
-        if (act === "scan-start-date") {
-          const input = document.getElementById("scan-date");
-          const v = input ? input.value : "";
-          if (!v) return toast(t("t_error_date"));
-          body.start_date = v;
+      if (act === "scan-start" || act === "scan-start-dates") {
+        const body = { async: true };
+        if (act === "scan-start-dates") {
+          const films = document.getElementById("scan-date-films");
+          const shorts = document.getElementById("scan-date-shorts");
+          if (films && films.value) body.start_date = films.value;
+          if (shorts && shorts.value) body.shorts_start_date = shorts.value;
+          if (!body.start_date && !body.shorts_start_date) return toast(t("t_error_date"));
         }
-        const r = await api("/schedule", { method: "POST", body: JSON.stringify(body) });
-        toast(`${t("t_sched_started")}: ${r.long || 0}/${r.standalone || 0}`);
+        busy(t("working"));
+        const r = await api("/schedule", { method: "POST", body: JSON.stringify(body) })
+          .finally(() => unbusy());
+        toast(t("t_started_async"));
         state.scan = null;
         return load();
       }

@@ -10,7 +10,7 @@ from .config import AppConfig
 from .db import Database
 from .publisher import Publisher
 from .safety import SafetyChecker
-from .slots import distribute_shorts, next_long_video_dates, thematic_slot_days
+from .slots import next_long_video_dates, thematic_slot_days
 
 logger = logging.getLogger(__name__)
 
@@ -206,13 +206,24 @@ class Scheduler:
         eff = sched_settings.effective(self.db, self.cfg, platform, "thematic")
         default_time = eff.get("time") or "20:30"
         slots = thematic_slot_days(long_dt, next_dt, default_time, tz_name=self.cfg.timezone)
+        floor_raw = sched_settings.shorts_start_date(self.db)
+        if floor_raw and slots:
+            try:
+                from datetime import date as _date
+
+                from .slots import get_tz
+                y, m, d = (int(x) for x in floor_raw.split("-"))
+                floor = _date(y, m, d)
+                tz = get_tz(self.cfg.timezone)
+                slots = [sl for sl in slots if sl.astimezone(tz).date() >= floor]
+            except Exception:
+                logger.warning("bad shorts_start_date: %s", floor_raw)
         if not slots:
             return 0
 
         short_ids = [s["id"] for s in shorts]
-        assignments = distribute_shorts(
-            short_ids, slots, self.cfg.safety.min_interval_minutes
-        )
+        # один шорт на день-слот (ровно в 20:30); остаток уходит в «Остаток»
+        assignments = list(zip(short_ids, slots, strict=False))
 
         pcfg = self.cfg.platforms[platform]
         count = 0

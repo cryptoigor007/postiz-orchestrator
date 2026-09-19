@@ -68,40 +68,6 @@ def thematic_slot_days(
     ]
 
 
-def distribute_shorts(
-    short_ids: list[int],
-    slot_times: list[datetime],
-    min_interval_minutes: int,
-) -> list[tuple[int, datetime]]:
-    if not short_ids or not slot_times:
-        return []
-
-    from collections import defaultdict
-    by_date: dict = defaultdict(list)
-    for st in sorted(slot_times):
-        by_date[st.date()].append(st)
-
-    result: list[tuple[int, datetime]] = []
-    idx = 0
-    interval = timedelta(minutes=min_interval_minutes)
-    days_sorted = sorted(by_date.keys())
-
-    for di, day in enumerate(days_sorted):
-        base = by_date[day][0]
-        offset = timedelta(0)
-        while idx < len(short_ids):
-            result.append((short_ids[idx], base + offset))
-            idx += 1
-            offset += interval
-            remaining_days = len(days_sorted) - di - 1
-            remaining_shorts = len(short_ids) - idx
-            if remaining_days > 0 and remaining_shorts > 0 and offset >= interval * 2:
-                break
-        if idx >= len(short_ids):
-            break
-    return result
-
-
 def next_long_video_dates(
     days: list[str],
     time_str: str,

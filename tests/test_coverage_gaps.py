@@ -274,6 +274,8 @@ def test_tg_bot_queue_with_titles(tmp_path):
 
     comps = _Comps()
     comps["db"] = db
+    comps["cfg"] = cfg
+    comps["clock"] = clock
     setup_commands(bot, comps)
     db.execute(
         "INSERT INTO long_videos (source, folder_path, title, title_text, created_at) "

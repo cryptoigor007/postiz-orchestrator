@@ -31,6 +31,14 @@
       t_paused: "Все платформы на паузе", t_resumed: "Все платформы возобновлены",
       t_resume: "Возобновлено", t_tail_on: "Хвост включён", t_tail_off: "Хвост выключен",
       t_distributed: "Распределено", t_saved: "Ссылка сохранена", t_scan: "Скан",
+      nav_manual: "Ручные", title_manual: "Ручные загрузки",
+      mu_scan_all: "Сканировать всё", mu_scan: "Сканировать", mu_total: "Всего",
+      mu_manual: "Ручных", mu_postiz: "От Postiz", mu_suggested: "Предложено",
+      mu_confirmed: "Подтверждено", mu_none: "Ничего не найдено", mu_confirm: "Подтвердить",
+      mu_reject: "Не моё", mu_ignore: "Игнорировать", mu_candidates: "Кандидаты",
+      mu_confidence: "уверенность", mu_claim: "клейм", mu_claim_title: "Обнаружен клейм",
+      mu_claim_delete: "Удалить видео", mu_claim_keep: "Оставить", mu_last_scan: "Последний скан",
+      mu_from: "источник",
       gate_msg: "Откройте приложение из Telegram-бота.",
       help: "Справка", help_nav: "Навигация", help_folders: "Раздел «Папки»",
       help_platforms: "Раздел «Платформы»", help_tail: "Раздел «Хвост»",
@@ -94,6 +102,14 @@
       t_paused: "All platforms paused", t_resumed: "All platforms resumed",
       t_resume: "Resumed", t_tail_on: "Tail enabled", t_tail_off: "Tail disabled",
       t_distributed: "Distributed", t_saved: "Link saved", t_scan: "Scan",
+      nav_manual: "Manual", title_manual: "Manual uploads",
+      mu_scan_all: "Scan all", mu_scan: "Scan", mu_total: "Total",
+      mu_manual: "Manual", mu_postiz: "From Postiz", mu_suggested: "Suggested",
+      mu_confirmed: "Confirmed", mu_none: "Nothing found", mu_confirm: "Confirm",
+      mu_reject: "Not mine", mu_ignore: "Ignore", mu_candidates: "Candidates",
+      mu_confidence: "confidence", mu_claim: "claim", mu_claim_title: "Claim detected",
+      mu_claim_delete: "Delete video", mu_claim_keep: "Keep", mu_last_scan: "Last scan",
+      mu_from: "source",
       gate_msg: "Open the app from the Telegram bot.",
       help: "Help", help_nav: "Navigation", help_folders: "“Folders” section",
       help_platforms: "“Platforms” section", help_tail: "“Tail” section",
@@ -185,7 +201,7 @@
     status: t("title_status"), folders: t("title_folders"), calendar: t("title_calendar"),
     queue: t("title_queue"), platforms: t("title_platforms"), tail: t("title_tail"),
     failed: t("title_failed"), actions: t("title_actions"), metrics: t("title_metrics"),
-    help: t("title_help"),
+    help: t("title_help"), manual: t("title_manual"),
   });
 
   async function load() {
@@ -204,6 +220,11 @@
       else if (v === "failed") state.data = await api("/failed");
       else if (v === "actions") state.data = await api("/status");
       else if (v === "metrics") state.data = await api("/metrics");
+      else if (v === "manual") {
+        const plan = await api("/manual/plan");
+        const uploads = await api("/manual/uploads");
+        state.data = { plan, items: uploads.items || [] };
+      }
       render();
     } catch (e) {
       content().innerHTML = `<div class="empty">${t("error_prefix")}: ${e.message}</div>`;
@@ -414,6 +435,58 @@
     return `<div class="panel"><div class="panel-header">${t(titleKey)}</div>${rows}</div>`;
   }
 
+  function renderManual(d) {
+    const plan = d.plan || {};
+    const items = d.items || [];
+    const statusRow = Object.entries(plan.by_status || {})
+      .map(([k, v]) => `${pill(k)} <span class="meta">${v}</span>`).join(" ");
+    const platforms = plan.platforms || [];
+    const scanBtns = platforms
+      .map((p) => `<button class="btn secondary" data-act="manual-scan" data-p="${p}">${t("mu_scan")} · ${p}</button>`)
+      .join(" ");
+    const scanAll = platforms.length
+      ? `<button class="btn primary" data-act="manual-scan-all">${t("mu_scan_all")}</button>` : "";
+    const last = plan.last_scan
+      ? `${t("mu_last_scan")}: ${fmtTime(Date.parse(plan.last_scan.at) / 1000)}` : "";
+    const rows = items.map((it) => {
+      const claim = it.claim_status === "claimed"
+        ? `<div class="form-row"><span class="pill err">${t("mu_claim_title")}</span>
+             <button class="btn danger" data-act="manual-claim" data-id="${it.id}" data-c="delete">${t("mu_claim_delete")}</button>
+             <button class="btn secondary" data-act="manual-claim" data-id="${it.id}" data-c="keep">${t("mu_claim_keep")}</button>
+             <button class="btn secondary" data-act="manual-claim" data-id="${it.id}" data-c="ignore">${t("mu_ignore")}</button></div>`
+        : "";
+      let actions = "";
+      if (it.match_status === "suggested" && (it.candidates || []).length) {
+        const cands = it.candidates.map((c, i) =>
+          `<button class="btn ${i === 0 ? "primary" : "secondary"}" data-act="manual-confirm"
+             data-id="${it.id}" data-et="${c.entity_type}" data-eid="${c.entity_id}">${c.title} · ${Math.round((c.score || 0) * 100)}%</button>`
+        ).join(" ");
+        actions = `<div class="form-row">${cands}
+          <button class="btn danger" data-act="manual-reject" data-id="${it.id}">${t("mu_reject")}</button>
+          <button class="btn secondary" data-act="manual-ignore" data-id="${it.id}">${t("mu_ignore")}</button></div>`;
+      } else if (it.match_status === "confirmed") {
+        actions = `<div class="row"><span class="pill ok">${t("mu_confirmed")}</span>
+          <span class="meta">${it.matched_entity_type}#${it.matched_entity_id}</span></div>`;
+      } else if (it.match_status === "unmatched") {
+        actions = `<div class="form-row"><span class="meta">${t("mu_none")}</span>
+          <button class="btn secondary" data-act="manual-ignore" data-id="${it.id}">${t("mu_ignore")}</button></div>`;
+      }
+      return `<div class="panel">
+        <div class="panel-header">${it.title || it.platform_video_id} ${pill(it.origin === "postiz" ? "postiz" : "manual")} ${pill(it.match_status)}</div>
+        <div class="row"><div class="title">${it.platform} · ${it.published_at || ""}</div>
+          ${it.url ? `<a href="${it.url}" target="_blank" rel="noopener">↗</a>` : ""}</div>
+        ${claim}${actions}
+      </div>`;
+    }).join("");
+    content().innerHTML = `
+      <div class="panel">
+        <div class="panel-header">${t("mu_total")}: ${plan.total ?? 0} <span class="meta">${statusRow}</span></div>
+        <div class="form-row">${scanBtns} ${scanAll}</div>
+        ${last ? `<div class="row"><span class="meta">${last}</span></div>` : ""}
+      </div>
+      ${rows || `<div class="panel"><div class="empty">${t("mu_none")}</div></div>`}`;
+  }
+
   function renderHelp() {
     content().innerHTML = [
       helpSection("help_nav", [
@@ -456,6 +529,7 @@
     else if (state.view === "failed") renderFailed(d);
     else if (state.view === "actions") renderActions();
     else if (state.view === "metrics") renderMetrics(d);
+    else if (state.view === "manual") renderManual(d);
     else if (state.view === "help") renderHelp();
     const root = content();
     root.classList.remove("view-enter");
@@ -486,6 +560,38 @@
   async function onAction(act, el) {
     try {
       if (act === "refresh") return load();
+      if (act === "manual-scan-all") {
+        await api("/manual/scan", { method: "POST", body: "{}" });
+        toast(t("t_scan"));
+        return load();
+      }
+      if (act === "manual-scan") {
+        await api("/manual/scan", { method: "POST", body: JSON.stringify({ platform: el.dataset.p }) });
+        toast(`${t("t_scan")} · ${el.dataset.p}`);
+        return load();
+      }
+      if (act === "manual-confirm") {
+        await api(`/manual/uploads/${el.dataset.id}/confirm`, {
+          method: "POST",
+          body: JSON.stringify({ entity_type: el.dataset.et, entity_id: Number(el.dataset.eid) }),
+        });
+        toast(t("mu_confirmed"));
+        return load();
+      }
+      if (act === "manual-reject") {
+        await api(`/manual/uploads/${el.dataset.id}/reject`, { method: "POST", body: "{}" });
+        return load();
+      }
+      if (act === "manual-ignore") {
+        await api(`/manual/uploads/${el.dataset.id}/ignore`, { method: "POST", body: "{}" });
+        return load();
+      }
+      if (act === "manual-claim") {
+        await api(`/manual/uploads/${el.dataset.id}/claim-action`, {
+          method: "POST", body: JSON.stringify({ action: el.dataset.c }),
+        });
+        return load();
+      }
       if (act === "lang") return setLang(el.dataset.lang);
       if (act === "folder-open") return browseTo(el.dataset.p);
       if (act === "folder-up") return browseTo(el.dataset.p || "/");

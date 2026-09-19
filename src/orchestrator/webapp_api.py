@@ -412,7 +412,9 @@ class WebAppAPI:
             except Exception:
                 last = None
         return {"total": len(rows), "by_status": by_status,
-                "by_platform": by_platform, "last_scan": last}
+                "by_platform": by_platform,
+                "platforms": sorted((self.comps.get("manual_sources") or {}).keys()),
+                "last_scan": last}
 
     def _roots(self) -> list[str]:
         raw = self.db.get_setting(WATCH_ROOTS_KEY)

@@ -74,6 +74,20 @@ class TelegramCfg(BaseModel):
     allowed_chat_ids: list[int] = Field(default_factory=list)
 
 
+class ManualUploadsCfg(BaseModel):
+    enabled: bool = True
+    platforms: list[str] = Field(default_factory=list)
+    lookback_days: int = 60
+    page_size: int = 50
+    confidence_high: float = 0.80
+    confidence_medium: float = 0.55
+    apply_description: bool = True
+    rename_title: bool = False
+    schedule_scan: str = "daily"
+    claim_policy: str = "warn"
+    placement_default: str = "end"
+
+
 class BackupCfg(BaseModel):
     enabled: bool = True
     interval_hours: int = 6
@@ -94,6 +108,7 @@ class AppConfig(BaseModel):
     })
     safety: SafetyCfg = Field(default_factory=SafetyCfg)
     telegram: TelegramCfg = Field(default_factory=TelegramCfg)
+    manual_uploads: ManualUploadsCfg = Field(default_factory=ManualUploadsCfg)
     backup: BackupCfg = Field(default_factory=BackupCfg)
     engines: dict[str, str] = Field(default_factory=dict)
     reconciliation_interval_hours: int = 24

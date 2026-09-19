@@ -274,3 +274,48 @@ def test_non_canonical_slot_rejected(env):
     nxt = sched._next_canonical("telegram", datetime(2026, 3, 11, 12, 7, tzinfo=UTC))
     from orchestrator.slots import get_tz
     assert nxt.astimezone(get_tz(cfg.timezone)).strftime("%H:%M") in ("16:00", "18:00", "20:30")
+
+
+def test_telegram_link_placeholder_then_refresh(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "link"
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, title_text, "
+        "description_text, created_at) VALUES ('videomaker', '/pl', 'PL', 'Заголовок', "
+        "'Описание', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    # YouTube-фильм запланирован (ещё не вышел)
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', ?, 'youtube', 'scheduled', "
+        "'2026-03-12T13:00:00+00:00')",
+        (lv["id"],),
+    )
+    # пре-план: Telegram-пост виден в очереди заранее (плейсхолдер)
+    n = sched.schedule_telegram_links()
+    assert n == 1
+    row = db.fetchone(
+        "SELECT status, postiz_scheduled_for FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='telegram'",
+        (lv["id"],),
+    )
+    assert row["status"] == "scheduled"
+    # время = премьера + 15 минут
+    from datetime import datetime as _dt
+    t = _dt.fromisoformat(row["postiz_scheduled_for"])
+    assert t.strftime("%H:%M") == "13:15"
+
+    # фильм вышел: появилась ссылка -> пост пересоздаётся с реальной ссылкой
+    db.execute(
+        "UPDATE entity_platform_status SET status='published', "
+        "release_url='https://youtu.be/xyz', published_at=? "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='youtube'",
+        (now, lv["id"]),
+    )
+    n2 = sched.refresh_telegram_links()
+    assert n2 == 1
+    # повторно не обновляем
+    assert sched.refresh_telegram_links() == 0

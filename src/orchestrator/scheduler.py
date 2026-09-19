@@ -353,65 +353,141 @@ class Scheduler:
                     break
         return count
 
+    def _link_text(self, etype: str, eid: int, url: str | None) -> str | None:
+        table = "long_videos" if etype == "long_video" else "shorts"
+        item = self.db.fetchone(
+            f"SELECT title_text, description_text FROM {table} WHERE id=?", (eid,))
+        if not item:
+            return None
+        if url:
+            tmpl = self.cfg.description_templates.get(
+                "telegram_link", "{title}\n\n{description}\n\n▶ Смотреть на YouTube: {link}")
+            return tmpl.format(title=item["title_text"] or "",
+                               description=item["description_text"] or "",
+                               link=url).strip()
+        tmpl = self.cfg.description_templates.get(
+            "telegram_link_no_link",
+            "{title}\n\n{description}\n\n▶ Смотреть на YouTube — ссылка появится после премьеры")
+        return tmpl.format(title=item["title_text"] or "",
+                           description=item["description_text"] or "").strip()
+
     def schedule_telegram_links(self) -> int:
-        """Telegram (post_mode=link): текстовый пост со ссылкой на YouTube после публикации видео."""
+        """Telegram (post_mode=link): посты-ссылки в плане заранее, с плейсхолдером до премьеры."""
         tcfg = self.cfg.platforms.get("telegram")
         if not tcfg or not tcfg.enabled or getattr(tcfg, "post_mode", "media") != "link":
             return 0
         delay = int(getattr(self.cfg, "telegram_link_delay_min", 15) or 0)
         limit = sched_settings.effective_daily_limit(self.db, self.cfg, "telegram")
         count = 0
-        for etype, table in (("long_video", "long_videos"), ("short", "shorts")):
-            rows = self.db.fetchall(
-                """
-                SELECT eps.entity_id AS id, eps.release_url AS url
-                FROM entity_platform_status eps
-                WHERE eps.entity_type=? AND eps.platform='youtube'
-                  AND eps.status='published' AND eps.release_url IS NOT NULL
-                """,
-                (etype,),
+        rows = self.db.fetchall(
+            """
+            SELECT eps.entity_type, eps.entity_id, eps.status, eps.release_url,
+                   COALESCE(eps.postiz_scheduled_for, eps.published_at) AS when_at
+            FROM entity_platform_status eps
+            WHERE eps.platform='youtube' AND eps.status IN ('scheduled','published')
+              AND COALESCE(eps.postiz_scheduled_for, eps.published_at) IS NOT NULL
+            ORDER BY when_at
+            """,
+        )
+        for r in rows:
+            etype, eid = r["entity_type"], r["entity_id"]
+            exists = self.db.fetchone(
+                "SELECT 1 FROM entity_platform_status "
+                "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                (etype, eid),
             )
-            if self.job is not None:
-                self.job.set_total(self.job.state.total + len(rows))
-            for r in rows:
-                if self.job is not None and self.job.cancelled:
-                    break
-                exists = self.db.fetchone(
-                    "SELECT 1 FROM entity_platform_status "
+            if exists:
+                continue
+            url = r["release_url"] if r["status"] == "published" else None
+            text = self._link_text(etype, eid, url)
+            if not text:
+                continue
+            try:
+                from datetime import datetime as _dt
+                yt_time = _dt.fromisoformat(str(r["when_at"]))
+            except Exception:
+                continue
+            when = yt_time + timedelta(minutes=delay)
+            if when <= self.clock.now():
+                when = self.clock.now() + timedelta(minutes=1)
+            ok, reason = self.safety.can_schedule("telegram", when, limit)
+            if not ok:
+                logger.info("telegram link skip (%s/%s): %s", etype, eid, reason)
+                continue
+            content = {"title": "", "description": text, "hashtags": ""}
+            post = self._safe_publish(etype, eid, "telegram", None, content, when)
+            if post:
+                count += 1
+                if url:
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET link_updated_at=? "
+                        "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                        (self.clock.now().isoformat(), etype, eid),
+                    )
+        return count
+
+    def refresh_telegram_links(self) -> int:
+        """После выхода видео обновляем Telegram-пост реальной ссылкой (пересоздаём)."""
+        tcfg = self.cfg.platforms.get("telegram")
+        if not tcfg or not tcfg.enabled or getattr(tcfg, "post_mode", "media") != "link":
+            return 0
+        rows = self.db.fetchall(
+            """
+            SELECT t.entity_type, t.entity_id, t.postiz_post_id, t.postiz_scheduled_for
+            FROM entity_platform_status t
+            WHERE t.platform='telegram' AND t.status IN ('scheduled','updating')
+              AND t.link_updated_at IS NULL
+              AND EXISTS (
+                SELECT 1 FROM entity_platform_status y
+                WHERE y.entity_type=t.entity_type AND y.entity_id=t.entity_id
+                  AND y.platform='youtube' AND y.status='published'
+                  AND y.release_url IS NOT NULL
+              )
+            """,
+        )
+        count = 0
+        for r in rows:
+            etype, eid = r["entity_type"], r["entity_id"]
+            yt = self.db.fetchone(
+                "SELECT release_url FROM entity_platform_status "
+                "WHERE entity_type=? AND entity_id=? AND platform='youtube' "
+                "AND status='published' AND release_url IS NOT NULL",
+                (etype, eid),
+            )
+            if not yt or not yt["release_url"]:
+                continue
+            text = self._link_text(etype, eid, yt["release_url"])
+            if not text:
+                continue
+            when = None
+            if r["postiz_scheduled_for"]:
+                try:
+                    from datetime import datetime as _dt
+                    when = _dt.fromisoformat(str(r["postiz_scheduled_for"]))
+                except Exception:
+                    when = None
+            if when is None or when <= self.clock.now():
+                when = self.clock.now() + timedelta(minutes=1)
+            old_id = r["postiz_post_id"]
+            if old_id:
+                try:
+                    self.postiz.delete_post(str(old_id))
+                except Exception:
+                    logger.warning("telegram refresh: не удалил старый пост %s", old_id)
+            self.db.execute(
+                "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL "
+                "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                (etype, eid),
+            )
+            content = {"title": "", "description": text, "hashtags": ""}
+            post = self._safe_publish(etype, eid, "telegram", None, content, when)
+            if post:
+                self.db.execute(
+                    "UPDATE entity_platform_status SET link_updated_at=? "
                     "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
-                    (etype, r["id"]),
+                    (self.clock.now().isoformat(), etype, eid),
                 )
-                if exists:
-                    continue
-                item = self.db.fetchone(
-                    f"SELECT title_text, description_text, hashtags_text FROM {table} WHERE id=?",
-                    (r["id"],),
-                )
-                if not item:
-                    continue
-                tmpl = self.cfg.description_templates.get(
-                    "telegram_link", "{title}\n\n{description}\n\n▶ Смотреть: {link}"
-                )
-                text = tmpl.format(
-                    title=item["title_text"] or "",
-                    description=item["description_text"] or "",
-                    link=r["url"] or "",
-                ).strip()
-                when = self.clock.now() + timedelta(minutes=delay)
-                ok, reason = self.safety.can_schedule("telegram", when, limit)
-                if not ok:
-                    logger.info("telegram link skip (%s/%s): %s", etype, r["id"], reason)
-                    continue
-                content = {
-                    "title": item["title_text"] or "",
-                    "description": text,
-                    "hashtags": item["hashtags_text"] or "",
-                }
-                post = self._safe_publish(etype, r["id"], "telegram", None, content, when)
-                if post:
-                    count += 1
-                    if self.job is not None:
-                        self.job.tick(1, f"Ссылка в Telegram: {etype} #{r['id']}")
+                count += 1
         return count
 
     def _backlog_slots(self, days: int = 30, start_date: str | None = None) -> list[datetime]:

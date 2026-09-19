@@ -4,10 +4,10 @@
   const I18N = {
     ru: {
       nav_status: "Статус", nav_folders: "Папки", nav_calendar: "Календарь", nav_queue: "Очередь",
-      nav_platforms: "Платформы", nav_tail: "Хвост", nav_failed: "Ошибки", nav_metrics: "Метрики",
+      nav_platforms: "Платформы", nav_tail: "Серия", nav_failed: "Ошибки", nav_metrics: "Метрики",
       nav_actions: "Действия", nav_help: "Справка",
       title_status: "Статус", title_folders: "Папки с видео", title_calendar: "Календарь",
-      title_queue: "Очередь", title_platforms: "Платформы", title_tail: "Режим хвоста",
+      title_queue: "Очередь", title_platforms: "Платформы", title_tail: "Завершение серии",
       title_failed: "Ошибки", title_actions: "Действия", title_metrics: "Метрики", title_help: "Справка",
       loading: "Загрузка…", error_prefix: "Ошибка", refresh: "Обновить", no_data: "Нет данных",
       platforms: "Платформы", no_platforms: "Нет платформ", limit: "лимит",
@@ -17,10 +17,10 @@
       net_root: "Сеть · /mnt/video", local_root: "Локально · /",
       calendar_empty: "Календарь пуст", queue_empty: "Пусто",
       resume: "Возобновить", pause_all: "Пауза всем", resume_all: "Возобновить все", none: "Нет",
-      tail_title: "Хвост серии", enable: "Включить", disable: "Выключить",
+      tail_title: "Завершение серии", tail_explain: "Режим завершения серии: если новые длинные видео не выходят заданное число дней, система предлагает завершить серию — добивает её оставшимися шортсами и задействует все слоты. На время завершения автономные шортсы ставятся на паузу.", enable: "Включить", disable: "Выключить",
       tail_on: "хвост вкл", tail_off: "выкл", no_errors: "Ошибок нет",
-      quick_actions: "Быстрые действия", act_sync: "Синхронизировать",
-      act_reconcile: "Реконсиляция", act_backup: "Бэкап", act_schedule: "Разложить по слотам",
+      quick_actions: "Быстрые действия", act_sync: "Обновить статусы",
+      act_reconcile: "Сверка с Postiz", act_backup: "Резервная копия", act_schedule: "Разложить по слотам",
       pa_pause: "Пауза", distribute: "Распределить длинные", refresh_data: "Обновить данные",
       force_link_title: "Обновить ссылку вручную", save: "Сохранить",
       m_uptime: "Аптайм", m_cycles: "Циклов сканирования", m_queue_now: "В очереди сейчас",
@@ -33,6 +33,15 @@
       t_paused: "Все платформы на паузе", t_resumed: "Все платформы возобновлены",
       t_resume: "Возобновлено", t_tail_on: "Хвост включён", t_tail_off: "Хвост выключен",
       t_distributed: "Распределено", t_saved: "Ссылка сохранена", t_scan: "Скан",
+      fl_hint: "Укажи ID видео (номер из «Очереди» или «Календаря»), платформу и ссылку — она подставится в описания.",
+      fl_id_ph: "ID видео",
+      st_ok: "ок", st_published: "опубликовано", st_scheduled: "запланировано",
+      st_updating: "обновляется", st_queue: "в очереди", st_ready: "готово",
+      st_draft: "черновик", st_failed: "ошибка", st_error: "ошибка", st_paused: "пауза",
+      st_skipped: "пропущено", st_on: "включено", st_off: "выключено",
+      st_manual: "ручная", st_postiz: "из Postiz", st_suggested: "предложено",
+      st_unmatched: "не найдено", st_confirmed: "подтверждено", st_rejected: "отклонено",
+      st_ignored: "проигнорировано", st_claimed: "клейм", st_none: "нет",
       nav_manual: "Ручные", title_manual: "Ручные загрузки",
       mu_scan_all: "Сканировать всё", mu_scan: "Сканировать", mu_total: "Всего",
       mu_manual: "Ручных", mu_postiz: "От Postiz", mu_suggested: "Предложено",
@@ -43,14 +52,14 @@
       mu_from: "источник",
       gate_msg: "Откройте приложение из Telegram-бота.",
       help: "Справка", help_nav: "Навигация", help_folders: "Раздел «Папки»",
-      help_platforms: "Раздел «Платформы»", help_tail: "Раздел «Хвост»",
+      help_platforms: "Раздел «Платформы»", help_tail: "Раздел «Серия» (завершение)",
       help_actions: "Раздел «Действия»", help_common: "Общее", help_status: "Статусы",
       help_nav_status: "Сводка: сколько постов в каждом статусе и состояние платформ.",
       help_nav_folders: "Выбор папок с видео и запуск сканирования.",
       help_nav_calendar: "Что и когда запланировано к публикации.",
       help_nav_queue: "Посты, которые ждут отправки.",
       help_nav_platforms: "Каналы (Telegram/YouTube/…), лимиты и пауза.",
-      help_nav_tail: "Режим «хвоста»: как добивать серию шортсами после выхода длинного видео.",
+      help_nav_tail: "Завершение серии: когда новых длинных видео нет N дней, система добивает серию оставшимися шортсами и задействует все слоты.",
       help_nav_failed: "Посты, которые не отправились, и текст ошибки.",
       help_nav_metrics: "Показатели работы оркестратора и очереди.",
       help_nav_actions: "Ручные операции: распределить, обновить ссылку.",
@@ -71,8 +80,8 @@
       help_a_pause_all: "Поставить все платформы на паузу (публикации временно прекращаются).",
       help_a_resume_all: "Снять паузу со всех платформ.",
       help_a_resume: "Снять паузу с одной платформы.",
-      help_a_tail_on: "Включить режим хвоста для платформы.",
-      help_a_tail_off: "Выключить режим хвоста.",
+      help_a_tail_on: "Включить завершение серии для платформы.",
+      help_a_tail_off: "Выключить завершение серии.",
       help_a_distribute: "Разложить длинные видео по свободным слотам расписания.",
       help_a_refresh: "Перечитать данные с сервера.",
       help_a_save: "Сохранить ссылку на полное видео для указанного поста (entity_id + платформа).",
@@ -84,10 +93,10 @@
     },
     en: {
       nav_status: "Status", nav_folders: "Folders", nav_calendar: "Calendar", nav_queue: "Queue",
-      nav_platforms: "Platforms", nav_tail: "Tail", nav_failed: "Errors", nav_metrics: "Metrics",
+      nav_platforms: "Platforms", nav_tail: "Series", nav_failed: "Errors", nav_metrics: "Metrics",
       nav_actions: "Actions", nav_help: "Help",
       title_status: "Status", title_folders: "Video folders", title_calendar: "Calendar",
-      title_queue: "Queue", title_platforms: "Platforms", title_tail: "Tail mode",
+      title_queue: "Queue", title_platforms: "Platforms", title_tail: "Series wrap-up",
       title_failed: "Errors", title_actions: "Actions", title_metrics: "Metrics", title_help: "Help",
       loading: "Loading…", error_prefix: "Error", refresh: "Refresh", no_data: "No data",
       platforms: "Platforms", no_platforms: "No platforms", limit: "limit",
@@ -97,10 +106,10 @@
       net_root: "Network · /mnt/video", local_root: "Local · /",
       calendar_empty: "Calendar is empty", queue_empty: "Empty",
       resume: "Resume", pause_all: "Pause all", resume_all: "Resume all", none: "None",
-      tail_title: "Series tail", enable: "Enable", disable: "Disable",
+      tail_title: "Series wrap-up", tail_explain: "Wrap-up mode: if no new long videos appear for the configured number of days, the system offers to finish the series — posting the remaining shorts and using all slots. Standalone shorts are paused during wrap-up.", enable: "Enable", disable: "Disable",
       tail_on: "tail ON", tail_off: "off", no_errors: "No errors",
       quick_actions: "Quick actions", act_sync: "Sync now",
-      act_reconcile: "Reconcile", act_backup: "Backup", act_schedule: "Schedule now",
+      act_reconcile: "Check against Postiz", act_backup: "Backup now", act_schedule: "Schedule now",
       pa_pause: "Pause", distribute: "Distribute long", refresh_data: "Refresh data",
       force_link_title: "Update link manually", save: "Save",
       m_uptime: "Uptime", m_cycles: "Scan cycles", m_queue_now: "In queue now",
@@ -113,6 +122,15 @@
       t_paused: "All platforms paused", t_resumed: "All platforms resumed",
       t_resume: "Resumed", t_tail_on: "Tail enabled", t_tail_off: "Tail disabled",
       t_distributed: "Distributed", t_saved: "Link saved", t_scan: "Scan",
+      fl_hint: "Provide the video ID (number from Queue or Calendar), platform and URL — it will be added to descriptions.",
+      fl_id_ph: "video ID",
+      st_ok: "ok", st_published: "published", st_scheduled: "scheduled",
+      st_updating: "updating", st_queue: "queued", st_ready: "ready",
+      st_draft: "draft", st_failed: "failed", st_error: "error", st_paused: "paused",
+      st_skipped: "skipped", st_on: "on", st_off: "off",
+      st_manual: "manual", st_postiz: "from Postiz", st_suggested: "suggested",
+      st_unmatched: "not found", st_confirmed: "confirmed", st_rejected: "rejected",
+      st_ignored: "ignored", st_claimed: "claim", st_none: "none",
       nav_manual: "Manual", title_manual: "Manual uploads",
       mu_scan_all: "Scan all", mu_scan: "Scan", mu_total: "Total",
       mu_manual: "Manual", mu_postiz: "From Postiz", mu_suggested: "Suggested",
@@ -123,14 +141,14 @@
       mu_from: "source",
       gate_msg: "Open the app from the Telegram bot.",
       help: "Help", help_nav: "Navigation", help_folders: "“Folders” section",
-      help_platforms: "“Platforms” section", help_tail: "“Tail” section",
+      help_platforms: "“Platforms” section", help_tail: "“Series” section (wrap-up)",
       help_actions: "“Actions” section", help_common: "Common", help_status: "Statuses",
       help_nav_status: "Overview: post counts per status and platform state.",
       help_nav_folders: "Pick video folders and run a scan.",
       help_nav_calendar: "What is scheduled and when.",
       help_nav_queue: "Posts waiting to be sent.",
       help_nav_platforms: "Channels (Telegram/YouTube/…), limits and pause.",
-      help_nav_tail: "“Tail” mode: finishing a series with shorts after a long video.",
+      help_nav_tail: "Series wrap-up: with no new long videos for N days, the system finishes the series with remaining shorts using all slots.",
       help_nav_failed: "Posts that failed, with the error text.",
       help_nav_metrics: "Orchestrator and queue metrics.",
       help_nav_actions: "Manual operations: distribute, update link.",
@@ -212,7 +230,9 @@
     else if (["scheduled", "updating", "queue"].includes(s)) cls += " info";
     else if (["failed", "error"].includes(s)) cls += " err";
     else if (["paused", "skipped"].includes(s)) cls += " warn";
-    return `<span class="${cls}">${status || "—"}</span>`;
+    const key = "st_" + s;
+    const label = (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || status || "—";
+    return `<span class="${cls}">${label}</span>`;
   }
 
   const titles = () => ({
@@ -252,7 +272,11 @@
   function renderStatus(d) {
     const counts = d.counts || {};
     const cards = Object.entries(counts)
-      .map(([k, v]) => `<div class="card"><div class="label">${k}</div><div class="value">${v}</div></div>`)
+      .map(([k, v]) => {
+        const key = "st_" + k;
+        const label = (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || k;
+        return `<div class="card"><div class="label">${label}</div><div class="value">${v}</div></div>`;
+      })
       .join("");
     const plats = (d.platforms || [])
       .map((p) => `<div class="row"><div class="title">${p.name}</div>${
@@ -358,8 +382,9 @@
         <button class="btn primary" data-act="tail-on" data-p="${x.platform}">${t("enable")}</button>
         <button class="btn secondary" data-act="tail-off" data-p="${x.platform}">${t("disable")}</button>
       </div>`).join("");
-    content().innerHTML = `<div class="panel"><div class="panel-header">${t("tail_title")}</div>${
-      rows || `<div class="empty">${t("no_data")}</div>`}</div>`;
+    content().innerHTML = `<div class="panel"><div class="panel-header">${t("tail_title")}</div>
+      <div class="row"><span class="meta">${t("tail_explain")}</span></div>
+      ${rows || `<div class="empty">${t("no_data")}</div>`}</div>`;
   }
 
   function renderFailed(d) {
@@ -388,8 +413,9 @@
         </div>
       </div>
       <div class="panel"><div class="panel-header">${t("force_link_title")}</div>
+        <div class="row"><span class="meta">${t("fl_hint")}</span></div>
         <div class="form-row">
-          <input id="fl-id" type="number" placeholder="entity_id" style="width:100px" />
+          <input id="fl-id" type="number" placeholder="${t("fl_id_ph")}" style="width:120px" />
           <select id="fl-p">${opts}</select>
           <input id="fl-url" type="url" placeholder="https://..." style="flex:1;min-width:140px" />
           <button class="btn primary" data-act="force-link">${t("save")}</button>

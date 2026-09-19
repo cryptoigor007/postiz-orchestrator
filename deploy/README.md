@@ -29,3 +29,20 @@ curl http://127.0.0.1:8080/health
 systemctl stop orchestrator.service
 cp backups/data_YYYYMMDD_HHMMSS.sqlite data/data.sqlite
 systemctl start orchestrator.service
+
+## Обновление (деплой с Mac)
+ВАЖНО: rsync не должен менять владельца файлов, иначе сервис потеряет запись в SQLite
+(«attempt to write a readonly database»). Используй:
+
+```bash
+rsync -az --delete --no-owner --no-group --chown=orchestrator:orchestrator \
+  --exclude venv --exclude .git --exclude __pycache__ --exclude .pytest_cache \
+  --exclude data --exclude backups --exclude logs --exclude .DS_Store --exclude .env \
+  ./ root@<pve>:/opt/orchestrator/
+ssh root@<pve> 'systemctl restart orchestrator.service'
+```
+
+Если владелец уже сбит:
+```bash
+ssh root@<pve> 'chown -R orchestrator:orchestrator /opt/orchestrator && chmod 600 /opt/orchestrator/.env && systemctl restart orchestrator.service'
+```

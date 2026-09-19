@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from . import sched_settings
 from .clock import Clock
@@ -103,6 +103,8 @@ class Scheduler:
         for platform, pcfg in self.cfg.platforms.items():
             if not pcfg.enabled:
                 continue
+            if getattr(pcfg, "post_mode", "media") == "link":
+                continue  # только ссылки: видео на этой платформе не ставим
             if self._backlog_active(platform):
                 continue  # сначала выкладываем остаток предыдущей серии
             eff = sched_settings.effective(self.db, self.cfg, platform, "long")
@@ -226,6 +228,8 @@ class Scheduler:
         assignments = list(zip(short_ids, slots, strict=False))
 
         pcfg = self.cfg.platforms[platform]
+        if getattr(pcfg, "post_mode", "media") == "link":
+            return 0
         count = 0
         for sid, sched in assignments:
             short = next(s for s in shorts if s["id"] == sid)
@@ -293,6 +297,61 @@ class Scheduler:
                 if post:
                     count += 1
                     break
+        return count
+
+    def schedule_telegram_links(self) -> int:
+        """Telegram (post_mode=link): текстовый пост со ссылкой на YouTube после публикации видео."""
+        tcfg = self.cfg.platforms.get("telegram")
+        if not tcfg or not tcfg.enabled or getattr(tcfg, "post_mode", "media") != "link":
+            return 0
+        delay = int(getattr(self.cfg, "telegram_link_delay_min", 15) or 0)
+        limit = sched_settings.effective_daily_limit(self.db, self.cfg, "telegram")
+        count = 0
+        for etype, table in (("long_video", "long_videos"), ("short", "shorts")):
+            rows = self.db.fetchall(
+                """
+                SELECT eps.entity_id AS id, eps.release_url AS url
+                FROM entity_platform_status eps
+                WHERE eps.entity_type=? AND eps.platform='youtube'
+                  AND eps.status='published' AND eps.release_url IS NOT NULL
+                """,
+                (etype,),
+            )
+            for r in rows:
+                exists = self.db.fetchone(
+                    "SELECT 1 FROM entity_platform_status "
+                    "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                    (etype, r["id"]),
+                )
+                if exists:
+                    continue
+                item = self.db.fetchone(
+                    f"SELECT title_text, description_text, hashtags_text FROM {table} WHERE id=?",
+                    (r["id"],),
+                )
+                if not item:
+                    continue
+                tmpl = self.cfg.description_templates.get(
+                    "telegram_link", "{title}\n\n{description}\n\n▶ Смотреть: {link}"
+                )
+                text = tmpl.format(
+                    title=item["title_text"] or "",
+                    description=item["description_text"] or "",
+                    link=r["url"] or "",
+                ).strip()
+                when = self.clock.now() + timedelta(minutes=delay)
+                ok, reason = self.safety.can_schedule("telegram", when, limit)
+                if not ok:
+                    logger.info("telegram link skip (%s/%s): %s", etype, r["id"], reason)
+                    continue
+                content = {
+                    "title": item["title_text"] or "",
+                    "description": text,
+                    "hashtags": item["hashtags_text"] or "",
+                }
+                post = self._safe_publish(etype, r["id"], "telegram", None, content, when)
+                if post:
+                    count += 1
         return count
 
     def _backlog_slots(self, days: int = 30, start_date: str | None = None) -> list[datetime]:
@@ -403,6 +462,8 @@ class Scheduler:
         count = 0
         for platform, pcfg in self.cfg.platforms.items():
             if not pcfg.enabled:
+                continue
+            if getattr(pcfg, "post_mode", "media") == "link":
                 continue
             if tail_manager and tail_manager.should_pause_standalone(platform):
                 continue

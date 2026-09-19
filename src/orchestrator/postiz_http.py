@@ -139,11 +139,14 @@ class HttpPostizClient:
     def create_post(
         self,
         platform: str,
-        media: MediaRef | str,
+        media: MediaRef | str | None,
         content: dict[str, Any],
         scheduled_for: datetime | None = None,
     ) -> PostizPost:
-        media_ref = media if isinstance(media, MediaRef) else MediaRef(id=str(media), path="")
+        if media is None:
+            media_ref = MediaRef(id="", path="")
+        else:
+            media_ref = media if isinstance(media, MediaRef) else MediaRef(id=str(media), path="")
         integration_id = (
             content.get("integration_id")
             or content.get("integrationId")

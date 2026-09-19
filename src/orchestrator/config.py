@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class PlatformCfg(BaseModel):
+    post_mode: str = "media"   # media | link (только ссылка на YouTube)
     video_variant: str = "wide"
     audio_profile: str = "default"
     enabled: bool = True
@@ -99,6 +100,7 @@ class AppConfig(BaseModel):
     backup: BackupCfg = Field(default_factory=BackupCfg)
     engines: dict[str, str] = Field(default_factory=dict)
     reconciliation_interval_hours: int = 24
+    telegram_link_delay_min: int = 15
     timezone: str = "Europe/Moscow"
     watcher_interval_sec: int = 75
     status_sync_interval_sec: int = 180

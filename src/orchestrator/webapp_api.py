@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "49"
+WEBAPP_BUILD = "50"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:

@@ -105,6 +105,10 @@ class Runner:
             nt += self.comps["scheduler"].schedule_thematic_shorts(
                 r["entity_id"], r["platform"]
             )
+        nl = self.comps["scheduler"].schedule_telegram_links()
+        if nl:
+            logger.info("Telegram link posts scheduled: %s", nl)
+        self.metrics.incr("scheduled_short", nl)
         postiz = self.comps.get("postiz")
         if postiz is not None and hasattr(postiz, "orphan_media_ids"):
             orphans = postiz.orphan_media_ids()

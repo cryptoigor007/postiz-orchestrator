@@ -31,7 +31,8 @@ class PostizClient(Protocol):
         """Upload media, return its id + path."""
         ...
 
-    def create_post(self, platform: str, media: MediaRef, content: dict[str, Any],
+    def create_post(self, platform: str, media: MediaRef | str | None,
+                    content: dict[str, Any],
                     scheduled_for: datetime | None = None) -> PostizPost:
         ...
 
@@ -63,9 +64,10 @@ class MockPostizClient:
         self.media[mid] = path
         return MediaRef(id=mid, path=path)
 
-    def create_post(self, platform: str, media: MediaRef | str, content: dict[str, Any],
+    def create_post(self, platform: str, media: MediaRef | str | None,
+                    content: dict[str, Any],
                     scheduled_for: datetime | None = None) -> PostizPost:
-        media_id = media.id if isinstance(media, MediaRef) else str(media)
+        media_id = media.id if isinstance(media, MediaRef) else (str(media) if media else "")
         if self.fail_create:
             self._orphan_media.append(media_id)
             raise RuntimeError("create_failed")

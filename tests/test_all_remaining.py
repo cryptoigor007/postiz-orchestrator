@@ -24,6 +24,7 @@ def test_multi_platform_schedule(tmp_path):
     clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
+    cfg.platforms["telegram"].post_mode = "media"  # тест мультиплатформы
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
     sched = Scheduler(db, cfg, pub, safety, clock)
     db.execute(

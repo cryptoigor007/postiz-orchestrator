@@ -52,7 +52,7 @@ class Publisher:
         entity_type: str,
         entity_id: int,
         platform: str,
-        media_path: str,
+        media_path: str | None,
         content: dict[str, Any],
         scheduled_for: datetime | None = None,
     ) -> PostizPost | None:
@@ -120,20 +120,22 @@ class Publisher:
                 logger.info("Hourly create limit reached (%s)", hourly)
                 return None
 
-        # 3. Upload
+        # 3. Upload (для постов-ссылок медиа нет)
         pcfg = self.cfg.platforms.get(platform)
         if pcfg and getattr(pcfg, "integration_id", None):
             content = {**content, "integration_id": pcfg.integration_id}
-        try:
-            media = make_media(media_path, platform, self.cfg, self.postiz, self.broker)
-        except Exception as e:
-            self.db.execute(
-                "UPDATE entity_platform_status SET status='error', last_error=? "
-                "WHERE entity_type=? AND entity_id=? AND platform=?",
-                (str(e), entity_type, entity_id, platform),
-            )
-            self.db.log(entity_type, entity_id, platform, "upload_fail", str(e))
-            raise
+        media = None
+        if media_path:
+            try:
+                media = make_media(media_path, platform, self.cfg, self.postiz, self.broker)
+            except Exception as e:
+                self.db.execute(
+                    "UPDATE entity_platform_status SET status='error', last_error=? "
+                    "WHERE entity_type=? AND entity_id=? AND platform=?",
+                    (str(e), entity_type, entity_id, platform),
+                )
+                self.db.log(entity_type, entity_id, platform, "upload_fail", str(e))
+                raise
 
         # 4. CREATE with retries
         last_err = None

@@ -107,6 +107,7 @@ def test_reconciliation(env):
 
 def test_thematic_shorts_for_scheduled_parent(env):
     db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "media"
     now = clock.now().isoformat()
     db.execute(
         "INSERT INTO long_videos (source, folder_path, title, vertical_path, "
@@ -143,6 +144,7 @@ def test_pick_path_variants(env):
 
 def test_auth_error_pauses_platform(env):
     db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "media"
     platform = "telegram"
     db.ensure_platform_states([platform])
 
@@ -158,3 +160,32 @@ def test_auth_error_pauses_platform(env):
     n = sched.schedule_long_videos()
     assert n == 0
     assert safety.is_platform_paused(platform) is True
+
+
+def test_telegram_link_post_after_youtube(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "link"
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, title_text, "
+        "description_text, hashtags_text, created_at) "
+        "VALUES ('videomaker', '/lk', 'LK', 'Заголовок', 'Описание', '#тег', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_post_id, release_url, published_at) VALUES ('long_video', ?, 'youtube', "
+        "'published', 'p1', 'https://youtu.be/abc', ?)",
+        (lv["id"], now),
+    )
+    n = sched.schedule_telegram_links()
+    assert n == 1
+    row = db.fetchone(
+        "SELECT status, postiz_post_id FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='telegram'",
+        (lv["id"],),
+    )
+    assert row is not None and row["postiz_post_id"]
+    # повторно не создаём
+    assert sched.schedule_telegram_links() == 0

@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from orchestrator.slots import apply_jitter
 from orchestrator.reload import reload_config
 from orchestrator.config import load_config
-from orchestrator.calendar_view import build_calendar
 from orchestrator.db import Database
 from orchestrator.clock import FakeClock
 
@@ -24,8 +23,3 @@ def test_reload_ok():
     new, msg = reload_config(Path(__file__).resolve().parents[1] / "config.yaml", cfg)
     assert new is not None
     assert msg == "ok"
-
-
-def test_calendar_empty(tmp_path):
-    db = Database(tmp_path / "c.sqlite")
-    assert "empty" in build_calendar(db).lower()

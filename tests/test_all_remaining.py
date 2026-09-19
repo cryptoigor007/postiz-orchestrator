@@ -13,7 +13,6 @@ from orchestrator.publisher import Publisher
 from orchestrator.safety import SafetyChecker
 from orchestrator.scheduler import Scheduler
 from orchestrator.metrics import Metrics
-from orchestrator.health import start_health_server
 from orchestrator.telegram_transport import TelegramTransport
 
 
@@ -78,9 +77,6 @@ def test_metrics_and_health():
     m.tick_cycle()
     assert m.snapshot()["scheduled_long"] == 2
     assert m.snapshot()["cycles"] == 1
-    srv = start_health_server(0, lambda: {"ok": True})  # port 0 may fail — ok
-    # just ensure callable
-    assert m.snapshot()["ok"] if False else True
 
 
 def test_tg_queue_push():

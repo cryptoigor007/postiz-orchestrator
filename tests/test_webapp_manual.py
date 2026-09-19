@@ -141,3 +141,20 @@ def test_manual_confirm_and_claim_action(tmp_path):
         json.dumps({"action": "delete"}).encode())
     assert code == 200
     assert source.deleted == ["V1"]
+
+
+def test_claim_mark_reveals_actions(tmp_path):
+    api, db, clock, cfg, source = env(tmp_path)
+    h = {"X-Telegram-Init-Data": "dev"}
+    up = db.upsert_upload(engine="direct", platform="youtube", external_id="CM1",
+                          title="Claimed", origin="manual")
+    code, payload, _ = api.handle(
+        "POST", f"/webapp/api/manual/uploads/{up['id']}/claim-mark", h,
+        json.dumps({"claimed": True}).encode())
+    assert code == 200
+    assert db.get_upload(up["id"])["claim_status"] == "claimed"
+    code, payload, _ = api.handle(
+        "POST", f"/webapp/api/manual/uploads/{up['id']}/claim-action", h,
+        json.dumps({"action": "keep"}).encode())
+    assert code == 200
+    assert db.get_upload(up["id"])["claim_status"] == "claimed"

@@ -496,10 +496,13 @@
         actions = `<div class="form-row"><span class="meta">${t("mu_none")}</span>
           <button class="btn secondary" data-act="manual-ignore" data-id="${it.id}">${t("mu_ignore")}</button></div>`;
       }
+      const claimMark = it.claim_status !== "claimed"
+        ? `<button class="btn secondary" data-act="manual-claim-mark" data-id="${it.id}">${t("mu_claim_mark")}</button>`
+        : "";
       return `<div class="panel">
         <div class="panel-header">${it.title || it.platform_video_id} ${pill(it.origin === "postiz" ? "postiz" : "manual")} ${pill(it.match_status)}</div>
         <div class="row"><div class="title">${it.platform} · ${it.published_at || ""}</div>
-          ${it.url ? `<a href="${it.url}" target="_blank" rel="noopener">↗</a>` : ""}</div>
+          ${it.url ? `<a href="${it.url}" target="_blank" rel="noopener">↗</a>` : ""}${claimMark}</div>
         ${claim}${actions}
       </div>`;
     }).join("");
@@ -641,6 +644,12 @@
       }
       if (act === "manual-ignore") {
         await api(`/manual/uploads/${el.dataset.id}/ignore`, { method: "POST", body: "{}" });
+        return load();
+      }
+      if (act === "manual-claim-mark") {
+        await api(`/manual/uploads/${el.dataset.id}/claim-mark`, {
+          method: "POST", body: JSON.stringify({ claimed: true }),
+        });
         return load();
       }
       if (act === "manual-claim") {

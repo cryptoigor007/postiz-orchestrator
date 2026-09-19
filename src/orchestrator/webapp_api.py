@@ -18,7 +18,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "23"
+WEBAPP_BUILD = "24"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -340,6 +340,12 @@ class WebAppAPI:
                     return 200, {"ok": manual.reject(uid)}, "application/json"
                 if action == "ignore" and method == "POST":
                     return 200, {"ok": manual.ignore(uid)}, "application/json"
+                if action == "claim-mark" and method == "POST":
+                    claimed = bool(data.get("claimed", True))
+                    self.db.execute(
+                        "UPDATE platform_uploads SET claim_status=?, claim_info=? WHERE id=?",
+                        ("claimed" if claimed else "none", "manual", uid))
+                    return 200, {"ok": True}, "application/json"
                 if action == "claim-action" and method == "POST":
                     act = data.get("action")
                     if act == "delete":

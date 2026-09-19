@@ -5,7 +5,7 @@
     ru: {
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
       edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
-      queue_remove: "Убрать", queue_removed: "Убрано из очереди", edit_date: "Дата", edit_time: "Время",
+      queue_remove: "Убрать", queue_remove_series: "Убрать серию", queue_removed: "Убрано из очереди", edit_date: "Дата", edit_time: "Время", confirm_series: "Убрать фильм и ВСЕ его шортсы со всех платформ?",
       mode_auto: "Авто-планирование: ВКЛ", mode_manual: "Авто-планирование: ВЫКЛ",
       mode_hint: "ВКЛ — система сама раскладывает видео по слотам. ВЫКЛ — ждёт, пока ты нажмёшь «Запустить» или выберешь дату после сканирования.",
       settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
@@ -120,7 +120,7 @@
     en: {
       queue_edit: "Edit", queue_edit_save: "Save", queue_edit_cancel: "Cancel",
       edit_title: "Title", edit_desc: "Description", edit_tags: "Hashtags", t_saved: "Saved",
-      queue_remove: "Remove", queue_removed: "Removed from queue", edit_date: "Date", edit_time: "Time",
+      queue_remove: "Remove", queue_remove_series: "Remove series", queue_removed: "Removed from queue", edit_date: "Date", edit_time: "Time", confirm_series: "Remove the film and ALL its shorts from all networks?",
       mode_auto: "Auto-scheduling: ON", mode_manual: "Auto-scheduling: OFF",
       mode_hint: "ON — the system places videos into slots automatically. OFF — waits for you to press Start or pick a date after scanning.",
       settings_tab_sched: "Groups and schedule", settings_tab_errors: "Errors", settings_tab_help: "Help",
@@ -482,7 +482,8 @@
        <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
-         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}">${t("queue_remove")}</button>
+         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
+         ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-series" data-eid="${it.entity_id}">${t("queue_remove_series")}</button>` : ""}
          ${statusBtn(it.status)}
          <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
@@ -1030,7 +1031,25 @@
           body: JSON.stringify({
             entity_type: el.dataset.et,
             entity_id: Number(el.dataset.eid),
+            platform: el.dataset.p,
           }),
+        });
+        toast(`${t("queue_removed")}: ${r.removed || 0}`);
+        return load();
+      }
+      if (act === "queue-remove-series") {
+        const ask = t("confirm_series");
+        const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+        let ok = true;
+        if (tgConfirm) {
+          ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
+        } else if (typeof window.confirm === "function") {
+          ok = window.confirm(ask);
+        }
+        if (!ok) return;
+        const r = await api("/queue/remove", {
+          method: "POST",
+          body: JSON.stringify({ entity_type: "long_video", entity_id: Number(el.dataset.eid), series: true }),
         });
         toast(`${t("queue_removed")}: ${r.removed || 0}`);
         return load();

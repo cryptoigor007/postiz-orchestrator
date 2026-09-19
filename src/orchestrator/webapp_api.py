@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "42"
+WEBAPP_BUILD = "43"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -297,9 +297,185 @@ class WebAppAPI:
                 for r in rows:
                     plat = r["platform"]
                     pid = r.get("postiz_post_id")
-                    if pid and postiz is not None and hasattr(postiz, "set_status"):
+                    if pid and postiz is not None:
                         try:
-                            postiz.set_status(str(pid), "draft")
+                            if hasattr(postiz, "delete_post"):
+                                postiz.delete_post(str(pid))
+                            elif hasattr(postiz, "set_status"):
+                                postiz.set_status(str(pid), "draft")
+                        except Exception:
+                            logger.warning("queue edit: не удалось отменить %s", pid, exc_info=True)
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (etype, eid, plat),
+                    )
+                    self.db.log(etype, eid, plat, "queue_edit", "")
+                    updated += 1
+                    if pub is None:
+                        continue
+                    entity = self.db.fetchone(f"SELECT * FROM {table} WHERE id=?", (eid,))
+                    if not entity:
+                        continue
+                    pcfg = self.cfg.platforms.get(plat)
+                    path = None
+                    if sch is not None and hasattr(sch, "_pick_path"):
+                        try:
+                            if etype == "long_video":
+                                path = sch._pick_path(entity, plat, pcfg)
+                            else:
+                                path = sch._pick_path(entity, plat) or entity.get("video_path")
+                        except Exception:
+                            path = entity.get("video_path")
+                    if not path:
+                        path = entity.get("video_path") or entity.get("vertical_path")                             or entity.get("wide_path")
+                    when = r.get("postiz_scheduled_for")
+                    sched_dt = None
+                    new_date = str(data.get("date") or "").strip()
+                    new_time = str(data.get("time") or "").strip()
+                    if new_date and new_time:
+                        try:
+                            from datetime import date as _date
+
+                            from .slots import local_to_utc, parse_time
+                            y, m, d = (int(x) for x in new_date.split("-"))
+                            sched_dt = local_to_utc(_date(y, m, d), parse_time(new_time),
+                                                    self.cfg.timezone)
+                        except Exception:
+                            sched_dt = None
+                    if sched_dt is None and when:
+                        from datetime import datetime as _dt
+                        try:
+                            sched_dt = _dt.fromisoformat(str(when))
+                        except Exception:
+                            sched_dt = None
+                    content = {"title": title, "description": desc, "hashtags": tags}
+                    try:
+                        post = pub.publish(etype, eid, plat, path, content, sched_dt)
+                        if post:
+                            recreated += 1
+                        elif sched_dt is not None:
+                            self.db.execute(
+                                "UPDATE entity_platform_status SET postiz_scheduled_for=? "
+                                "WHERE entity_type=? AND entity_id=? AND platform=?",
+                                (sched_dt.isoformat(), etype, eid, plat),
+                            )
+                    except Exception:
+                        logger.exception("queue edit: пересоздание не удалось (%s/%s %s)",
+                                         etype, eid, plat)
+                return 200, {"ok": True, "updated": updated, "recreated": recreated}, \
+                    "application/json"
+            if method == "POST" and route == "queue/remove":
+                etype = str(data.get("entity_type") or "").strip()
+                platform = str(data.get("platform") or "").strip()
+                series = bool(data.get("series"))
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                sql = ("SELECT platform, postiz_post_id, status FROM entity_platform_status "
+                       "WHERE entity_type=? AND entity_id=? AND status IN "
+                       "('scheduled','updating','ready','error')")
+                params: list = [etype, eid]
+                if platform:
+                    sql += " AND platform=?"
+                    params.append(platform)
+                rows = list(self.db.fetchall(sql, tuple(params)))
+                if series and etype == "long_video":
+                    child_sql = ("SELECT s.id AS entity_id, eps.platform, eps.postiz_post_id, "
+                                 "eps.status FROM shorts s "
+                                 "JOIN entity_platform_status eps "
+                                 "  ON eps.entity_type='short' AND eps.entity_id = s.id "
+                                 "WHERE s.parent_video_id=? "
+                                 "AND eps.status IN ('scheduled','updating','ready','error')")
+                    child_params: list = [eid]
+                    if platform:
+                        child_sql += " AND eps.platform=?"
+                        child_params.append(platform)
+                    for c in self.db.fetchall(child_sql, tuple(child_params)):
+                        rows.append({"platform": c["platform"],
+                                     "postiz_post_id": c["postiz_post_id"],
+                                     "status": c["status"],
+                                     "_child_short": c["entity_id"]})
+                postiz = self.comps.get("postiz")
+                removed = 0
+                for r in rows:
+                    pid = r.get("postiz_post_id")
+                    if pid and postiz is not None:
+                        deleted = False
+                        if hasattr(postiz, "delete_post"):
+                            try:
+                                postiz.delete_post(str(pid))
+                                deleted = True
+                            except Exception:
+                                logger.warning("queue remove: delete failed %s", pid, exc_info=True)
+                        if not deleted and hasattr(postiz, "set_status"):
+                            try:
+                                postiz.set_status(str(pid), "draft")
+                            except Exception:
+                                logger.warning("queue remove: draft failed %s", pid, exc_info=True)
+                    child_id = r.get("_child_short")
+                    if child_id is not None:
+                        self.db.execute(
+                            "UPDATE entity_platform_status SET status='skipped', "
+                            "last_error='removed_by_user' WHERE entity_type='short' "
+                            "AND entity_id=? AND platform=?",
+                            (child_id, r["platform"]),
+                        )
+                        self.db.log("short", child_id, r["platform"], "queue_remove", str(pid or ""))
+                    else:
+                        self.db.execute(
+                            "UPDATE entity_platform_status SET status='skipped', "
+                            "last_error='removed_by_user' WHERE entity_type=? AND entity_id=? "
+                            "AND platform=?",
+                            (etype, eid, r["platform"]),
+                        )
+                        self.db.log(etype, eid, r["platform"], "queue_remove", str(pid or ""))
+                    removed += 1
+                return 200, {"ok": True, "removed": removed,
+                             "platforms": [r["platform"] for r in rows]}, "application/json"
+            if method == "POST" and route == "queue/edit":
+                etype = str(data.get("entity_type") or "").strip()
+                platform_sel = str(data.get("platform") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                table = "long_videos" if etype == "long_video" else "shorts"
+                title = str(data.get("title") or "")
+                desc = str(data.get("description") or "")
+                tags = str(data.get("hashtags") or "")
+                self.db.execute(
+                    f"UPDATE {table} SET title_text=?, description_text=?, hashtags_text=? "
+                    "WHERE id=?",
+                    (title[:200], desc, tags, eid),
+                )
+                sql = ("SELECT platform, postiz_post_id, postiz_scheduled_for, status "
+                       "FROM entity_platform_status WHERE entity_type=? AND entity_id=? "
+                       "AND status IN ('scheduled','updating','ready','error')")
+                params: list = [etype, eid]
+                if platform_sel:
+                    sql += " AND platform=?"
+                    params.append(platform_sel)
+                rows = self.db.fetchall(sql, tuple(params))
+                postiz = self.comps.get("postiz")
+                sch = self.comps.get("scheduler")
+                pub = getattr(sch, "publisher", None)
+                updated = 0
+                recreated = 0
+                for r in rows:
+                    plat = r["platform"]
+                    pid = r.get("postiz_post_id")
+                    if pid and postiz is not None:
+                        try:
+                            if hasattr(postiz, "delete_post"):
+                                postiz.delete_post(str(pid))
+                            elif hasattr(postiz, "set_status"):
+                                postiz.set_status(str(pid), "draft")
                         except Exception:
                             logger.warning("queue edit: не удалось отменить %s", pid, exc_info=True)
                     self.db.execute(
@@ -895,6 +1071,7 @@ class WebAppAPI:
             LEFT JOIN shorts sh
                    ON eps.entity_type='short' AND sh.id = eps.entity_id
             WHERE eps.postiz_scheduled_for IS NOT NULL
+              AND eps.status NOT IN ('skipped')
             ORDER BY eps.postiz_scheduled_for LIMIT 500
             """
         )

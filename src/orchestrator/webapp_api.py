@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "30"
+WEBAPP_BUILD = "31"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -271,7 +271,9 @@ class WebAppAPI:
                 return 200, {"ok": True, "groups": payload}, "application/json"
             if method == "GET" and route == "browse":
                 roots = self._browse_roots()
-                root = roots[0]
+                metas = [self._root_meta(r) for r in roots]
+                available = [Path(m["path"]) for m in metas if m["available"]]
+                root = available[0] if available else roots[0]
                 sel = query.get("root")
                 if sel:
                     rp = Path(sel).expanduser()
@@ -284,17 +286,25 @@ class WebAppAPI:
                 if base != root and root not in base.parents:
                     base = root
                 dirs = []
+                warning = ""
                 try:
                     for child in sorted(base.iterdir()):
                         if child.is_dir() and not child.name.startswith("."):
                             dirs.append({"name": child.name, "path": str(child.resolve())})
                 except PermissionError:
                     return 403, {"error": "permission denied"}, "application/json"
+                except OSError:
+                    warning = "папка недоступна (диск отключён?)"
+                cur = next((m for m in metas if m["path"] == str(root)), None)
+                if cur and not cur["available"]:
+                    warning = cur["note"]
                 return 200, {
                     "path": str(base),
                     "parent": str(base.parent) if base != root else None,
                     "root": str(root),
                     "roots": [str(r) for r in roots],
+                    "roots_meta": metas,
+                    "warning": warning,
                     "dirs": dirs,
                     "selected": str(base) in self._roots(),
                 }, "application/json"
@@ -592,6 +602,30 @@ class WebAppAPI:
                     elif isinstance(x, (str, Path)):
                         out.append({"path": str(x), "kind": "auto"})
         return out
+
+    @staticmethod
+    def _mount_source(path: Path) -> str:
+        try:
+            for line in Path("/proc/mounts").read_text().splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].replace("\\040", " ") == str(path):
+                    return parts[0]
+        except OSError:
+            pass
+        return ""
+
+    def _root_meta(self, path: Path) -> dict:
+        """Доступность корня обзора: диск может быть отключён (stale mount)."""
+        meta = {"path": str(path), "available": True, "note": ""}
+        if not path.is_dir():
+            meta.update(available=False, note="папка недоступна")
+            return meta
+        if os.path.ismount(path):
+            src = self._mount_source(path)
+            name = src.rsplit("/", 1)[-1] if src else ""
+            if src.startswith("/dev/") and name and not Path("/sys/class/block", name).exists():
+                meta.update(available=False, note="диск отключён — подключи его или выбери другой корень")
+        return meta
 
     def _compose_index(self, key: str = "") -> bytes:
         """Self-contained page: inline CSS/JS so nothing can be cached separately."""

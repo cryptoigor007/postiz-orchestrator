@@ -245,7 +245,7 @@
     status: t("title_status"), folders: t("title_folders"), calendar: t("title_calendar"),
     queue: t("title_queue"), platforms: t("title_platforms"), tail: t("title_tail"),
     failed: t("title_failed"), actions: t("title_actions"), metrics: t("title_metrics"),
-    help: t("title_help"), manual: t("title_manual"), schedule: t("title_schedule"),
+    help: t("title_help"), manual: t("title_manual"), settings: t("title_settings"),
   });
 
   async function load() {
@@ -260,7 +260,11 @@
       else if (v === "calendar") state.data = await api("/calendar");
       else if (v === "queue") state.data = await api("/queue");
       else if (v === "platforms") state.data = await api("/platforms");
-      else if (v === "schedule") state.data = await api("/schedule_settings");
+      else if (v === "settings" || v === "failed" || v === "help" || v === "schedule") {
+        const sched = await api("/schedule_settings");
+        const failed = await api("/failed");
+        state.data = { sched, failed };
+      }
       else if (v === "tail") {
         const tail = await api("/tail");
         const backlog = await api("/backlog");
@@ -310,11 +314,16 @@
         <button class="btn danger" data-act="folder-remove" data-p="${it.path}">${t("remove")}</button></div>`)
       .join("");
     const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
-    const rootLabel = (r) => r;
+    const metaByPath = {};
+    (b.roots_meta || []).forEach((m) => { metaByPath[m.path] = m; });
     const rsel = (b.roots || []).length > 1
-      ? `<div class="form-row">${(b.roots || []).map((r) =>
-          `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}">${rootLabel(r)}</button>`).join("")}</div>`
+      ? `<div class="form-row">${(b.roots || []).map((r) => {
+          const m = metaByPath[r] || { available: true };
+          const warn = m.available ? "" : " ⚠";
+          return `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}"${m.available ? "" : " disabled"}>${r}${warn}</button>`;
+        }).join("")}</div>`
       : "";
+    const warnRow = b.warning ? `<div class="row"><span class="meta">⚠ ${b.warning}</span></div>` : "";
     const dirs = (b.dirs || [])
       .map((x) => `<div class="row"><div class="title">📁 ${x.name}</div>
         <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button></div>`)
@@ -327,6 +336,7 @@
         <div class="panel-header">${t("browse")} · <span class="mono" style="font-size:12px">${b.path || ""}</span></div>
         ${rsel}
         <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
+        ${warnRow}
         <div class="form-row">
           <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
           <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}" data-kind="series">${t("add_series")}</button>
@@ -415,11 +425,11 @@
       ${rows || `<div class="empty">${t("no_data")}</div>`}</div>`;
   }
 
-  function renderFailed(d) {
-    const rows = (d.items || []).map((it) =>
+  function failedHtml(d) {
+    const rows = ((d && d.items) || []).map((it) =>
       `<div class="row"><div class="title">${it.entity_type}#${it.entity_id} · ${it.platform}</div>
        <span class="meta">${it.last_error || ""}</span>${pill(it.status)}</div>`).join("");
-    content().innerHTML = `<div class="panel"><div class="panel-header">${t("nav_failed")}</div>${
+    return `<div class="panel"><div class="panel-header">${t("errors_header")}</div>${
       rows || `<div class="empty">${t("no_errors")}</div>`}</div>`;
   }
 
@@ -602,10 +612,8 @@
         <button class="btn secondary" data-act="sched-reset" data-p="${key}">${t("sched_reset")}</button>
       </div></div>`;
   }
-  function renderSchedule(d) {
-    const settings = d.settings || {};
+  function groupsHtml(d) {
     const groups = d.groups || [];
-    const eff = d.effective || {};
     const plats = d.platforms || [];
     const groupRows = groups.map((g) =>
       `<div class="row"><div class="title">👥 ${g.name}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
@@ -613,18 +621,30 @@
     const groupForm = `<div class="form-row"><input id="group-name" placeholder="${t("group_name")}" />
       <span class="meta">${plats.map((p) => `<label class="chk" style="margin-right:6px"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
       <button class="btn secondary" data-act="group-add">${t("group_add")}</button></div>`;
+    return `<div class="panel"><div class="panel-header">${t("groups_header")}</div>
+      ${groupRows || `<div class="empty">${t("groups_none")}</div>`}${groupForm}</div>`;
+  }
+  function scheduleHtml(d) {
+    const settings = d.settings || {};
+    const groups = d.groups || [];
+    const eff = d.effective || {};
+    const plats = d.platforms || [];
     const platformsHtml = plats.map((p) => schedBlock(p, p, eff[p] || {}, settings[p] || {}, true)).join("");
-    const groupsHtml = groups.map((g) => schedBlock(`group:${g.name}`, `👥 ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
+    const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `👥 ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
+    return platformsHtml + groupsHtmlBlocks;
+  }
+  function renderSettings(d) {
+    const sched = d.sched || {};
     content().innerHTML = `<div class="view-enter">
-      <div class="panel"><div class="panel-header">${t("groups_title")}</div>
-        ${groupRows || `<div class="empty">${t("groups_none")}</div>`}${groupForm}</div>
-      <div class="panel"><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>
-      ${platformsHtml}
-      ${groupsHtml}
+      ${groupsHtml(sched)}
+      <div class="panel"><div class="panel-header">${t("sched_title")}</div><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>
+      ${scheduleHtml(sched)}
+      ${failedHtml(d.failed || {})}
+      ${helpHtml()}
     </div>`;
   }
-  function renderHelp() {
-    content().innerHTML = [
+  function helpHtml() {
+    return [
       helpSection("help_nav", [
         ["nav_status", "help_nav_status"], ["nav_folders", "help_nav_folders"],
         ["nav_calendar", "help_nav_calendar"], ["nav_queue", "help_nav_queue"],
@@ -667,13 +687,11 @@
     else if (state.view === "calendar") renderCalendar(d);
     else if (state.view === "queue") renderQueue(d);
     else if (state.view === "platforms") renderPlatforms(d);
-    else if (state.view === "schedule") renderSchedule(d);
+    else if (state.view === "settings" || state.view === "failed" || state.view === "help" || state.view === "schedule") renderSettings(d);
     else if (state.view === "tail") renderTail(d);
-    else if (state.view === "failed") renderFailed(d);
     else if (state.view === "actions") renderActions(d);
     else if (state.view === "metrics") renderMetrics(d);
     else if (state.view === "manual") renderManual(d);
-    else if (state.view === "help") renderHelp();
     const root = content();
     root.classList.remove("view-enter");
     void root.offsetWidth;
@@ -784,10 +802,9 @@
         const p = el.dataset.p;
         const items = (state.data?.items || []).map((it) => ({ ...it }));
         const it = items.find((x) => x.path === p);
-        if (it) {
-          const order = ["auto", "series", "shorts"];
-          it.kind = order[(order.indexOf(it.kind) + 1) % order.length];
-        }
+        if (!it) return;
+        const order = ["auto", "series", "shorts"];
+        it.kind = order[(order.indexOf(it.kind) + 1) % order.length];
         state.data = await api("/roots", { method: "POST", body: JSON.stringify({ items }) });
         toast(t("t_kind_changed"));
         return load();

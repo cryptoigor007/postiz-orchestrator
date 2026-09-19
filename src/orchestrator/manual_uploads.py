@@ -55,7 +55,7 @@ def _within_lookback(published_at: str | None, days: int, now: Any) -> bool:
     if dt is None:
         return True
     try:
-        now_dt = now if getattr(now, "tzinfo", None) else now.replace(tzinfo=timezone.utc)
+        now_dt = now if getattr(now, "tzinfo", None) else now.replace(tzinfo=UTC)
     except Exception:
         now_dt = now
     return (now_dt - dt).total_seconds() <= days * 86400

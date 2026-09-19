@@ -27,6 +27,5 @@ PY
   echo "$PUB" > "$STATE"
   systemctl restart orchestrator.service
   echo "$(date -Is) updated -> $PUB" >> "$LOG"
-else
-  echo "$(date -Is) ok $PUB" >> "$LOG"
+  tail -n 200 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG" 2>/dev/null || true
 fi

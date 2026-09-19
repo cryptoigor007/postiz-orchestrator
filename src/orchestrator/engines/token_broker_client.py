@@ -1,0 +1,29 @@
+from __future__ import annotations
+import json
+import urllib.parse
+import urllib.request
+from typing import Any, Callable
+
+
+def _urllib_http(method: str, url: str, params: dict, headers: dict) -> dict:
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        body = r.read().decode()
+        return json.loads(body) if body else {}
+
+
+class TokenBrokerClient:
+    """Fetches a platform OAuth token from the on-server token broker."""
+
+    def __init__(self, url: str, secret: str,
+                 http: Callable[[str, str, dict, dict], dict] | None = None):
+        self.url = url.rstrip("/")
+        self.secret = secret
+        self._http = http or _urllib_http
+
+    def get(self, platform: str) -> dict[str, Any]:
+        return self._http("GET", self.url + "/token",
+                          {"platform": platform},
+                          {"X-Broker-Secret": self.secret})

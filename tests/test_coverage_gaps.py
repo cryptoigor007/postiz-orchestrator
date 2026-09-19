@@ -328,3 +328,23 @@ def test_hourly_limit_ignores_deleted(tmp_path):
     post = pub.publish("long_video", lv["id"], "telegram", "/x/v.mp4", {"title": "T"},
                        datetime(2026, 3, 11, 13, 0, tzinfo=UTC))
     assert post is not None  # удалённые не считаются лимитом
+
+
+def test_rate_limit_does_not_pause_platform(tmp_path):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from orchestrator.clock import FakeClock
+    from orchestrator.config import load_config
+    from orchestrator.db import Database
+    from orchestrator.safety import SafetyChecker
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    db = Database(tmp_path / "rl.sqlite")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    safety = SafetyChecker(db, cfg, clock)
+    db.ensure_platform_states(["telegram"])
+    safety.handle_error("telegram", "Client error '429 Too Many Requests' for url ...")
+    assert safety.is_platform_paused("telegram") is False
+    safety.handle_error("telegram", "401 Unauthorized: token expired")
+    assert safety.is_platform_paused("telegram") is True

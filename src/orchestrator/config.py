@@ -52,6 +52,7 @@ class SafetyCfg(BaseModel):
         "action": "pause_platform", "pause_hours": 0, "notify": True
     })
     serious_errors: list[str] = Field(default_factory=list)
+    rate_limit_errors: list[str] = Field(default_factory=list)
     auth_errors: list[str] = Field(default_factory=list)
 
 

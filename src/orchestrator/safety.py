@@ -177,8 +177,11 @@ class SafetyChecker:
             (error, now, now, platform),
         )
         err_l = error.lower()
-        if any(a.lower() in err_l for a in self.safety.auth_errors):
+        if any(a.lower() in err_l for a in getattr(self.safety, "auth_errors", [])):
             self.pause_platform(platform, f"auth: {error}")
+            return
+        # троттлинг Postiz/платформы — не пауза, просто запись об ошибке (ретраи делают своё дело)
+        if any(r.lower() in err_l for r in getattr(self.safety, "rate_limit_errors", [])):
             return
         if any(s.lower() in err_l for s in self.safety.serious_errors):
             action = self.safety.on_serious_error.get("action", "pause_platform")

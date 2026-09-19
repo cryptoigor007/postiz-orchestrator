@@ -33,3 +33,15 @@
 - Deploy: rsync + restart; проверено: health ok, manual/plan platforms=[telegram,youtube], scan youtube → 404 (нет подключённого канала).
 - Tests: 103 passed.
 - Prerequisite live YouTube: подключить YouTube-канал в Postiz (broker отдаёт токен).
+
+## 2026-09-19 — Глубокий аудит
+- Static: compileall ok, node --check ok, tests 105 passed.
+- Server (pve): orchestrator active; DB schema v9 + platform_uploads; manual plan/scan ok; ошибок в логе нет.
+- VM: token-broker active; cloudflared active; sync timer active. UI b21 рендерится (manual view).
+- Security: секретов в трекнутых файлах нет; .env игнорируется.
+- Исправлено в ходе аудита:
+  1) scan пропускает движки без `list`;
+  2) confirm/reassign → 409 при конфликте привязки;
+  3) брокер-клиент даёт понятную ошибку (`token broker: …`);
+  4) удалён мёртвый код (health.py, calendar_view.py) + чистка тестов.
+- Открытые риски: YouTube не подключён; клеймы через API ограничены; browser — экспериментальный; n8n требует N8N_URL.

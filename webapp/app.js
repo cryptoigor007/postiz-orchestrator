@@ -175,7 +175,7 @@
     const s = (status || "").toLowerCase();
     let cls = "pill";
     if (["published", "ok", "ready"].includes(s)) cls += " ok";
-    else if (["scheduled", "updating"].includes(s)) cls += " info";
+    else if (["scheduled", "updating", "queue"].includes(s)) cls += " info";
     else if (["failed", "error"].includes(s)) cls += " err";
     else if (["paused", "skipped"].includes(s)) cls += " warn";
     return `<span class="${cls}">${status || "—"}</span>`;
@@ -272,11 +272,14 @@
       return;
     }
     content().innerHTML = days.map((day) => {
-      const rows = (day.items || []).map((it) =>
-        `<div class="row"><span class="mono">${it.time || ""}</span>
-         <div class="title">${it.platform} · ${it.entity_type}#${it.entity_id}</div>
-         ${pill(it.status)}</div>`).join("");
-      return `<div class="panel"><div class="panel-header">${day.date}</div>${rows}</div>`;
+      const rows = (day.items || []).map((it) => {
+        const title = it.title || it.platform || "";
+        const link = it.url ? ` <a href="${it.url}" target="_blank" rel="noopener">↗</a>` : "";
+        return `<div class="row"><span class="mono">${it.time || ""}</span>
+          <div class="title">${title}${link}</div>
+          <span class="meta">${it.platform || ""}</span>${pill(it.status)}</div>`;
+      }).join("");
+      return `<div class="panel"><div class="panel-header">${day.date} <span class="meta">${day.count || 0}</span></div>${rows}</div>`;
     }).join("");
   }
 

@@ -71,7 +71,7 @@ def env(tmp_path):
     comps = {
         "cfg": cfg, "db": db, "clock": clock, "safety": safety,
         "scheduler": sched, "link_upd": link, "publisher": pub,
-        "watcher": watcher,
+        "watcher": watcher, "postiz": postiz,
     }
     return WebAppAPI(comps), db, clock, cfg, watcher
 
@@ -158,14 +158,14 @@ def test_composed_index_inlines_assets_and_key(env):
     api, db, clock, cfg, watcher = env
     os.environ["WEBAPP_ACCESS_KEY"] = "s3cret"
     try:
-        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/19/", {}, b"")
+        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/20/", {}, b"")
         assert code == 200
         assert ctype.startswith("text/html")
         assert b'src="app.js' not in body
         assert b"__WEBAPP_KEY__" in body
         assert b'"s3cret"' in body
         assert b"gate-msg" in body
-        code, body, _ = api.handle("GET", "/webapp/b/19/", {}, b"")
+        code, body, _ = api.handle("GET", "/webapp/b/20/", {}, b"")
         assert b'__WEBAPP_KEY__=""' in body
     finally:
         os.environ.pop("WEBAPP_ACCESS_KEY", None)
@@ -173,10 +173,10 @@ def test_composed_index_inlines_assets_and_key(env):
 
 def test_build_path_serves_app_and_assets(env):
     api, db, clock, cfg, watcher = env
-    code, body, _ = api.handle("GET", "/webapp/b/19/", {}, b"")
+    code, body, _ = api.handle("GET", "/webapp/b/20/", {}, b"")
     assert code == 200
     assert b"Orchestrator" in body
-    code, body, ctype = api.handle("GET", "/webapp/b/19/app.js", {}, b"")
+    code, body, ctype = api.handle("GET", "/webapp/b/20/app.js", {}, b"")
     assert code == 200
     assert ctype.startswith("application/javascript")
 
@@ -234,6 +234,22 @@ def test_metrics_has_live_counts(env):
     code, payload, _ = api.handle("GET", "/webapp/api/metrics", headers, b"")
     assert code == 200
     assert payload["live"]["queue"] == 1
+
+
+def test_calendar_includes_postiz_posts(env):
+    api, db, clock, cfg, watcher = env
+    from orchestrator.postiz import PostizPost
+    postiz = api.comps["postiz"]
+    postiz.posts["pz1"] = PostizPost(
+        id="pz1", platform="telegram", scheduled_for=clock.now(),
+        status="scheduled", content={"text": "hello from postiz"},
+    )
+    headers = {"X-Telegram-Init-Data": "dev"}
+    code, payload, _ = api.handle("GET", "/webapp/api/calendar", headers, b"")
+    assert code == 200
+    assert payload["total"] >= 1
+    titles = [it["title"] for d in payload["days"] for it in d["items"]]
+    assert any("hello from postiz" in x for x in titles)
 
 
 def test_diag_endpoint(env):

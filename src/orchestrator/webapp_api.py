@@ -15,7 +15,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "19"
+WEBAPP_BUILD = "20"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -359,27 +359,55 @@ class WebAppAPI:
         return {"counts": counts, "platforms": platforms}
 
     def _calendar(self) -> dict:
+        entries: list[dict] = []
+        seen: set[str] = set()
         rows = self.db.fetchall(
             """
-            SELECT platform, postiz_scheduled_for, entity_type, entity_id, status
+            SELECT platform, postiz_post_id, postiz_scheduled_for, entity_type, entity_id, status
             FROM entity_platform_status
             WHERE postiz_scheduled_for IS NOT NULL
-            ORDER BY postiz_scheduled_for LIMIT 200
+            ORDER BY postiz_scheduled_for LIMIT 500
             """
         )
-        by: dict[str, list] = defaultdict(list)
         for r in rows:
-            day = (r["postiz_scheduled_for"] or "")[:10]
-            time = (r["postiz_scheduled_for"] or "")[11:16]
-            by[day].append({
-                "time": time,
+            pid = r.get("postiz_post_id")
+            if pid:
+                seen.add(str(pid))
+            entries.append({
+                "scheduled_for": r["postiz_scheduled_for"] or "",
                 "platform": r["platform"],
-                "entity_type": r["entity_type"],
-                "entity_id": r["entity_id"],
+                "title": f'{r["entity_type"]}#{r["entity_id"]}',
                 "status": r["status"],
+                "source": "db",
             })
-        days = [{"date": d, "items": by[d]} for d in sorted(by.keys())]
-        return {"days": days}
+        postiz = self.comps.get("postiz")
+        if postiz is not None and hasattr(postiz, "list_scheduled"):
+            try:
+                for p in postiz.list_scheduled():
+                    if str(p.id) in seen:
+                        continue
+                    seen.add(str(p.id))
+                    content = p.content.get("text") if isinstance(p.content, dict) else ""
+                    entries.append({
+                        "scheduled_for": p.scheduled_for.isoformat() if p.scheduled_for else "",
+                        "platform": p.platform,
+                        "title": (content or "").strip()[:90] or f"Postiz {str(p.id)[:8]}",
+                        "status": p.status,
+                        "source": "postiz",
+                        "url": p.release_url,
+                    })
+            except Exception:
+                logger.debug("postiz calendar failed", exc_info=True)
+        by: dict[str, list] = defaultdict(list)
+        for e in entries:
+            sched = e.get("scheduled_for") or ""
+            e["time"] = sched[11:16]
+            by[sched[:10]].append(e)
+        days = []
+        for d in sorted(k for k in by if k):
+            items = sorted(by[d], key=lambda x: x.get("time") or "")
+            days.append({"date": d, "count": len(items), "items": items})
+        return {"days": days, "total": len(entries)}
 
     def _queue(self) -> dict:
         rows = self.db.fetchall(

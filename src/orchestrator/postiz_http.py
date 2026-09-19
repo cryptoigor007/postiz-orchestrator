@@ -222,31 +222,39 @@ class HttpPostizClient:
         )
 
     def list_scheduled(self, platform: str | None = None) -> list[PostizPost]:
-        # API: GET /public/v1/posts?startDate=&endDate=
+        # API: GET /public/v1/posts?startDate=&endDate=  ->  {"posts":[...]}
         from datetime import timedelta
         now = datetime.now(timezone.utc)
         params = {
-            "startDate": (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "endDate": (now + timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDate": (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDate": (now + timedelta(days=120)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
         r = self._client.get(self.path_posts, params=params)
         r.raise_for_status()
         payload = r.json()
         items = payload if isinstance(payload, list) else (
-            payload.get("items") or payload.get("data") or payload.get("posts") or []
+            payload.get("posts") or payload.get("items") or payload.get("data") or []
         )
         result = []
         for data in items:
-            sched = _first(data, "scheduledFor", "scheduled_for", "date")
-            st = _first(data, "status", default="scheduled")
-            if st and str(st).lower() not in ("scheduled", "queue", "pending", "draft", "published"):
+            integration = data.get("integration") or {}
+            sched = _first(data, "publishDate", "scheduledFor", "scheduled_for", "date")
+            st = _first(data, "state", "status", default="scheduled")
+            if st and str(st).lower() not in (
+                "scheduled", "queue", "pending", "draft", "published"
+            ):
                 continue
+            content = _first(data, "content", "message", "description")
             result.append(PostizPost(
                 id=str(_first(data, "id", "postId")),
-                platform=_first(data, "platform", default=platform or ""),
+                platform=_first(
+                    integration, "providerIdentifier", "name",
+                    default=platform or "",
+                ),
                 scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
-                status=str(st),
-                release_url=_first(data, "releaseUrl", "release_url", "url", "releaseId"),
+                status=str(st).lower(),
+                release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
+                content=({"text": content} if content else None),
             ))
         return result
 

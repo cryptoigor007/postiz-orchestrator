@@ -7,7 +7,7 @@ DEST="${PVE_DEST:-/opt/orchestrator}"
 cd "$(dirname "$0")/.."
 
 echo ">> rsync -> $HOST:$DEST"
-rsync -az --delete --no-owner --no-group --chown=orchestrator:orchestrator \
+rsync -az --delete --no-owner --no-group \
   --exclude venv --exclude .git --exclude __pycache__ --exclude '.pytest_cache' \
   --exclude data --exclude backups --exclude logs --exclude '.DS_Store' --exclude '.env' \
   ./ "$HOST:$DEST/"

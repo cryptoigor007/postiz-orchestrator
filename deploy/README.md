@@ -35,12 +35,15 @@ systemctl start orchestrator.service
 («attempt to write a readonly database»). Используй:
 
 ```bash
-rsync -az --delete --no-owner --no-group --chown=orchestrator:orchestrator \
+rsync -az --delete --no-owner --no-group \
   --exclude venv --exclude .git --exclude __pycache__ --exclude .pytest_cache \
   --exclude data --exclude backups --exclude logs --exclude .DS_Store --exclude .env \
   ./ root@<pve>:/opt/orchestrator/
-ssh root@<pve> 'systemctl restart orchestrator.service'
+ssh root@<pve> 'chown -R orchestrator:orchestrator /opt/orchestrator && \
+  chmod 600 /opt/orchestrator/.env && systemctl restart orchestrator.service'
 ```
+
+(на macOS штатный rsync не поддерживает `--chown` — владельца правим на сервере)
 
 Если владелец уже сбит:
 ```bash

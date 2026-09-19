@@ -58,6 +58,13 @@ class TelegramCfg(BaseModel):
     allowed_chat_ids: list[int] = Field(default_factory=list)
 
 
+class MediaCfg(BaseModel):
+    symlink_mode: bool = True          # не копировать файлы сервера в Postiz (симлинк)
+    local_prefix: str = "/mnt/video/"
+    cache_dir: str = "/mnt/video/.orch_cache"
+    telegram_max_mb: int = 49           # лимит Bot API; больше — авто-сжатие
+
+
 class ManualUploadsCfg(BaseModel):
     enabled: bool = True
     platforms: list[str] = Field(default_factory=list)
@@ -87,6 +94,7 @@ class AppConfig(BaseModel):
     })
     safety: SafetyCfg = Field(default_factory=SafetyCfg)
     telegram: TelegramCfg = Field(default_factory=TelegramCfg)
+    media: MediaCfg = Field(default_factory=MediaCfg)
     manual_uploads: ManualUploadsCfg = Field(default_factory=ManualUploadsCfg)
     backup: BackupCfg = Field(default_factory=BackupCfg)
     engines: dict[str, str] = Field(default_factory=dict)

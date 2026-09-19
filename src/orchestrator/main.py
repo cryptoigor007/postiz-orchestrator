@@ -17,6 +17,7 @@ from .backup import run_backup
 from .clock import SystemClock
 from .config import load_config
 from .db import Database
+from .engines.token_broker_client import TokenBrokerClient
 from .link_updater import LinkUpdater
 from .manual_sources import build_manual_sources
 from .manual_uploads import ManualUploadsService
@@ -51,7 +52,12 @@ def build(args: argparse.Namespace) -> dict:
     safety = SafetyChecker(db, cfg, clock)
     guard = ScheduleGuard(cfg, clock, sources=[("postiz", postiz_source(postiz))])
     comps_guard = guard
-    publisher = Publisher(db, cfg, postiz, safety, clock, dry_run=args.dry_run, guard=guard)
+    broker = None
+    if os.getenv("TOKEN_BROKER_URL"):
+        broker = TokenBrokerClient(os.environ["TOKEN_BROKER_URL"],
+                                   os.getenv("TOKEN_BROKER_SECRET", ""))
+    publisher = Publisher(db, cfg, postiz, safety, clock, dry_run=args.dry_run,
+                          guard=guard, broker=broker)
     scheduler = Scheduler(db, cfg, publisher, safety, clock)
     status_sync = StatusSync(db, postiz, clock, cfg)
     recon = Reconciliation(db, postiz, clock)

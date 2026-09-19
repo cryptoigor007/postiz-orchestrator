@@ -8,10 +8,17 @@ from collections.abc import Callable
 from typing import Any
 
 
-def _urllib_http(method: str, url: str, params: dict, headers: dict) -> dict:
-    if params:
-        url += "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers=headers, method=method)
+def _urllib_http(method: str, url: str, params: dict, headers: dict,
+                 body: dict | None = None) -> dict:
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers = {**headers, "Content-Type": "application/json"}
+    else:
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        params = {}
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             body = r.read().decode()
@@ -33,6 +40,11 @@ class TokenBrokerClient:
         self.url = url.rstrip("/")
         self.secret = secret
         self._http = http or _urllib_http
+
+    def symlink(self, src: str) -> dict[str, Any]:
+        """Создать симлинк в хранилище Postiz на файл сервера (без копии)."""
+        return self._http("POST", self.url + "/symlink", {},
+                          {"X-Broker-Secret": self.secret}, {"src": src})
 
     def get(self, platform: str, integration_id: str | None = None) -> dict[str, Any]:
         params = {"platform": platform}

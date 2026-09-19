@@ -9,6 +9,9 @@ Env:
   BROKER_BIND        bind address (default 0.0.0.0)
   BROKER_PORT        port (default 9099)
   BROKER_PLATFORMS   comma list allowed (default youtube)
+  BROKER_UPLOADS_DIR Postiz uploads dir (default docker volume _data path)
+  BROKER_FRONTEND_URL public base of Postiz (for media URLs)
+  BROKER_SRC_PREFIX  allowed source prefix (default /mnt/video/)
 """
 from __future__ import annotations
 
@@ -24,6 +27,11 @@ BIND = os.getenv("BROKER_BIND", "0.0.0.0")
 PORT = int(os.getenv("BROKER_PORT", "9099"))
 ALLOWED = {p.strip() for p in os.getenv("BROKER_PLATFORMS", "youtube").split(",") if p.strip()}
 ALLOW_IPS = {x.strip() for x in os.getenv("BROKER_ALLOW_IPS", "").split(",") if x.strip()}
+UPLOADS = os.getenv("BROKER_UPLOADS_DIR",
+                    "/var/lib/docker/volumes/postiz_postiz_uploads/_data")
+FRONTEND = os.getenv("BROKER_FRONTEND_URL", "").rstrip("/")
+SRC_PREFIX = os.getenv("BROKER_SRC_PREFIX", "/mnt/video/")
+HOST_PREFIX = os.getenv("BROKER_SRC_HOST_PREFIX", "/mnt/media/")
 DB = os.getenv("POSTIZ_DB_CONTAINER", "postiz-db")
 APP = os.getenv("POSTIZ_CONTAINER", "postiz")
 
@@ -88,12 +96,63 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _auth(self) -> bool:
+        if not ip_allowed(self.client_address[0]):
+            self._json(403, {"error": "forbidden"})
+            return False
+        if not SECRET or self.headers.get("X-Broker-Secret") != SECRET:
+            self._json(401, {"error": "unauthorized"})
+            return False
+        return True
+
+    def _symlink(self, src: str, name: str = "") -> dict:
+        import datetime as _dt
+        import uuid as _uuid
+        if not src.startswith(SRC_PREFIX):
+            return {"error": f"src must start with {SRC_PREFIX}"}
+        host_src = (src.replace(SRC_PREFIX, HOST_PREFIX, 1) if HOST_PREFIX else src)
+        if not os.path.isfile(host_src):
+            return {"error": f"src not found ({host_src})"}
+        base = os.path.basename(name or src)
+        safe = "".join(c for c in base if c.isalnum() or c in "._- ").strip() or "media.mp4"
+        now = _dt.date.today()
+        rel_dir = now.strftime("%Y/%m/%d")
+        target_dir = os.path.join(UPLOADS, rel_dir)
+        os.makedirs(target_dir, exist_ok=True)
+        uniq = _uuid.uuid4().hex * 2
+        fname = f"{uniq[:32]}{os.path.splitext(safe)[1] or '.mp4'}"
+        link_path = os.path.join(target_dir, fname)
+        try:
+            if os.path.islink(link_path) or os.path.exists(link_path):
+                os.unlink(link_path)
+            os.symlink(src, link_path)
+        except Exception as e:
+            return {"error": f"symlink failed: {e}"}
+        rel = f"/uploads/{rel_dir}/{fname}"
+        return {"media_id": _uuid.uuid4().hex, "rel": rel,
+                "path": (FRONTEND + rel) if FRONTEND else rel}
+
+    def do_POST(self):  # noqa: N802
+        u = urlparse(self.path)
+        if not self._auth():
+            return
+        if u.path != "/symlink":
+            return self._json(404, {"error": "not found"})
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(length) or b"{}")
+        except Exception:
+            return self._json(400, {"error": "bad json"})
+        src = str(data.get("src") or "")
+        res = self._symlink(src, str(data.get("name") or ""))
+        if "error" in res:
+            return self._json(400, res)
+        return self._json(200, res)
+
     def do_GET(self):  # noqa: N802
         u = urlparse(self.path)
-        if not ip_allowed(self.client_address[0]):
-            return self._json(403, {"error": "forbidden"})
-        if not SECRET or self.headers.get("X-Broker-Secret") != SECRET:
-            return self._json(401, {"error": "unauthorized"})
+        if not self._auth():
+            return
         if u.path != "/health" and u.path != "/token":
             return self._json(404, {"error": "not found"})
         if u.path == "/health":

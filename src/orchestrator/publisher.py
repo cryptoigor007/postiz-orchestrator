@@ -7,6 +7,7 @@ from typing import Any
 from .clock import Clock
 from .config import AppConfig
 from .db import Database
+from .media import make_media
 from .postiz import PostizClient, PostizPost
 from .safety import SafetyChecker
 
@@ -23,6 +24,7 @@ class Publisher:
         clock: Clock,
         dry_run: bool = False,
         guard: Any = None,
+        broker: Any = None,
     ):
         self.db = db
         self.cfg = cfg
@@ -31,6 +33,7 @@ class Publisher:
         self.clock = clock
         self.dry_run = dry_run
         self.guard = guard
+        self.broker = broker
 
     def _already_exists(self, entity_type: str, entity_id: int, platform: str) -> str | None:
         row = self.db.fetchone(
@@ -122,7 +125,7 @@ class Publisher:
         if pcfg and getattr(pcfg, "integration_id", None):
             content = {**content, "integration_id": pcfg.integration_id}
         try:
-            media = self.postiz.upload_media(media_path, platform)
+            media = make_media(media_path, platform, self.cfg, self.postiz, self.broker)
         except Exception as e:
             self.db.execute(
                 "UPDATE entity_platform_status SET status='error', last_error=? "

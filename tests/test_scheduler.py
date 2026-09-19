@@ -140,3 +140,22 @@ def test_pick_path_variants(env):
     row = {"wide_path": "/w.mp4", "vertical_path": "/v.mp4", "platform_paths": None}
     assert sched._pick_path(row, "youtube", cfg.platforms["youtube"]) == "/w.mp4"
     assert sched._pick_path(row, "telegram", cfg.platforms["telegram"]) == "/v.mp4"
+
+
+def test_auth_error_pauses_platform(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    platform = "telegram"
+    db.ensure_platform_states([platform])
+
+    def boom(*a, **k):
+        raise RuntimeError("401 Unauthorized: token expired")
+
+    pub.publish = boom
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, vertical_path, "
+        "title_text, created_at) VALUES ('videomaker', '/sx', 'SX', '/sx/v.mp4', 'T', ?)",
+        (clock.now().isoformat(),),
+    )
+    n = sched.schedule_long_videos()
+    assert n == 0
+    assert safety.is_platform_paused(platform) is True

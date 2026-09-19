@@ -287,3 +287,18 @@
 - Тесты: +1 (точечное удаление), обновлён каскадный. Итого 176.
 - По решению пользователя очередь не восстанавливаем: строки оставлены `skipped`, в Postiz 0 постов.
   Запуск заново — «Папки» → «Сканировать» → «Да, запустить» (или через API /schedule).
+
+## 2026-09-19 — Глубокий аудит: мёртвый код, скрытая регрессия, предохранитель
+- Удалён мёртвый код: классы ScheduleLong/Thematic/Standalone; поля конфига confidence_high/medium,
+  apply_description, rename_title, claim_policy, is_cycle; методы backlog.has_ready_long/reminder_due,
+  safety._get_last_scheduled, publisher._idempotency_key; 11 неиспользуемых ключей i18n;
+  unreachable-код в telegram_opencode_bridge; неприсвоенный `cls`.
+- Восстановлена скрытая регрессия: `exception_days` для обычных шортсов (потерялся при рефакторинге
+  расписаний) — снова учитывается (effective + scheduler).
+- Подключён предохранитель `safety.handle_error`: при auth-ошибке публикации платформа автоматически
+  ставится на паузу (раньше метод был только в тестах).
+- Логи: транспортные сбои Telegram-поллинга теперь warning без стектрейса.
+- Инструменты: vulture (dead code, 100% confidence) добавлен в requirements и `scripts/check.sh`.
+- Проверка: 177 тестов, линт, vulture — чисто; health ok, ошибок в цикле нет.
+- Замечено, но оставлено: колонка shorts.meta_text не используется (удаление — отдельной миграцией);
+  audio_profile/placement_default — осознанно зарезервированы под будущие фичи.

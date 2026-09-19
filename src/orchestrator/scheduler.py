@@ -46,8 +46,15 @@ class Scheduler:
         """Публикация с изоляцией: сбой одного поста не ломает весь цикл."""
         try:
             return self.publisher.publish(*args, **kwargs)
-        except Exception:
-            logger.exception("publish failed (%s / %s)", args[0] if args else "", args[1] if len(args) > 1 else "")
+        except Exception as e:
+            logger.exception("publish failed (%s / %s)",
+                             args[0] if args else "", args[1] if len(args) > 1 else "")
+            platform = args[2] if len(args) > 2 else ""
+            if platform and hasattr(self, "safety") and self.safety is not None:
+                try:
+                    self.safety.handle_error(str(platform), str(e))
+                except Exception:
+                    logger.exception("safety.handle_error failed")
             return None
 
     def _backlog_active(self, platform: str) -> bool:

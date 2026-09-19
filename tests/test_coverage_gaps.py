@@ -210,3 +210,22 @@ def test_http_server_health_and_webapp_404(tmp_path):
         assert e.value.code == 404
     finally:
         srv.shutdown()
+
+
+def test_tg_transport_no_ack_persistent_watermark():
+    from orchestrator.telegram_transport import TelegramTransport
+
+    store = {"v": 0}
+    t = TelegramTransport(token="x", load_seen=lambda: store["v"],
+                          save_seen=lambda v: store.update(v=v))
+    t.no_ack = True
+    assert t._accept({"update_id": 100}) is True
+    assert store["v"] == 100
+    assert t._accept({"update_id": 100}) is False
+    # «рестарт» процесса: отметка читается из хранилища, повторно не отвечаем
+    t2 = TelegramTransport(token="x", load_seen=lambda: store["v"],
+                           save_seen=lambda v: store.update(v=v))
+    t2.no_ack = True
+    assert t2._accept({"update_id": 100}) is False
+    assert t2._accept({"update_id": 101}) is True
+    assert store["v"] == 101

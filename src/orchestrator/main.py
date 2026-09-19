@@ -88,7 +88,12 @@ def build(args: argparse.Namespace) -> dict:
         "backlog": backlog,
     }
     setup_commands(tg, comps)
-    transport = TelegramTransport(on_message=tg.handle_update)
+    db = comps["db"]
+    transport = TelegramTransport(
+        on_message=tg.handle_update,
+        load_seen=lambda: int(db.get_setting("tg_seen_update_id") or 0),
+        save_seen=lambda v: db.set_setting("tg_seen_update_id", str(v)),
+    )
     tg.transport = transport
     comps["tg_transport"] = transport
     return comps

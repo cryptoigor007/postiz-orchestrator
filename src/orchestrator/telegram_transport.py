@@ -15,9 +15,14 @@ logger = logging.getLogger(__name__)
 class TelegramTransport:
     """Long-poll + optional webhook-style local push. Heavy handlers run on worker queue."""
 
-    def __init__(self, token: str | None = None, on_message: Callable[[int, str], str | None] | None = None):
+    def __init__(self, token: str | None = None,
+                 on_message: Callable[[int, str], str | None] | None = None,
+                 load_seen: Callable[[], int] | None = None,
+                 save_seen: Callable[[int], None] | None = None):
         self.token = token or os.getenv("TELEGRAM_BOT_TOKEN", "")
         self.on_message = on_message
+        self._load_seen = load_seen
+        self._save_seen = save_seen
         self._offset = 0
         self._stop = False
         self._poll_thread: threading.Thread | None = None
@@ -29,6 +34,11 @@ class TelegramTransport:
         self.no_ack = os.getenv("TELEGRAM_POLL_NO_ACK", "1") not in ("0", "false", "no")
         self._seen: set[int] = set()
         self._last_update_id = 0
+        if self._load_seen:
+            try:
+                self._last_update_id = int(self._load_seen() or 0)
+            except Exception:
+                logger.warning("cannot load telegram seen watermark", exc_info=True)
 
     @property
     def enabled(self) -> bool:
@@ -76,18 +86,24 @@ class TelegramTransport:
         return max(0, self._last_update_id - 50)
 
     def _accept(self, upd: dict) -> bool:
-        """Фильтр дублей в режиме no_ack; иначе двигаем offset."""
+        """Фильтр дублей в режиме no_ack (с постоянной отметкой); иначе двигаем offset."""
         uid = upd.get("update_id")
-        if uid is not None:
-            self._last_update_id = max(self._last_update_id, uid)
-        if self.no_ack:
-            if uid in self._seen:
-                return False
-            if uid is not None:
-                self._seen.add(uid)
-                if len(self._seen) > 5000:
-                    self._seen = set(sorted(self._seen)[-2000:])
+        if uid is None:
             return True
+        if self.no_ack:
+            if uid <= self._last_update_id or uid in self._seen:
+                return False
+            self._seen.add(uid)
+            if len(self._seen) > 5000:
+                self._seen = set(sorted(self._seen)[-2000:])
+            self._last_update_id = uid
+            if self._save_seen:
+                try:
+                    self._save_seen(uid)
+                except Exception:
+                    logger.warning("cannot save telegram seen watermark", exc_info=True)
+            return True
+        self._last_update_id = max(self._last_update_id, uid)
         if uid is not None:
             self._offset = uid + 1
         return True
@@ -117,9 +133,11 @@ class TelegramTransport:
                 if r.status_code != 200:
                     time.sleep(3)
                     continue
+                new_count = 0
                 for upd in r.json().get("result", []):
                     if not self._accept(upd):
                         continue
+                    new_count += 1
                     msg = upd.get("message") or upd.get("edited_message")
                     if not msg:
                         cb = upd.get("callback_query")
@@ -137,6 +155,9 @@ class TelegramTransport:
                     chat_id = msg["chat"]["id"]
                     text = msg.get("text") or ""
                     self._q.put((chat_id, text))
+                if new_count == 0 and self.no_ack:
+                    # старые (неподтверждённые) апдейты возвращаются мгновенно — не долбим API
+                    time.sleep(float(os.getenv("TELEGRAM_POLL_IDLE_SEC", "10")))
             except Exception:
                 logger.exception("poll error")
                 time.sleep(5)

@@ -105,7 +105,11 @@ class Publisher:
             cutoff = (self.clock.now() - timedelta(hours=1)).isoformat()
             row = self.db.fetchone(
                 "SELECT COUNT(*) AS c FROM publish_log "
-                "WHERE action='created' AND created_at >= ?",
+                "WHERE action='created' AND created_at >= ? "
+                "AND EXISTS (SELECT 1 FROM entity_platform_status eps "
+                "  WHERE eps.entity_type=publish_log.entity_type "
+                "    AND eps.entity_id=publish_log.entity_id "
+                "    AND eps.platform=publish_log.platform)",
                 (cutoff,),
             )
             if row and row["c"] >= hourly:

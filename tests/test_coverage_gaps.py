@@ -291,3 +291,40 @@ def test_tg_bot_queue_with_titles(tmp_path):
     own = cfg.telegram.allowed_chat_ids[0]
     out = bot.handle_update(own, "/queue")
     assert "Очередь" in out and "Мой фильм" in out and "telegram" in out and "22.09" in out
+
+
+def test_hourly_limit_ignores_deleted(tmp_path):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from orchestrator.clock import FakeClock
+    from orchestrator.config import load_config
+    from orchestrator.db import Database
+    from orchestrator.postiz import MockPostizClient
+    from orchestrator.publisher import Publisher
+    from orchestrator.safety import SafetyChecker
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    cfg.limits.postiz_create_per_hour = 3
+    db = Database(tmp_path / "h.sqlite")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    postiz = MockPostizClient()
+    safety = SafetyChecker(db, cfg, clock)
+    pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
+    now = clock.now().isoformat()
+    # 30 "созданий" в логе, но постов в базе нет (удалены)
+    for i in range(30):
+        db.execute(
+            "INSERT INTO publish_log (entity_type, entity_id, platform, action, created_at) "
+            "VALUES ('long_video', ?, 'telegram', 'created', ?)",
+            (i + 100, now),
+        )
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, vertical_path, created_at) "
+        "VALUES ('videomaker', '/x', 'X', '/x/v.mp4', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    post = pub.publish("long_video", lv["id"], "telegram", "/x/v.mp4", {"title": "T"},
+                       datetime(2026, 3, 11, 13, 0, tzinfo=UTC))
+    assert post is not None  # удалённые не считаются лимитом

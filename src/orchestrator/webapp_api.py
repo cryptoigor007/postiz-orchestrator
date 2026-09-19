@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "46"
+WEBAPP_BUILD = "47"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -811,7 +811,12 @@ class WebAppAPI:
                 watcher = self.comps.get("watcher")
                 if not watcher:
                     return 500, {"error": "watcher unavailable"}, "application/json"
-                stats = watcher.scan()
+                stats = {"long": 0, "shorts": 0, "standalone": 0}
+                passes = max(2, int(getattr(self.cfg, "file_stability_cycles", 2)))
+                for _ in range(passes):
+                    st = watcher.scan()
+                    for k in stats:
+                        stats[k] += int(st.get(k, 0) or 0)
                 roots = [str(r) for r in watcher.effective_roots()]
 
                 def _under(path: str) -> bool:

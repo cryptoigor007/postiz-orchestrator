@@ -348,3 +348,26 @@ def test_rate_limit_does_not_pause_platform(tmp_path):
     assert safety.is_platform_paused("telegram") is False
     safety.handle_error("telegram", "401 Unauthorized: token expired")
     assert safety.is_platform_paused("telegram") is True
+
+
+def test_jobs_progress_and_cancel():
+    import time
+
+    from orchestrator.jobs import JobRegistry
+
+    reg = JobRegistry()
+    job = reg.start("schedule", "Планирование", total=4)
+    job.tick(1)
+    job.tick(1)
+    snap = reg.snapshot()
+    assert snap["percent"] == 50 and snap["done"] == 2
+    assert snap["eta"] is not None
+    assert reg.cancel() is True
+    assert job.cancelled
+    job.finish("done", "ok")
+    assert snap is not None
+    snap2 = reg.snapshot()
+    assert snap2["status"] == "cancelled"
+    # после завершения и паузы (>60с) snapshot скрывается
+    job.state.finished_at = time.time() - 120
+    assert reg.snapshot() is None

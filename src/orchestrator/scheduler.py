@@ -119,6 +119,8 @@ class Scheduler:
             if not future_slots:
                 continue
             limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
+            if self.job is not None:
+                self.job.set_total(self.job.state.total + len(videos))
             for video in videos:
                 if self.job is not None and self.job.cancelled:
                     break
@@ -326,6 +328,8 @@ class Scheduler:
                 """,
                 (etype,),
             )
+            if self.job is not None:
+                self.job.set_total(self.job.state.total + len(rows))
             for r in rows:
                 if self.job is not None and self.job.cancelled:
                     break
@@ -486,6 +490,8 @@ class Scheduler:
             limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
             exceptions = set(eff.get("exception_days") or [])
             weekday_set = {DAY_MAP[d.lower()[:3]] for d in days}
+        if self.job is not None:
+            self.job.set_total(self.job.state.total + len(ready))
             thematic = self._thematic_dates_for_platform(platform)
             for short in ready:
                 if self.job is not None and self.job.cancelled:

@@ -44,6 +44,8 @@ class Job:
     def finish(self, status: str = "done", message: str = "") -> None:
         if status == "done" and self.cancelled:
             status = "cancelled"
+        if status == "done":
+            self.state.done = max(self.state.done, self.state.total)
         self.state.status = status
         if message:
             self.state.message = message

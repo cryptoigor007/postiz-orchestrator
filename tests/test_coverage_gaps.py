@@ -374,7 +374,7 @@ def test_jobs_progress_and_cancel():
 
 
 def test_tg_split_long_text():
-    from orchestrator.telegram_bot import split_text
+    from orchestrator.telegram_transport import split_text
 
     text = "\n".join(f"строка номер {i} с некоторым текстом" for i in range(300))
     parts = split_text(text, 500)

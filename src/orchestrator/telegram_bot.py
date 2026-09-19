@@ -9,30 +9,7 @@ from .config import AppConfig
 from .db import Database
 
 logger = logging.getLogger(__name__)
-
-
-def split_text(text: str, limit: int = 3800) -> list[str]:
-    """Разбивает длинный текст по строкам на части (лимит Telegram 4096)."""
-    text = text or ""
-    if len(text) <= limit:
-        return [text]
-    parts: list[str] = []
-    cur = ""
-    for line in text.splitlines():
-        while len(line) > limit:
-            if cur:
-                parts.append(cur)
-                cur = ""
-            parts.append(line[:limit])
-            line = line[limit:]
-        if len(cur) + len(line) + 1 > limit:
-            parts.append(cur)
-            cur = line
-        else:
-            cur = (cur + "\n" + line) if cur else line
-    if cur:
-        parts.append(cur)
-    return parts
+from .telegram_transport import split_text  # noqa: E402
 
 
 class TelegramNotifier:

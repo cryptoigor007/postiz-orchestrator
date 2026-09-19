@@ -12,6 +12,30 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def split_text(text: str, limit: int = 3800) -> list[str]:
+    """Разбивает длинный текст по строкам на части (лимит Telegram 4096)."""
+    text = text or ""
+    if len(text) <= limit:
+        return [text]
+    parts: list[str] = []
+    cur = ""
+    for line in text.splitlines():
+        while len(line) > limit:
+            if cur:
+                parts.append(cur)
+                cur = ""
+            parts.append(line[:limit])
+            line = line[limit:]
+        if len(cur) + len(line) + 1 > limit:
+            parts.append(cur)
+            cur = line
+        else:
+            cur = (cur + "\n" + line) if cur else line
+    if cur:
+        parts.append(cur)
+    return parts
+
+
 class TelegramTransport:
     """Long-poll + optional webhook-style local push. Heavy handlers run on worker queue."""
 
@@ -46,15 +70,17 @@ class TelegramTransport:
 
     def send_message(self, chat_id: int, text: str, reply_markup: dict | None = None) -> None:
         if not self.token:
-            logger.info("[TG-mock -> %s] %s", chat_id, text[:200])
+            logger.info("[TG-mock -> %s] %s", chat_id, (text or "")[:200])
             return
-        payload: dict = {"chat_id": chat_id, "text": text[:4000]}
-        if reply_markup:
-            payload["reply_markup"] = reply_markup
-        try:
-            httpx.post(f"{self._base}/sendMessage", json=payload, timeout=30)
-        except Exception:
-            logger.exception("sendMessage failed")
+        chunks = split_text(text or "")
+        for i, chunk in enumerate(chunks):
+            payload: dict = {"chat_id": chat_id, "text": chunk}
+            if reply_markup and i == len(chunks) - 1:
+                payload["reply_markup"] = reply_markup
+            try:
+                httpx.post(f"{self._base}/sendMessage", json=payload, timeout=30)
+            except Exception:
+                logger.exception("sendMessage failed")
 
     def start(self) -> None:
         if not self.enabled or self._poll_thread:

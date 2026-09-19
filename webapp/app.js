@@ -275,6 +275,16 @@
     });
   }
 
+  function statusText(status) {
+    const s = (status || "").toLowerCase();
+    const key = "st_" + s;
+    return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || status || "—";
+  }
+
+  function statusBtn(status) {
+    return `<span class="btn secondary status-btn">${statusText(status)}</span>`;
+  }
+
   function pill(status) {
     const s = (status || "").toLowerCase();
     let cls = "pill";
@@ -464,11 +474,14 @@
              </div>
            </div>`
         : "";
-      return `<div class="row"><div class="title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+      return `<div class="row"><div class="title" style="flex:1">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
        <span class="mono meta">${it.date || ""} ${it.time || ""}</span>
-       <span class="meta">${pIcon(it.platform)}${it.platform}</span>${pill(it.status)}
-       <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
-       <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
+       <span class="meta">${pIcon(it.platform)}${it.platform}</span>
+       <div class="queue-col">
+         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
+         <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
+         ${statusBtn(it.status)}
+       </div>
        ${form}</div>`;
     }).join("");
     content().innerHTML = `<div class="panel"><div class="panel-header">${t("nav_queue")}</div>${

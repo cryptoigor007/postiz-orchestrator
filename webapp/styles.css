@@ -195,3 +195,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 /* Значки соцсетей */
 .pico { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; opacity: 0.92; }
 .pico svg { width: 16px; height: 16px; display: block; fill: currentColor; }
+
+
+/* Очередь: колонка действий справа */
+.queue-col { display: flex; flex-direction: column; gap: 6px; min-width: 180px; }
+.queue-col .btn { width: 100%; justify-content: center; text-align: center; }
+.status-btn { pointer-events: none; cursor: default; opacity: 0.95; }

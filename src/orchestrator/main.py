@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .backlog import BacklogManager
 from .backup import run_backup
 from .clock import SystemClock
 from .config import load_config
@@ -57,6 +58,7 @@ def build(args: argparse.Namespace) -> dict:
     link_upd = LinkUpdater(db, cfg, postiz, clock, tg)
     manual = ManualUploadsService(db, cfg, clock)
     manual_sources = build_manual_sources(cfg, postiz, os.environ)
+    backlog = BacklogManager(db, cfg, clock, scheduler=scheduler, notifier=tg)
 
     comps = {
         "cfg": cfg,
@@ -74,6 +76,7 @@ def build(args: argparse.Namespace) -> dict:
         "link_upd": link_upd,
         "manual": manual,
         "manual_sources": manual_sources,
+        "backlog": backlog,
     }
     setup_commands(tg, comps)
     transport = TelegramTransport(on_message=tg.handle_update)

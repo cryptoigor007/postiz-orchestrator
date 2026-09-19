@@ -177,6 +177,78 @@ class Scheduler:
 
 
 
+    def schedule_backlog(self, platform: str) -> int:
+        """Публикует остаток (неопубликованные шортсы серий) по свободным слотам."""
+        pcfg = self.cfg.platforms.get(platform)
+        if not pcfg or not pcfg.enabled:
+            return 0
+        shorts = self.db.fetchall(
+            """
+            SELECT s.id, s.video_path, s.title_text, s.description_text, s.hashtags_text
+            FROM shorts s
+            WHERE s.parent_video_id IS NOT NULL AND s.video_path IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM entity_platform_status eps
+                  WHERE eps.entity_type='short' AND eps.entity_id=s.id
+                    AND eps.platform=? AND eps.status IN ('scheduled','published','skipped'))
+            ORDER BY s.parent_video_id, s.order_index, s.id
+            """,
+            (platform,),
+        )
+        if not shorts:
+            return 0
+        slots = self._backlog_slots()
+        count = 0
+        for s in shorts:
+            for slot in slots:
+                ok, _ = self.safety.can_schedule(platform, slot, pcfg.daily_limit)
+                if not ok:
+                    continue
+                content = {
+                    "title": s["title_text"] or "",
+                    "description": s["description_text"] or "",
+                    "hashtags": s["hashtags_text"] or "",
+                }
+                post = self.publisher.publish(
+                    "short", s["id"], platform, s["video_path"], content, slot
+                )
+                if post:
+                    count += 1
+                    break
+        return count
+
+    def _backlog_slots(self, days: int = 30) -> list[datetime]:
+        """Свободные слоты: слот серии + обычные шортсы + тематические."""
+        from datetime import timedelta
+
+        from .slots import DAY_MAP, get_tz, local_to_utc, parse_time
+
+        tz = get_tz(self.cfg.timezone)
+        long_sched = self.cfg.schedules.get("long_video", {})
+        long_days = {DAY_MAP[d.lower()[:3]] for d in long_sched.get("days", ["tue", "fri"])
+                     if d.lower()[:3] in DAY_MAP}
+        long_time = long_sched.get("time", "16:00")
+        sa = self.cfg.schedules.get("shorts_standalone", {})
+        sa_days = {DAY_MAP[d.lower()[:3]] for d in sa.get("days", []) if d.lower()[:3] in DAY_MAP}
+        sa_times = sa.get("times", [])
+        th_time = self.cfg.schedules.get("shorts_thematic", {}).get("default_time", "20:30")
+
+        now = self.clock.now()
+        local_today = now.astimezone(tz).date()
+        out: list[datetime] = []
+        for i in range(days):
+            d = local_today + timedelta(days=i)
+            times = [th_time]
+            if d.weekday() in long_days:
+                times.append(long_time)
+            if d.weekday() in sa_days:
+                times.extend(sa_times)
+            for ts in times:
+                dt = local_to_utc(d, parse_time(ts), self.cfg.timezone)
+                if dt > now:
+                    out.append(dt)
+        return sorted(set(out))
+
     def _thematic_dates_for_platform(self, platform: str) -> set:
         """Local dates occupied by thematic slots for this platform."""
         from .slots import thematic_days_set

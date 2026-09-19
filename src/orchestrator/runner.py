@@ -105,7 +105,31 @@ class Runner:
         self.metrics.incr("scheduled_short", n2 + nt)
         if n or n2 or nt:
             logger.info("Scheduled long=%s standalone=%s thematic=%s", n, n2, nt)
+        self._backlog_check()
         self.metrics.tick_cycle()
+
+    def _backlog_check(self) -> None:
+        """Спрашиваем/распределяем остаток шортсов серии перед слотом серии."""
+        bl = self.comps.get("backlog")
+        if not bl:
+            return
+        for platform, pcfg in self.cfg.platforms.items():
+            if not getattr(pcfg, "enabled", False):
+                continue
+            try:
+                slot = bl.needs_question(platform)
+                if slot:
+                    bl.ask(platform, slot)
+                    continue
+                if bl.awaiting(platform):
+                    if bl.auto_default(platform):
+                        logger.info("Backlog auto-distributed on %s", platform)
+                        continue
+                    rslot = bl.should_remind(platform)
+                    if rslot:
+                        bl.mark_reminded(platform, rslot)
+            except Exception:
+                logger.exception("backlog check failed for %s", platform)
 
     def _cycle_sync(self) -> None:
         n = self.comps["status_sync"].sync()

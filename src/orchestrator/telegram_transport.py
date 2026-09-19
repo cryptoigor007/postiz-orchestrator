@@ -30,16 +30,15 @@ class TelegramTransport:
     def enabled(self) -> bool:
         return bool(self.token) and self.mode != "off"
 
-    def send_message(self, chat_id: int, text: str) -> None:
+    def send_message(self, chat_id: int, text: str, reply_markup: dict | None = None) -> None:
         if not self.token:
             logger.info("[TG-mock -> %s] %s", chat_id, text[:200])
             return
+        payload: dict = {"chat_id": chat_id, "text": text[:4000]}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         try:
-            httpx.post(
-                f"{self._base}/sendMessage",
-                json={"chat_id": chat_id, "text": text[:4000]},
-                timeout=30,
-            )
+            httpx.post(f"{self._base}/sendMessage", json=payload, timeout=30)
         except Exception:
             logger.exception("sendMessage failed")
 
@@ -95,6 +94,17 @@ class TelegramTransport:
                     self._offset = upd["update_id"] + 1
                     msg = upd.get("message") or upd.get("edited_message")
                     if not msg:
+                        cb = upd.get("callback_query")
+                        if cb:
+                            chat_id = ((cb.get("message") or {}).get("chat") or {}).get("id")
+                            data = cb.get("data") or ""
+                            if chat_id and data:
+                                self._q.put((chat_id, f"/{data}"))
+                            try:
+                                httpx.post(f"{self._base}/answerCallbackQuery",
+                                           json={"callback_query_id": cb.get("id")}, timeout=10)
+                            except Exception:
+                                pass
                         continue
                     chat_id = msg["chat"]["id"]
                     text = msg.get("text") or ""

@@ -18,7 +18,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "26"
+WEBAPP_BUILD = "27"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -367,6 +367,31 @@ class WebAppAPI:
                             (uid,))
                     return 200, {"ok": True}, "application/json"
                 return 404, {"error": "unknown manual action"}, "application/json"
+            if method == "GET" and route == "backlog":
+                bl = self.comps.get("backlog")
+                if not bl:
+                    return 500, {"error": "backlog unavailable"}, "application/json"
+                out = []
+                for p, pcfg in self.cfg.platforms.items():
+                    if not getattr(pcfg, "enabled", False):
+                        continue
+                    st = bl._state(p) or {}
+                    out.append({
+                        "platform": p,
+                        "count": bl.has_backlog(p),
+                        "awaiting": bool(st.get("pending_series_end_question")),
+                        "slot": st.get("pending_series_end_at"),
+                        "tail_mode": bool(st.get("series_tail_mode")),
+                    })
+                return 200, {"platforms": out}, "application/json"
+            if method == "POST" and route == "backlog/answer":
+                bl = self.comps.get("backlog")
+                p = (data.get("platform") or "").strip()
+                ans = (data.get("answer") or "").strip()
+                if not bl or p not in self.cfg.platforms or ans not in ("distribute", "wait", "skip"):
+                    return 400, {"error": "platform/answer invalid"}, "application/json"
+                n = bl.resolve(p, ans)
+                return 200, {"ok": True, "scheduled": n}, "application/json"
             if method == "POST" and route == "sync":
                 ss = self.comps.get("status_sync")
                 n = ss.sync() if ss else 0

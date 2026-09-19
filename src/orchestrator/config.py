@@ -44,6 +44,10 @@ class TailCfg(BaseModel):
     series_end_question_cooldown_days: int = 3
     use_all_short_slots: bool = True
     pause_standalone_during_tail: bool = True
+    # backlog (неопубликованные шортсы серии)
+    ask_minutes_before: int = 60      # спросить за N минут до слота серии
+    reminder_minutes_before: int = 15 # напомнить за N минут до слота
+    default_action: str = "distribute"  # distribute | wait
 
 
 class LimitsCfg(BaseModel):

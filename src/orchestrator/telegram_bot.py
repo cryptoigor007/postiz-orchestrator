@@ -303,6 +303,42 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         )
 
 
+    def ask_backlog(self, platform: str, count: int) -> None:
+        text = (f"Серия закончилась? Не опубликовано шортсов: {count} ({platform}).\n"
+                f"Если не ответить до слота — распределю остаток автоматически.")
+        markup = {"inline_keyboard": [[
+            {"text": "Распределить остаток", "callback_data": f"backlog_distribute {platform}"},
+            {"text": "Ждать ещё", "callback_data": f"backlog_wait {platform}"},
+            {"text": "Не публиковать", "callback_data": f"backlog_skip {platform}"},
+        ]]}
+        self.broadcast_markup(text, markup)
+
+    def remind_backlog(self, platform: str, count: int) -> None:
+        text = f"⚠️ ВАЖНО: серия закончилась, остаток {count} шортсов ({platform}) не распределён. Отвечай!"
+        markup = {"inline_keyboard": [[
+            {"text": "Распределить остаток", "callback_data": f"backlog_distribute {platform}"},
+            {"text": "Ждать ещё", "callback_data": f"backlog_wait {platform}"},
+            {"text": "Не публиковать", "callback_data": f"backlog_skip {platform}"},
+        ]]}
+        self.broadcast_markup(text, markup)
+
+    def backlog_distributed(self, platform: str, n: int) -> None:
+        self.broadcast(f"Остаток распределён ({platform}): {n} шортсов поставлено в план.")
+
+    def broadcast_markup(self, text: str, reply_markup: dict) -> None:
+        targets = self.cfg.telegram.allowed_chat_ids or (
+            [self._owner_chat_id] if self._owner_chat_id else []
+        )
+        for cid in targets:
+            if not cid:
+                continue
+            if not self.is_allowed(cid):
+                continue
+            if self.transport:
+                self.transport.send_message(cid, text, reply_markup)
+            else:
+                logger.info("[TG-markup -> %s] %s", cid, text[:200])
+
     def cmd_app(chat_id: int, arg: str) -> str:
         import os
         url = os.getenv("WEBAPP_PUBLIC_URL", "").rstrip("/")
@@ -311,6 +347,31 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         # Client apps open via menu button; here we return the link
         return f"Откройте панель:\n{url}/\n\n(В BotFather: Menu Button → Web App → этот URL)"
 
+    def cmd_backlog_distribute(chat_id: int, arg: str) -> str:
+        m = components.get("backlog")
+        if not m:
+            return "Менеджер остатка недоступен"
+        p = (arg or "").strip() or next(iter(cfg.platforms), "")
+        n = m.resolve(p, "distribute")
+        return f"Остаток распределён ({p}): {n}"
+
+    def cmd_backlog_wait(chat_id: int, arg: str) -> str:
+        m = components.get("backlog")
+        p = (arg or "").strip() or next(iter(cfg.platforms), "")
+        if m:
+            m.resolve(p, "wait")
+        return f"Ждём новую серию ({p})."
+
+    def cmd_backlog_skip(chat_id: int, arg: str) -> str:
+        m = components.get("backlog")
+        p = (arg or "").strip() or next(iter(cfg.platforms), "")
+        if m:
+            m.resolve(p, "skip")
+        return f"Остаток не публикуем ({p})."
+
+    bot.register("backlog_distribute", cmd_backlog_distribute)
+    bot.register("backlog_wait", cmd_backlog_wait)
+    bot.register("backlog_skip", cmd_backlog_skip)
     bot.register("app", cmd_app)
     bot.register("status", cmd_status)
     bot.register("pause", cmd_pause)

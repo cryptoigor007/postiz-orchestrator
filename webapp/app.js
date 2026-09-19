@@ -15,6 +15,9 @@
       scan: "Сканировать", no_subfolders: "Нет подпапок", folders_to_scan: "Папки для сканирования",
       folders_none: "Папки не выбраны", browse: "Обзор папок",
       net_root: "Сеть · /mnt/video", local_root: "Локально · /",
+      backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
+      backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
+      backlog_skip: "Не публиковать", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
       calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто",
       resume: "Возобновить", pause_all: "Пауза всем", resume_all: "Возобновить все", none: "Нет",
       tail_title: "Остаток шортсов серии", tail_explain: "Шортсы уже нарезаны для серии, но ещё не опубликованы. Когда новых серий больше нет, система распределяет остаток по слотам (в слот основной серии — обычные шортсы, в 20:30 — шортсы к другим сериям), и только после этого запускается следующая серия. Перед запуском она спросит подтверждение.", enable: "Включить", disable: "Выключить",
@@ -104,6 +107,9 @@
       scan: "Scan", no_subfolders: "No subfolders", folders_to_scan: "Folders to scan",
       folders_none: "No folders selected", browse: "Browse",
       net_root: "Network · /mnt/video", local_root: "Local · /",
+      backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
+      backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
+      backlog_skip: "Do not publish", backlog_on: "distribution on", backlog_off: "distribution off",
       calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty",
       resume: "Resume", pause_all: "Pause all", resume_all: "Resume all", none: "None",
       tail_title: "Unposted series shorts", tail_explain: "Shorts already cut for the series but not published yet. When no new episodes appear, the system distributes the backlog into slots (standard shorts in the main-series slot, other series' shorts at 20:30) and only then starts the next series. It asks for confirmation first.", enable: "Enable", disable: "Disable",
@@ -254,7 +260,11 @@
       else if (v === "calendar") state.data = await api("/calendar");
       else if (v === "queue") state.data = await api("/queue");
       else if (v === "platforms") state.data = await api("/platforms");
-      else if (v === "tail") state.data = await api("/tail");
+      else if (v === "tail") {
+        const tail = await api("/tail");
+        const backlog = await api("/backlog");
+        state.data = { items: tail.items || [], backlog: backlog.platforms || [] };
+      }
       else if (v === "failed") state.data = await api("/failed");
       else if (v === "actions") state.data = await api("/status");
       else if (v === "metrics") state.data = await api("/metrics");
@@ -378,12 +388,20 @@
   }
 
   function renderTail(d) {
-    const rows = (d.items || []).map((x) => `
-      <div class="row"><div class="title">${x.platform}</div>
-        ${x.tail ? pill(t("tail_on")) : pill(t("tail_off"))}
-        <button class="btn primary" data-act="tail-on" data-p="${x.platform}">${t("enable")}</button>
-        <button class="btn secondary" data-act="tail-off" data-p="${x.platform}">${t("disable")}</button>
-      </div>`).join("");
+    const rows = (d.backlog || []).map((p) => {
+      const state = p.awaiting
+        ? pill(t("backlog_awaiting"))
+        : (p.tail_mode ? pill(t("backlog_on")) : pill(t("backlog_off")));
+      const slot = p.slot ? `<span class="mono meta">${String(p.slot).slice(0, 16).replace("T", " ")}</span>` : "";
+      return `<div class="row"><div class="title">${p.platform}</div>
+          <span class="meta">${t("backlog_unposted")}: ${p.count}</span>
+          ${state}${slot}</div>
+        <div class="form-row">
+          <button class="btn primary" data-act="backlog-answer" data-p="${p.platform}" data-a="distribute">${t("backlog_distribute")}</button>
+          <button class="btn secondary" data-act="backlog-answer" data-p="${p.platform}" data-a="wait">${t("backlog_wait")}</button>
+          <button class="btn danger" data-act="backlog-answer" data-p="${p.platform}" data-a="skip">${t("backlog_skip")}</button>
+        </div>`;
+    }).join("");
     content().innerHTML = `<div class="panel"><div class="panel-header">${t("tail_title")}</div>
       <div class="row"><span class="meta">${t("tail_explain")}</span></div>
       ${rows || `<div class="empty">${t("no_data")}</div>`}</div>`;

@@ -203,30 +203,28 @@ class HttpPostizClient:
 
     def get_post(self, post_id: str) -> PostizPost | None:
         r = self._client.get(f"{self.path_posts}/{post_id}")
-        if r.status_code == 404:
-            return None
-        if r.status_code >= 400:
-            # single-get может не поддерживаться; ищем в списке (ошибки не глотаем —
-            # иначе reconcile ложно помечает пост «missing»)
-            for p in self.list_scheduled():
-                if p.id == post_id:
-                    return p
-            return None
-        data = r.json()
-        if isinstance(data, list):
-            data = data[0] if data else {}
-        integration = data.get("integration") or {}
-        sched = _first(data, "publishDate", "scheduledFor", "scheduled_for", "date")
-        status = _first(data, "state", "status", default="unknown")
-        return PostizPost(
-            id=str(_first(data, "id", "postId") or post_id),
-            platform=_first(integration, "providerIdentifier", "name",
-                            "platform", default=""),
-            scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
-            status=str(status).lower(),
-            release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
-            content=({"text": data["content"]} if data.get("content") else None),
-        )
+        if r.status_code < 400:
+            data = r.json()
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            integration = data.get("integration") or {}
+            sched = _first(data, "publishDate", "scheduledFor", "scheduled_for", "date")
+            status = _first(data, "state", "status", default="unknown")
+            return PostizPost(
+                id=str(_first(data, "id", "postId") or post_id),
+                platform=_first(integration, "providerIdentifier", "name",
+                                "platform", default=""),
+                scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
+                status=str(status).lower(),
+                release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
+                content=({"text": data["content"]} if data.get("content") else None),
+            )
+        # этот Postiz может не поддерживать single-get (404 = нет эндпоинта) —
+        # ищем пост в списке; ошибки списка не глотаем (иначе ложный «missing»)
+        for p in self.list_scheduled():
+            if p.id == post_id:
+                return p
+        return None
 
     def list_scheduled(self, platform: str | None = None) -> list[PostizPost]:
         # API: GET /public/v1/posts?startDate=&endDate=  ->  {"posts":[...]}

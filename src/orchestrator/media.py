@@ -43,7 +43,7 @@ def maybe_compress(path: str, platform: str, cfg: AppConfig) -> str:
     dst = cache_dir / f"{key}.mp4"
     if dst.exists() and dst.stat().st_size <= limit:
         return str(dst)
-    attempts = ((26, "4M"), (30, "2.5M"), (34, "1.5M"))
+    attempts = ((21, "10M"), (25, "5M"), (29, "2.5M"))
     for crf, maxrate in attempts:
         cmd = [
             ffmpeg, "-y", "-nostdin", "-loglevel", "error",

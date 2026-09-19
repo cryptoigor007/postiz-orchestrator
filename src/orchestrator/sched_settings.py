@@ -216,3 +216,22 @@ def shorts_start_date(db: Database) -> str:
 
 def set_shorts_start_date(db: Database, value: str) -> None:
     db.set_setting(SHORTS_START_KEY, str(value or "").strip())
+
+
+def all_times(db: Database, cfg: AppConfig, platform: str) -> list[str]:
+    """Все разрешённые времена слотов платформы (HH:MM) из эффективных настроек."""
+    out: list[str] = []
+    long_eff = effective(db, cfg, platform, "long")
+    if long_eff.get("time"):
+        out.append(str(long_eff["time"]))
+    th = effective(db, cfg, platform, "thematic")
+    if th.get("time"):
+        out.append(str(th["time"]))
+    sa = effective(db, cfg, platform, "standalone")
+    for t in sa.get("times") or []:
+        out.append(str(t))
+    seen: list[str] = []
+    for t in out:
+        if t not in seen:
+            seen.append(t)
+    return seen

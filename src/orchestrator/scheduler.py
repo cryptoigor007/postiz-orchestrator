@@ -43,8 +43,44 @@ class Scheduler:
             return row["wide_path"] if pcfg.video_variant == "wide" else row["vertical_path"]
         return row.get("video_path")
 
+    def _is_canonical(self, platform: str, when) -> bool:
+        """Время поста обязано совпадать с одним из времён расписания платформы."""
+        if when is None:
+            return True
+        times = sched_settings.all_times(self.db, self.cfg, platform)
+        if not times:
+            return True
+        from .slots import get_tz
+        local = when.astimezone(get_tz(self.cfg.timezone))
+        return local.strftime("%H:%M") in times
+
+    def _next_canonical(self, platform: str, after):
+        """Ближайшее разрешённое время расписания, не раньше `after`."""
+        times = sorted(sched_settings.all_times(self.db, self.cfg, platform))
+        if not times:
+            return after
+        from .slots import get_tz, local_to_utc, parse_time
+        tz = get_tz(self.cfg.timezone)
+        local = after.astimezone(tz)
+        for offset in range(0, 8):
+            d = (local + timedelta(days=offset)).date()
+            for ts in times:
+                cand = local_to_utc(d, parse_time(ts), self.cfg.timezone)
+                if cand >= after:
+                    return cand
+        return None
+
     def _safe_publish(self, *args, **kwargs):
         """Публикация с изоляцией: сбой одного поста не ломает весь цикл."""
+        when = args[5] if len(args) > 5 else kwargs.get("scheduled_for")
+        platform = str(args[2]) if len(args) > 2 else ""
+        if when is not None and platform and not self._is_canonical(platform, when):
+            logger.warning("Отклонено: время %s не из расписания (%s)", when, platform)
+            try:
+                self.db.log(args[0], args[1], platform, "non_canonical_slot", str(when))
+            except Exception:
+                pass
+            return None
         try:
             return self.publisher.publish(*args, **kwargs)
         except Exception as e:
@@ -360,7 +396,10 @@ class Scheduler:
                     description=item["description_text"] or "",
                     link=r["url"] or "",
                 ).strip()
-                when = self.clock.now() + timedelta(minutes=delay)
+                when = self._next_canonical(
+                    "telegram", self.clock.now() + timedelta(minutes=delay))
+                if when is None:
+                    continue
                 ok, reason = self.safety.can_schedule("telegram", when, limit)
                 if not ok:
                     logger.info("telegram link skip (%s/%s): %s", etype, r["id"], reason)

@@ -228,3 +228,24 @@ def test_thematic_short_exact_time_and_busy_slot_skipped(env):
     assert sched.schedule_thematic_shorts(lv["id"], "telegram") == 0
     assert len(db.fetchall(
         "SELECT 1 FROM entity_platform_status WHERE entity_type='short'")) == 1
+
+
+def test_non_canonical_slot_rejected(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, vertical_path, created_at) "
+        "VALUES ('videomaker', '/nc', 'NC', '/nc/v.mp4', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    # 12:07 — не из расписания (разрешены 16:00, 20:30, 12:00, 18:00)
+    weird = datetime(2026, 3, 11, 12, 7, tzinfo=UTC)
+    assert sched._safe_publish("long_video", lv["id"], "telegram", "/nc/v.mp4",
+                               {"title": "x"}, weird) is None
+    # 09:00 UTC = 12:00 МСК — это канонический слот (standalone)
+    assert sched._is_canonical("telegram", datetime(2026, 3, 11, 9, 0, tzinfo=UTC)) is True
+    # ссылки в Telegram ставятся только в канонические слоты
+    nxt = sched._next_canonical("telegram", datetime(2026, 3, 11, 12, 7, tzinfo=UTC))
+    from orchestrator.slots import get_tz
+    assert nxt.astimezone(get_tz(cfg.timezone)).strftime("%H:%M") in ("16:00", "18:00", "20:30")

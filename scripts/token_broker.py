@@ -22,8 +22,14 @@ SECRET = os.getenv("BROKER_SECRET", "")
 BIND = os.getenv("BROKER_BIND", "0.0.0.0")
 PORT = int(os.getenv("BROKER_PORT", "9099"))
 ALLOWED = {p.strip() for p in os.getenv("BROKER_PLATFORMS", "youtube").split(",") if p.strip()}
+ALLOW_IPS = {x.strip() for x in os.getenv("BROKER_ALLOW_IPS", "").split(",") if x.strip()}
 DB = os.getenv("POSTIZ_DB_CONTAINER", "postiz-db")
 APP = os.getenv("POSTIZ_CONTAINER", "postiz")
+
+
+def ip_allowed(ip: str, allowed: set[str] | None = None) -> bool:
+    allowed = ALLOW_IPS if allowed is None else allowed
+    return (not allowed) or ip in allowed or ip in ("127.0.0.1", "::1")
 
 
 def _run(cmd: list[str]) -> str:
@@ -76,6 +82,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802
         u = urlparse(self.path)
+        if not ip_allowed(self.client_address[0]):
+            return self._json(403, {"error": "forbidden"})
         if not SECRET or self.headers.get("X-Broker-Secret") != SECRET:
             return self._json(401, {"error": "unauthorized"})
         if u.path != "/health" and u.path != "/token":

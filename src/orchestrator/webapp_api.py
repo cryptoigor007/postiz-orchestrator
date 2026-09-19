@@ -6,7 +6,8 @@ import logging
 import os
 import re
 import sqlite3
-from collections import defaultdict
+import time
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
@@ -49,6 +50,7 @@ class WebAppAPI:
         self.cfg = comps["cfg"]
         self.db = comps["db"]
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        self._rl: dict[str, deque] = {}
 
     def _auth(self, headers: dict[str, str], query: dict[str, str] | None = None) -> dict[str, Any] | None:
         access_key = os.getenv("WEBAPP_ACCESS_KEY", "").strip()
@@ -129,6 +131,8 @@ class WebAppAPI:
         auth = self._auth(headers, query)
         if not auth:
             return 401, {"error": "unauthorized"}, "application/json"
+        if self._rate_limited(headers):
+            return 429, {"error": "too many requests"}, "application/json"
 
         route = qpath[len("/webapp/api/") :].strip("/")
         data = {}
@@ -384,6 +388,27 @@ class WebAppAPI:
             logger.debug("live metrics failed", exc_info=True)
         data["live"] = live
         return data
+
+    def _rate_limited(self, headers: dict[str, str]) -> bool:
+        try:
+            limit = int(os.getenv("WEBAPP_RATE_LIMIT", "120"))
+        except ValueError:
+            limit = 120
+        if limit <= 0:
+            return False
+        ident = (
+            headers.get("X-Webapp-Key") or headers.get("x-webapp-key")
+            or headers.get("X-Telegram-Init-Data") or headers.get("x-telegram-init-data")
+            or headers.get("X-Forwarded-For") or "local"
+        )
+        now = time.monotonic()
+        dq = self._rl.setdefault(ident, deque())
+        while dq and now - dq[0] > 60:
+            dq.popleft()
+        if len(dq) >= limit:
+            return True
+        dq.append(now)
+        return False
 
     def _browse_roots(self) -> list[Path]:
         raw = os.getenv("WEBAPP_BROWSE_ROOT", "/mnt/video")

@@ -124,6 +124,7 @@ class AppConfig(BaseModel):
     status_sync_interval_sec: int = 180
     confirm_published_interval_sec: int = 120
     file_stability_cycles: int = 2
+    watch_max_depth: int = 5
 
     @field_validator("platforms", mode="before")
     @classmethod

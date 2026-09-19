@@ -11,7 +11,7 @@
       title_failed: "Ошибки", title_actions: "Действия", title_metrics: "Метрики", title_help: "Справка",
       loading: "Загрузка…", error_prefix: "Ошибка", refresh: "Обновить", no_data: "Нет данных",
       platforms: "Платформы", no_platforms: "Нет платформ", limit: "лимит",
-      remove: "Убрать", open: "Открыть", up: "↑ Вверх", add_folder: "Добавить эту папку",
+      remove: "Убрать", open: "Открыть", up: "↑ Вверх", add_folder: "+ Добавить эту папку",
       scan: "Сканировать", no_subfolders: "Нет подпапок", folders_to_scan: "Папки для сканирования",
       folders_none: "Папки не выбраны", browse: "Обзор папок",
       net_root: "Сеть · /mnt/video", local_root: "Локально · /",
@@ -103,7 +103,7 @@
       title_failed: "Errors", title_actions: "Actions", title_metrics: "Metrics", title_help: "Help",
       loading: "Loading…", error_prefix: "Error", refresh: "Refresh", no_data: "No data",
       platforms: "Platforms", no_platforms: "No platforms", limit: "limit",
-      remove: "Remove", open: "Open", up: "↑ Up", add_folder: "Add this folder",
+      remove: "Remove", open: "Open", up: "↑ Up", add_folder: "+ Add this folder",
       scan: "Scan", no_subfolders: "No subfolders", folders_to_scan: "Folders to scan",
       folders_none: "No folders selected", browse: "Browse",
       net_root: "Network · /mnt/video", local_root: "Local · /",
@@ -306,7 +306,7 @@
         <button class="btn danger" data-act="folder-remove" data-p="${r}">${t("remove")}</button></div>`)
       .join("");
     const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
-    const rootLabel = (r) => (r === "/mnt/video" ? t("net_root") : r === "/" ? t("local_root") : r);
+    const rootLabel = (r) => r;
     const rsel = (b.roots || []).length > 1
       ? `<div class="form-row">${(b.roots || []).map((r) =>
           `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}">${rootLabel(r)}</button>`).join("")}</div>`

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import unicodedata
 from pathlib import Path
 
 from .clock import Clock
@@ -11,6 +12,14 @@ from .db import Database
 logger = logging.getLogger(__name__)
 
 WATCH_ROOTS_KEY = "watch_roots"
+
+JUNK_DIR_NAMES = {
+    "$RECYCLE.BIN",
+    "System Volume Information",
+    "__pycache__",
+}
+JUNK_SUBSTR = ("shorts_overflow",)
+META_MARKERS = ("_titles.txt", "_title.txt", "_hashtags.txt", "_hooks.txt")
 
 
 class Watcher:
@@ -35,20 +44,7 @@ class Watcher:
                 logger.warning("Invalid %s setting", WATCH_ROOTS_KEY)
         return list(self.roots)
 
-    def _platform_map(self, base: Path, platforms: list[str]) -> dict[str, str]:
-        """Карта платформ -> файл: base/<platform>/*.mp4 или base/<platform>.mp4."""
-        out: dict[str, str] = {}
-        for p in platforms:
-            d = base / p
-            if d.is_dir():
-                f = next((x for x in sorted(d.glob("*.mp4"))), None)
-                if f:
-                    out[p] = str(f.resolve())
-                continue
-            f = base / f"{p}.mp4"
-            if f.is_file():
-                out[p] = str(f.resolve())
-        return out
+    # ---------- helpers ----------
 
     def _read_text(self, path: Path) -> str:
         try:
@@ -66,6 +62,62 @@ class Watcher:
                     out.setdefault(k, v)
         return out
 
+    def _clean_name(self, name: str) -> str:
+        cleaned = "".join(ch for ch in name if unicodedata.category(ch) != "Co").strip()
+        return cleaned or name
+
+    def _first_field(self, text: str, field: str) -> str:
+        prefix = field.lower() + ":"
+        for line in text.splitlines():
+            s = line.strip()
+            if s.lower().startswith(prefix):
+                return s.split(":", 1)[1].strip()
+        return ""
+
+    def _first_hook(self, text: str) -> str:
+        for line in text.splitlines():
+            s = line.strip()
+            if not s or s.startswith("---") or s.lower().startswith("вариант"):
+                continue
+            return s
+        return ""
+
+    def _is_junk_dir(self, name: str) -> bool:
+        if name.startswith(".") or name.startswith("_"):
+            return True
+        if name in JUNK_DIR_NAMES or name.endswith(".app"):
+            return True
+        return any(s in name for s in JUNK_SUBSTR)
+
+    def _mp4s(self, d: Path) -> list[Path]:
+        if not d.is_dir():
+            return []
+        return [p for p in sorted(d.glob("*.mp4")) if not p.name.startswith("._")]
+
+    def _first_mp4(self, d: Path) -> Path | None:
+        files = self._mp4s(d)
+        if not files:
+            return None
+        for p in files:
+            if "final" in p.stem:
+                return p
+        return files[0]
+
+    def _platform_map(self, base: Path, platforms: list[str]) -> dict[str, str]:
+        """Карта платформ -> файл: base/<platform>/*.mp4 или base/<platform>.mp4."""
+        out: dict[str, str] = {}
+        for p in platforms:
+            d = base / p
+            if d.is_dir():
+                f = self._first_mp4(d)
+                if f:
+                    out[p] = str(f.resolve())
+                continue
+            f = base / f"{p}.mp4"
+            if f.is_file():
+                out[p] = str(f.resolve())
+        return out
+
     def _is_fresh_enough(self, path: Path) -> bool:
         if self.max_age_days <= 0:
             return True
@@ -77,7 +129,6 @@ class Watcher:
             return False
 
     def _is_stable(self, path: Path) -> bool:
-
         try:
             size = path.stat().st_size
         except OSError:
@@ -91,38 +142,54 @@ class Watcher:
         self._size_cache[key] = (size, 1)
         return False
 
+    # ---------- scan ----------
+
     def scan(self) -> dict[str, int]:
         stats = {"long": 0, "shorts": 0, "standalone": 0}
+        max_depth = getattr(self.cfg, "watch_max_depth", 5)
         for root in self.effective_roots():
             if not root.exists():
                 continue
-            # shortsmaker root: flat or dated folders with mp4
             if root.name.lower().startswith("shortsmaker") or (root / ".shortsmaker").exists():
                 stats["standalone"] += self._scan_standalone_root(root)
                 continue
-            # root сам может быть серией (vertical/wide внутри)
-            if (root / "vertical").is_dir() or (root / "wide").is_dir():
-                stats["long"] += self._scan_long(root)
-                stats["shorts"] += self._scan_shorts(root)
-            for series in root.iterdir():
-                if not series.is_dir() or series.name.startswith("."):
-                    continue
-                if "shorts_overflow" in series.name:
-                    continue
-                stats["long"] += self._scan_long(series)
-                stats["shorts"] += self._scan_shorts(series)
+            self._walk(root, 0, max_depth, stats)
         return stats
+
+    def _walk(self, d: Path, depth: int, max_depth: int, stats: dict[str, int]) -> None:
+        if depth > max_depth:
+            return
+        if self._is_episode(d):
+            stats["long"] += self._scan_long(d)
+            stats["shorts"] += self._scan_shorts(d)
+            return
+        if self._register_shorts_maker_short(d):
+            stats["standalone"] += 1
+            return
+        loose = self._register_loose_shorts(d)
+        if loose:
+            stats["standalone"] += loose
+            return
+        for child in sorted(d.iterdir()):
+            if not child.is_dir() or self._is_junk_dir(child.name):
+                continue
+            self._walk(child, depth + 1, max_depth, stats)
+
+    def _is_episode(self, d: Path) -> bool:
+        if (d / "vertical").is_dir() or (d / "wide").is_dir():
+            return True
+        platforms = list(self.cfg.platforms.keys())
+        return bool(self._platform_map(d, platforms))
 
     def _scan_long(self, series: Path) -> int:
         platforms = list(self.cfg.platforms.keys())
         pmap = self._platform_map(series, platforms)
-        wide = series / "wide" / "final_16x9.mp4"
-        vert = series / "vertical" / "final_9x16.mp4"
-        if not wide.exists() and not vert.exists() and not pmap:
+        wide = self._first_mp4(series / "wide")
+        vert = self._first_mp4(series / "vertical")
+        if not wide and not vert and not pmap:
             return 0
-        # stability on existing files
         for p in (wide, vert):
-            if p.exists() and not self._is_stable(p):
+            if p and not self._is_stable(p):
                 return 0
 
         folder = str(series.resolve())
@@ -132,7 +199,7 @@ class Watcher:
         if existing:
             return 0
 
-        title = series.name
+        title = self._clean_name(series.name)
         meta_kv = self._meta_kv(series / "info_metadata.txt")
         title_text = meta_kv.get("package_title") or self._read_text(
             series / "info_metadata.txt"
@@ -157,8 +224,8 @@ class Watcher:
             """,
             (
                 folder, title,
-                str(wide) if wide.exists() else None,
-                str(vert) if vert.exists() else None,
+                str(wide) if wide else None,
+                str(vert) if vert else None,
                 title_text, desc_text, tags_text,
                 (json.dumps(pmap) if pmap else None), now,
             ),
@@ -178,10 +245,10 @@ class Watcher:
         count = 0
         platforms = list(self.cfg.platforms.keys())
         for i, short_dir in enumerate(sorted(shorts_dir.iterdir())):
-            if not short_dir.is_dir():
+            if not short_dir.is_dir() or self._is_junk_dir(short_dir.name):
                 continue
             pmap = self._platform_map(short_dir, platforms)
-            generic = [f for f in sorted(short_dir.glob("*.mp4")) if f.stem not in platforms]
+            generic = [f for f in self._mp4s(short_dir) if f.stem not in platforms]
             if generic:
                 video = generic[0]
             elif pmap:
@@ -194,7 +261,7 @@ class Watcher:
             if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (folder,)):
                 continue
             name = short_dir.name
-            title_text = self._read_text(short_dir / f"{name}_title.txt") or name
+            title_text = self._read_text(short_dir / f"{name}_title.txt") or self._clean_name(name)
             desc_text = self._read_text(short_dir / f"{name}_description.txt")
             tags_text = self._read_text(short_dir / f"{name}_hashtags.txt")
             hook_text = self._read_text(short_dir / f"{name}_hook.txt")
@@ -222,21 +289,115 @@ class Watcher:
             count += 1
         return count
 
+    def _register_shorts_maker_short(self, d: Path) -> bool:
+        """Папка одного шортса Shorts Maker: *_final.mp4 + мета-файлы рядом."""
+        files = self._mp4s(d)
+        if not files:
+            return False
+        final = next((p for p in files if "_final" in p.stem), None)
+        if not final:
+            return False
+        metas = [p for p in d.iterdir() if p.is_file() and p.name.endswith(META_MARKERS)]
+        if not metas:
+            return False
+        folder = str(d.resolve())
+        if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (folder,)):
+            return True
+        if not self._is_stable(final) or not self._is_fresh_enough(final):
+            return True
+        prefix = final.stem[: -len("_final")] if final.stem.endswith("_final") else final.stem
+        titles_text = self._read_text(d / f"{prefix}_titles.txt") or self._read_text(
+            d / f"{prefix}_title.txt"
+        )
+        hooks_text = self._read_text(d / f"{prefix}_hooks.txt")
+        tags_text = self._read_text(d / f"{prefix}_hashtags.txt")
+        title_text = self._first_field(titles_text, "Заголовок") or self._clean_name(d.name)
+        desc_text = self._first_field(titles_text, "Описание")
+        hook_text = self._first_hook(hooks_text)
+        tags_line = tags_text.splitlines()[0].strip() if tags_text else ""
+        cover = next(d.glob("*_final_cover.*"), None) or next(d.glob("*cover*"), None)
+        now = self.clock.now().isoformat()
+        self.db.execute(
+            """
+            INSERT INTO shorts
+                (source, parent_video_id, folder_path, order_index,
+                 video_path, cover_path, title_text, description_text,
+                 hashtags_text, hook_text, upload_text, platform_paths, created_at)
+            VALUES ('shortsmaker', NULL, ?, 0, ?, ?, ?, ?, ?, ?, '', NULL, ?)
+            """,
+            (
+                folder, str(final), str(cover) if cover else None,
+                title_text, desc_text, tags_line, hook_text, now,
+            ),
+        )
+        logger.info("Registered Shorts Maker clip: %s", folder)
+        return True
+
+    def _register_loose_shorts(self, d: Path) -> int:
+        """Отдельные mp4 с мета-файлами рядом (stem совпадает с префиксом меты)."""
+        files = self._mp4s(d)
+        if not files:
+            return 0
+        metas = [p.name for p in d.iterdir() if p.is_file() and p.name.endswith(META_MARKERS)]
+        if not metas:
+            return 0
+        count = 0
+        for video in files:
+            stem = video.stem
+            mine = [m for m in metas if m.startswith(stem)]
+            if not mine:
+                continue
+            if not self._is_stable(video) or not self._is_fresh_enough(video):
+                continue
+            key = f"{d.resolve()}::{video.name}"
+            if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (key,)):
+                continue
+            def pick(suffix: str, mine: tuple[str, ...] = tuple(mine)) -> str:
+                for m in mine:
+                    if m.endswith(suffix):
+                        return self._read_text(d / m)
+                return ""
+            titles_text = pick("_titles.txt") or pick("_title.txt")
+            title_text = (
+                self._first_field(titles_text, "Заголовок")
+                or pick("_title.txt")
+                or self._clean_name(stem)
+            )
+            desc_text = self._first_field(titles_text, "Описание")
+            hook_text = self._first_hook(pick("_hooks.txt"))
+            tags = pick("_hashtags.txt").splitlines()
+            cover = next(d.glob(f"{stem}*cover*"), None)
+            now = self.clock.now().isoformat()
+            self.db.execute(
+                """
+                INSERT INTO shorts
+                    (source, parent_video_id, folder_path, order_index,
+                     video_path, cover_path, title_text, description_text,
+                     hashtags_text, hook_text, upload_text, platform_paths, created_at)
+                VALUES ('shortsmaker', NULL, ?, 0, ?, ?, ?, ?, ?, ?, '', NULL, ?)
+                """,
+                (
+                    key, str(video), str(cover) if cover else None,
+                    title_text, desc_text, tags[0].strip() if tags else "", hook_text, now,
+                ),
+            )
+            count += 1
+        return count
+
     def _scan_standalone_root(self, root: Path) -> int:
-        """ShortsMaker: any subfolder with *.mp4, or loose mp4 files."""
+        """ShortsMaker root (маркер .shortsmaker): any subfolder with *.mp4, or loose mp4 files."""
         count = 0
         candidates = []
         for p in root.rglob("*.mp4"):
-            if "overflow" in str(p):
+            if "overflow" in str(p) or p.name.startswith("._"):
                 continue
             candidates.append(p)
         for video in candidates:
             if not self._is_stable(video) or not self._is_fresh_enough(video):
                 continue
-            folder = str(video.parent.resolve())
-            if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (folder,)):
+            key = f"{video.parent.resolve()}::{video.name}"
+            if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (key,)):
                 continue
-            # skip if looks like videomaker short under series/shorts/
             if video.parent.name.startswith("short_") and (video.parent.parent.name == "shorts"):
                 continue
             now = self.clock.now().isoformat()
@@ -247,7 +408,7 @@ class Watcher:
                      video_path, title_text, description_text, hashtags_text, created_at)
                 VALUES ('shortsmaker', NULL, ?, 0, ?, ?, '', '', ?)
                 """,
-                (folder, str(video), video.stem, now),
+                (key, str(video), self._clean_name(video.stem), now),
             )
             count += 1
             logger.info("Registered standalone short: %s", video)

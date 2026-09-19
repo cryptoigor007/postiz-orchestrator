@@ -91,3 +91,72 @@ def test_watcher_root_can_be_series(env):
     assert lv is not None
     shorts = db.fetchall("SELECT * FROM shorts")
     assert len(shorts) >= 1
+
+
+def test_shorts_maker_layout(tmp_path):
+    db = Database(tmp_path / "s.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    root = tmp_path / "content"
+    d = root / "шортс" / "Ш 19 деньги"
+    d.mkdir(parents=True)
+    (d / "Ш 19 деньги_final.mp4").write_bytes(b"v" * 200)
+    (d / "Ш 19 деньги_titles.txt").write_text(
+        "--- КЛИП #1 ---\nЗаголовок: Что с тобой сделают деньги?\nОписание: Деньги раскрывают суть.",
+        encoding="utf-8",
+    )
+    (d / "Ш 19 деньги_hooks.txt").write_text(
+        "--- ХУК #1 (0.2с) ---\nДеньги меняют людей или нет?\n  Вариант 1: x", encoding="utf-8"
+    )
+    (d / "Ш 19 деньги_hashtags.txt").write_text("#деньги #психология", encoding="utf-8")
+    (d / "Ш 19 деньги_final_cover.jpg").write_bytes(b"jpg")
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    s = db.fetchone("SELECT * FROM shorts")
+    assert s is not None
+    assert s["title_text"] == "Что с тобой сделают деньги?"
+    assert s["description_text"] == "Деньги раскрывают суть."
+    assert s["hashtags_text"] == "#деньги #психология"
+    assert s["hook_text"] == "Деньги меняют людей или нет?"
+    assert s["cover_path"].endswith("_final_cover.jpg")
+    assert s["source"] == "shortsmaker"
+
+
+def test_junk_and_no_video_skipped(tmp_path):
+    db = Database(tmp_path / "j.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    root = tmp_path / "content"
+    tmp = root / "_tmp"
+    tmp.mkdir(parents=True)
+    (tmp / "final_16x9.mp4").write_bytes(b"x" * 100)
+    (root / ".Spotlight-V100").mkdir()
+    (root / "$RECYCLE.BIN").mkdir()
+    (root / "пустая_серия" / "vertical").mkdir(parents=True)  # нет видео
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    assert db.fetchone("SELECT * FROM long_videos") is None
+    assert db.fetchone("SELECT * FROM shorts") is None
+
+
+def test_platform_dirs_platform_paths(tmp_path):
+    db = Database(tmp_path / "p.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    series = tmp_path / "series" / "ep1"
+    (series / "youtube").mkdir(parents=True)
+    (series / "telegram").mkdir(parents=True)
+    (series / "youtube" / "final.mp4").write_bytes(b"y" * 150)
+    (series / "telegram" / "final.mp4").write_bytes(b"t" * 150)
+    (series / "info_metadata.txt").write_text("package_title: Заголовок", encoding="utf-8")
+    w = Watcher(db, cfg, clock, [str(series.parent)])
+    for _ in range(4):
+        w.scan()
+    lv = db.fetchone("SELECT * FROM long_videos")
+    assert lv is not None
+    import json as _json
+    pmap = _json.loads(lv["platform_paths"])
+    assert set(pmap) == {"youtube", "telegram"}
+    assert pmap["youtube"].endswith("final.mp4")

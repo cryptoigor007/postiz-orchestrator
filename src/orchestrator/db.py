@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS long_videos (
     title_text TEXT,
     description_text TEXT,
     hashtags_text TEXT,
+    platform_paths TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS shorts (
     hook_text TEXT,
     upload_text TEXT,
     meta_text TEXT,
+    platform_paths TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -134,7 +136,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_confirmed
     WHERE match_status = 'confirmed';
 """
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 
@@ -174,6 +176,15 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_shorts_parent
                     ON shorts(parent_video_id);
             """)
+        if current < 10:
+            for stmt in (
+                "ALTER TABLE long_videos ADD COLUMN platform_paths TEXT",
+                "ALTER TABLE shorts ADD COLUMN platform_paths TEXT",
+            ):
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    pass
         if current < SCHEMA_VERSION or current == 0:
             conn.execute(
                 "INSERT INTO system_state (key, value, updated_at) VALUES ('schema_version', ?, ?) "

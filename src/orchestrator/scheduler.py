@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 
@@ -27,6 +28,18 @@ class Scheduler:
         self.publisher = publisher
         self.safety = safety
         self.clock = clock
+
+    def _pick_path(self, row, platform: str, pcfg=None):
+        """Путь под платформу (platform_paths) или общий wide/vertical/video."""
+        try:
+            pm = json.loads(row.get("platform_paths") or "{}")
+            if platform in pm and pm[platform]:
+                return pm[platform]
+        except Exception:
+            pass
+        if pcfg is not None:
+            return row["wide_path"] if pcfg.video_variant == "wide" else row["vertical_path"]
+        return row.get("video_path")
 
     def _safe_publish(self, *args, **kwargs):
         """Публикация с изоляцией: сбой одного поста не ломает весь цикл."""
@@ -69,7 +82,7 @@ class Scheduler:
             return 0
 
         videos = self.db.fetchall(
-            "SELECT id, wide_path, vertical_path, title_text, description_text, hashtags_text "
+            "SELECT id, wide_path, vertical_path, platform_paths, title_text, description_text, hashtags_text "
             "FROM long_videos ORDER BY created_at"
         )
         count = 0
@@ -85,7 +98,7 @@ class Scheduler:
                     (video["id"], platform))
                 if exists:
                     continue
-                path = video["wide_path"] if pcfg.video_variant == "wide" else video["vertical_path"]
+                path = self._pick_path(video, platform, pcfg)
                 if not path:
                     continue
                 for slot in future_slots:
@@ -187,7 +200,7 @@ class Scheduler:
                 "description": desc,
                 "hashtags": short["hashtags_text"] or "",
             }
-            path = short["video_path"]
+            path = self._pick_path(short, platform) or short["video_path"]
             if not path:
                 continue
             # adjust slot if needed for safety
@@ -210,7 +223,7 @@ class Scheduler:
             return 0
         shorts = self.db.fetchall(
             """
-            SELECT s.id, s.video_path, s.title_text, s.description_text, s.hashtags_text
+            SELECT s.id, s.video_path, s.platform_paths, s.title_text, s.description_text, s.hashtags_text
             FROM shorts s
             WHERE s.parent_video_id IS NOT NULL AND s.video_path IS NOT NULL
               AND NOT EXISTS (
@@ -236,7 +249,8 @@ class Scheduler:
                     "hashtags": s["hashtags_text"] or "",
                 }
                 post = self._safe_publish(
-                    "short", s["id"], platform, s["video_path"], content, slot
+                    "short", s["id"], platform,
+                    self._pick_path(s, platform) or s["video_path"], content, slot
                 )
                 if post:
                     count += 1
@@ -328,7 +342,7 @@ class Scheduler:
 
         ready = self.db.fetchall(
             """
-            SELECT s.id, s.video_path, s.title_text, s.description_text, s.hashtags_text
+            SELECT s.id, s.video_path, s.platform_paths, s.title_text, s.description_text, s.hashtags_text
             FROM shorts s
             WHERE s.source = 'shortsmaker'
               AND s.parent_video_id IS NULL
@@ -376,7 +390,8 @@ class Scheduler:
                                 }
                                 post = self._safe_publish(
                                     "short", short["id"], platform,
-                                    short["video_path"], content, candidate,
+                                    self._pick_path(short, platform) or short["video_path"],
+                                    content, candidate,
                                 )
                                 if post:
                                     count += 1

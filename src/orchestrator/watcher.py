@@ -35,6 +35,21 @@ class Watcher:
                 logger.warning("Invalid %s setting", WATCH_ROOTS_KEY)
         return list(self.roots)
 
+    def _platform_map(self, base: Path, platforms: list[str]) -> dict[str, str]:
+        """Карта платформ -> файл: base/<platform>/*.mp4 или base/<platform>.mp4."""
+        out: dict[str, str] = {}
+        for p in platforms:
+            d = base / p
+            if d.is_dir():
+                f = next((x for x in sorted(d.glob("*.mp4"))), None)
+                if f:
+                    out[p] = str(f.resolve())
+                continue
+            f = base / f"{p}.mp4"
+            if f.is_file():
+                out[p] = str(f.resolve())
+        return out
+
     def _is_fresh_enough(self, path: Path) -> bool:
         if self.max_age_days <= 0:
             return True
@@ -79,9 +94,11 @@ class Watcher:
         return stats
 
     def _scan_long(self, series: Path) -> int:
+        platforms = list(self.cfg.platforms.keys())
+        pmap = self._platform_map(series, platforms)
         wide = series / "wide" / "final_16x9.mp4"
         vert = series / "vertical" / "final_9x16.mp4"
-        if not wide.exists() and not vert.exists():
+        if not wide.exists() and not vert.exists() and not pmap:
             return 0
         # stability on existing files
         for p in (wide, vert):
@@ -107,14 +124,15 @@ class Watcher:
             """
             INSERT INTO long_videos
                 (source, folder_path, title, wide_path, vertical_path,
-                 title_text, description_text, hashtags_text, created_at)
-            VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?)
+                 title_text, description_text, hashtags_text, platform_paths, created_at)
+            VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 folder, title,
                 str(wide) if wide.exists() else None,
                 str(vert) if vert.exists() else None,
-                title_text, desc, tags, now,
+                title_text, desc, tags,
+                (json.dumps(pmap) if pmap else None), now,
             ),
         )
         logger.info("Registered long video: %s", folder)
@@ -130,10 +148,18 @@ class Watcher:
         )
         parent_id = parent["id"] if parent else None
         count = 0
+        platforms = list(self.cfg.platforms.keys())
         for i, short_dir in enumerate(sorted(shorts_dir.iterdir())):
             if not short_dir.is_dir():
                 continue
-            video = next(short_dir.glob("*.mp4"), None)
+            pmap = self._platform_map(short_dir, platforms)
+            generic = [f for f in sorted(short_dir.glob("*.mp4")) if f.stem not in platforms]
+            if generic:
+                video = generic[0]
+            elif pmap:
+                video = Path(next(iter(pmap.values())))
+            else:
+                video = None
             if not video or not self._is_stable(video):
                 continue
             folder = str(short_dir.resolve())
@@ -146,13 +172,14 @@ class Watcher:
                 INSERT INTO shorts
                     (source, parent_video_id, folder_path, order_index,
                      video_path, cover_path, title_text, description_text,
-                     hashtags_text, created_at)
-                VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     hashtags_text, platform_paths, created_at)
+                VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     parent_id, folder, i,
                     str(video), str(cover) if cover else None,
-                    short_dir.name, "", "", now,
+                    short_dir.name, "", "",
+                    (json.dumps(pmap) if pmap else None), now,
                 ),
             )
             count += 1

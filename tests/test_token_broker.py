@@ -40,3 +40,24 @@ def test_token_broker_error_message(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     with pytest.raises(RuntimeError, match="token broker"):
         TokenBrokerClient("http://x:9099", "s").get("youtube")
+
+
+def test_token_broker_passes_integration_id():
+    calls = []
+    def http(method, url, params, headers):
+        calls.append(params)
+        return {"token": "T"}
+    c = TokenBrokerClient("http://b", "s", http=http)
+    c.get("youtube", "INT1")
+    assert calls[0] == {"platform": "youtube", "id": "INT1"}
+    c.get("youtube")
+    assert calls[1] == {"platform": "youtube"}
+
+
+def test_broker_sql_has_channel_filter():
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import token_broker as tb
+    assert "\"id\"='INT1'" in tb.build_token_sql("youtube", "INT1")
+    assert "\"id\"=" not in tb.build_token_sql("youtube", None)
+    assert "\"id\"=" not in tb.build_token_sql("youtube", "bad';drop")

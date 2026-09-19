@@ -34,7 +34,9 @@ class TokenBrokerClient:
         self.secret = secret
         self._http = http or _urllib_http
 
-    def get(self, platform: str) -> dict[str, Any]:
-        return self._http("GET", self.url + "/token",
-                          {"platform": platform},
+    def get(self, platform: str, integration_id: str | None = None) -> dict[str, Any]:
+        params = {"platform": platform}
+        if integration_id:
+            params["id"] = integration_id
+        return self._http("GET", self.url + "/token", params,
                           {"X-Broker-Secret": self.secret})

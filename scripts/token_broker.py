@@ -41,14 +41,21 @@ def _run(cmd: list[str]) -> str:
         return ""
 
 
-def token_for(platform: str) -> dict | None:
-    if platform not in ALLOWED:
-        return None
+def build_token_sql(platform: str, integration_id: str | None = None) -> str:
+    import re as _re
     sql = (
         "SELECT token, \"refreshToken\", \"tokenExpiration\" FROM \"Integration\" "
         f"WHERE \"providerIdentifier\"='{platform}' AND \"deletedAt\" IS NULL "
-        "ORDER BY \"updatedAt\" DESC LIMIT 1"
     )
+    if integration_id and _re.fullmatch(r"[A-Za-z0-9_-]+", integration_id):
+        sql += f"AND \"id\"='{integration_id}' "
+    return sql + "ORDER BY \"updatedAt\" DESC LIMIT 1"
+
+
+def token_for(platform: str, integration_id: str | None = None) -> dict | None:
+    if platform not in ALLOWED:
+        return None
+    sql = build_token_sql(platform, integration_id)
     out = _run(["docker", "exec", DB, "psql", "-U", "postiz", "-d", "postiz",
                 "-t", "-A", "-F", "\t", "-c", sql]).strip()
     if not out:
@@ -92,7 +99,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/health":
             return self._json(200, {"ok": True})
         platform = (parse_qs(u.query).get("platform") or [""])[0]
-        data = token_for(platform)
+        integration_id = (parse_qs(u.query).get("id") or [""])[0]
+        data = token_for(platform, integration_id)
         if not data:
             return self._json(404, {"error": f"no token for {platform}"})
         return self._json(200, data)

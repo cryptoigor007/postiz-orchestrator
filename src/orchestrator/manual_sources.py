@@ -24,8 +24,9 @@ def build_manual_sources(cfg: Any, postiz: Any, env: dict) -> dict[str, Any]:
         if engine == "postiz":
             out[platform] = PostizEngine(postiz)
         elif engine == "direct" and platform == "youtube" and broker is not None:
+            iid = getattr(pcfg, "integration_id", "") or ""
             out[platform] = YouTubeEngine(
-                token_provider=lambda p=platform, b=broker: b.get(p).get("token", "")
+                token_provider=lambda p=platform, b=broker, i=iid: b.get(p, i).get("token", "")
             )
         elif engine == "n8n" and n8n_url:
             out[platform] = N8nEngine(n8n_url, env.get("N8N_TOKEN", ""))

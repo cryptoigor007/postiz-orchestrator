@@ -95,15 +95,45 @@ CREATE TABLE IF NOT EXISTS system_state (
     updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS platform_uploads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    engine TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    platform_video_id TEXT NOT NULL,
+    url TEXT,
+    title TEXT,
+    description TEXT,
+    published_at TEXT,
+    duration_sec REAL,
+    width INTEGER,
+    height INTEGER,
+    thumbnail_url TEXT,
+    origin TEXT NOT NULL DEFAULT 'manual',
+    match_status TEXT NOT NULL DEFAULT 'unmatched',
+    confidence REAL,
+    matched_entity_type TEXT,
+    matched_entity_id INTEGER,
+    claim_status TEXT NOT NULL DEFAULT 'unknown',
+    claim_info TEXT,
+    edit_error TEXT,
+    raw_json TEXT,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    UNIQUE(engine, platform, platform_video_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_eps_platform_sched
     ON entity_platform_status(platform, postiz_scheduled_for);
 CREATE INDEX IF NOT EXISTS idx_eps_status
     ON entity_platform_status(status);
 CREATE INDEX IF NOT EXISTS idx_shorts_parent
     ON shorts(parent_video_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_confirmed
+    ON platform_uploads(engine, platform, matched_entity_type, matched_entity_id)
+    WHERE match_status = 'confirmed';
 """
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 
@@ -197,6 +227,82 @@ class Database:
             "INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
             (key, value, _utc_now()),
+        )
+
+    def upsert_upload(
+        self,
+        engine: str,
+        platform: str,
+        external_id: str,
+        url: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+        published_at: str | None = None,
+        duration_sec: float | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        thumbnail_url: str | None = None,
+        origin: str = "manual",
+        raw_json: str | None = None,
+    ) -> dict[str, Any]:
+        now = _utc_now()
+        self.execute(
+            """
+            INSERT INTO platform_uploads
+                (engine, platform, platform_video_id, url, title, description, published_at,
+                 duration_sec, width, height, thumbnail_url, origin, raw_json,
+                 first_seen_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(engine, platform, platform_video_id) DO UPDATE SET
+                url=COALESCE(excluded.url, platform_uploads.url),
+                title=COALESCE(excluded.title, platform_uploads.title),
+                description=COALESCE(excluded.description, platform_uploads.description),
+                published_at=COALESCE(excluded.published_at, platform_uploads.published_at),
+                duration_sec=COALESCE(excluded.duration_sec, platform_uploads.duration_sec),
+                width=COALESCE(excluded.width, platform_uploads.width),
+                height=COALESCE(excluded.height, platform_uploads.height),
+                thumbnail_url=COALESCE(excluded.thumbnail_url, platform_uploads.thumbnail_url),
+                origin=excluded.origin,
+                raw_json=COALESCE(excluded.raw_json, platform_uploads.raw_json),
+                last_seen_at=excluded.last_seen_at
+            """,
+            (engine, platform, external_id, url, title, description, published_at,
+             duration_sec, width, height, thumbnail_url, origin, raw_json, now, now),
+        )
+        return self.fetchone(
+            "SELECT * FROM platform_uploads WHERE engine=? AND platform=? AND platform_video_id=?",
+            (engine, platform, external_id),
+        )
+
+    def get_upload(self, upload_id: int) -> dict[str, Any] | None:
+        return self.fetchone("SELECT * FROM platform_uploads WHERE id=?", (upload_id,))
+
+    def list_uploads(
+        self, status: str | None = None, platform: str | None = None
+    ) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM platform_uploads WHERE 1=1"
+        params: list[Any] = []
+        if status:
+            sql += " AND match_status=?"
+            params.append(status)
+        if platform:
+            sql += " AND platform=?"
+            params.append(platform)
+        sql += " ORDER BY COALESCE(published_at, first_seen_at) DESC"
+        return self.fetchall(sql, tuple(params))
+
+    def set_upload_match(
+        self,
+        upload_id: int,
+        entity_type: str,
+        entity_id: int,
+        confidence: float | None = None,
+        status: str = "confirmed",
+    ) -> None:
+        self.execute(
+            "UPDATE platform_uploads SET match_status=?, matched_entity_type=?, "
+            "matched_entity_id=?, confidence=?, last_seen_at=? WHERE id=?",
+            (status, entity_type, entity_id, confidence, _utc_now(), upload_id),
         )
 
     def ensure_platform_states(self, platforms: list[str]) -> None:

@@ -9,7 +9,7 @@
   --card: #ffffff;
   --text: #1c1c1e;
   --text-2: #636366;
-  --text-3: #8e8e93;
+  --text-3: #6b6b70;
   --sep: rgba(60, 60, 67, 0.12);
   --accent: #007aff;
   --accent-press: #0066d6;
@@ -23,7 +23,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #000; --sidebar: rgba(28,28,30,0.86); --card: #1c1c1e;
-    --text: #f5f5f7; --text-2: #98989f; --text-3: #636366;
+    --text: #f5f5f7; --text-2: #98989f; --text-3: #9a9aa0;
     --sep: rgba(84,84,88,0.45); --accent: #0a84ff; --accent-press: #409cff;
     --shadow: 0 1px 0 rgba(255,255,255,0.04), 0 12px 32px rgba(0,0,0,0.45);
   }

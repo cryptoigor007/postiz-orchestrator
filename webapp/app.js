@@ -310,8 +310,8 @@
     const el = _overlay();
     el.innerHTML = `<div class="busy-box">
       <div class="busy-row">${icon("spinner", 20)}<span id="job-title">${title || t("working")}</span></div>
-      <div class="pbar"><div class="pbar-fill" id="job-fill" style="width:0%"></div></div>
-      <div class="busy-row busy-meta"><span id="job-count"></span><span id="job-eta"></span></div>
+      <div class="pbar" id="job-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="pbar-fill" id="job-fill" style="width:0%"></div></div>
+      <div class="busy-row busy-meta" aria-live="polite"><span id="job-count"></span><span id="job-eta"></span></div>
       <div class="form-row"><button class="btn danger" data-act="job-cancel">${t("cancel")}</button></div>
     </div>`;
     el.style.display = "flex";
@@ -338,6 +338,8 @@
       const title = document.getElementById("job-title");
       if (title && j.title) title.textContent = j.title;
       if (fill) fill.style.width = `${j.percent || 0}%`;
+      const bar = document.getElementById("job-bar");
+      if (bar) bar.setAttribute("aria-valuenow", String(j.percent || 0));
       if (cnt) cnt.textContent = j.total ? `${j.done} / ${j.total} · ${j.percent}%` : `${j.done}`;
       if (eta) eta.textContent = j.status === "running" && j.eta ? `${t("left")} ~${_fmtSec(j.eta)}` : "";
       if (j.status !== "running") {

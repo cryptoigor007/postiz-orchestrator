@@ -3,6 +3,8 @@
 
   const I18N = {
     ru: {
+      queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
+      edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
       queue_remove: "Убрать из очереди", queue_removed: "Убрано из очереди",
       mode_auto: "Авто-планирование: ВКЛ", mode_manual: "Авто-планирование: ВЫКЛ",
       mode_hint: "ВКЛ — система сама раскладывает видео по слотам. ВЫКЛ — ждёт, пока ты нажмёшь «Запустить» или выберешь дату после сканирования.",
@@ -116,6 +118,8 @@
       help_st_off: "Выключено.",
     },
     en: {
+      queue_edit: "Edit", queue_edit_save: "Save", queue_edit_cancel: "Cancel",
+      edit_title: "Title", edit_desc: "Description", edit_tags: "Hashtags", t_saved: "Saved",
       queue_remove: "Remove from queue", queue_removed: "Removed from queue",
       mode_auto: "Auto-scheduling: ON", mode_manual: "Auto-scheduling: OFF",
       mode_hint: "ON — the system places videos into slots automatically. OFF — waits for you to press Start or pick a date after scanning.",
@@ -443,11 +447,30 @@
   }
 
   function renderQueue(d) {
-    const rows = (d.items || []).map((it) =>
-      `<div class="row"><div class="title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
-       <span class="meta">${pIcon(it.platform)}${it.platform}</span>${pill(it.status)}
+    const edit = state.queueEdit;
+    const rows = (d.items || []).map((it) => {
+      const key = `${it.entity_type}|${it.entity_id}|${it.platform}`;
+      const form = (edit && edit.key === key)
+        ? `<div class="panel" style="margin:6px 0">
+             <div class="form-row"><label class="meta">${t("edit_title")}
+               <input id="qe-title" type="text" value="${(it.title_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
+             <div class="form-row"><label class="meta">${t("edit_desc")}
+               <textarea id="qe-desc" rows="4" style="width:100%">${(it.description_text || "").replace(/</g, "&lt;")}</textarea></label></div>
+             <div class="form-row"><label class="meta">${t("edit_tags")}
+               <input id="qe-tags" type="text" value="${(it.hashtags_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
+             <div class="form-row">
+               <button class="btn primary" data-act="queue-edit-save" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_edit_save")}</button>
+               <button class="btn secondary" data-act="queue-edit-cancel">${t("queue_edit_cancel")}</button>
+             </div>
+           </div>`
+        : "";
+      return `<div class="row"><div class="title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
        <span class="mono meta">${it.date || ""} ${it.time || ""}</span>
-       <button class="btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button></div>`).join("");
+       <span class="meta">${pIcon(it.platform)}${it.platform}</span>${pill(it.status)}
+       <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
+       <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
+       ${form}</div>`;
+    }).join("");
     content().innerHTML = `<div class="panel"><div class="panel-header">${t("nav_queue")}</div>${
       rows || `<div class="empty">${t("queue_empty")}</div>`}</div>`;
   }
@@ -952,6 +975,34 @@
         state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        return load();
+      }
+      if (act === "queue-edit") {
+        state.queueEdit = { key: el.dataset.key };
+        return render();
+      }
+      if (act === "queue-edit-cancel") {
+        state.queueEdit = null;
+        return render();
+      }
+      if (act === "queue-edit-save") {
+        const val = (id) => {
+          const n = document.getElementById(id);
+          return n ? n.value : "";
+        };
+        const r = await api("/queue/edit", {
+          method: "POST",
+          body: JSON.stringify({
+            entity_type: el.dataset.et,
+            entity_id: Number(el.dataset.eid),
+            platform: el.dataset.p,
+            title: val("qe-title"),
+            description: val("qe-desc"),
+            hashtags: val("qe-tags"),
+          }),
+        });
+        state.queueEdit = null;
+        toast(`${t("t_saved")}: ${r.updated || 0}/${r.recreated || 0}`);
         return load();
       }
       if (act === "queue-remove") {

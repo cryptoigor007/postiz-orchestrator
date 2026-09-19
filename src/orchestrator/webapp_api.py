@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "36"
+WEBAPP_BUILD = "37"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -263,6 +263,87 @@ class WebAppAPI:
                         return 400, {"error": f"unknown platform: {key}"}, "application/json"
                 sched_settings.save_schedule_settings(self.db, payload)
                 return 200, {"ok": True}, "application/json"
+            if method == "POST" and route == "queue/edit":
+                etype = str(data.get("entity_type") or "").strip()
+                platform_sel = str(data.get("platform") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                table = "long_videos" if etype == "long_video" else "shorts"
+                title = str(data.get("title") or "")
+                desc = str(data.get("description") or "")
+                tags = str(data.get("hashtags") or "")
+                self.db.execute(
+                    f"UPDATE {table} SET title_text=?, description_text=?, hashtags_text=? "
+                    "WHERE id=?",
+                    (title[:200], desc, tags, eid),
+                )
+                sql = ("SELECT platform, postiz_post_id, postiz_scheduled_for, status "
+                       "FROM entity_platform_status WHERE entity_type=? AND entity_id=? "
+                       "AND status IN ('scheduled','updating','ready','error')")
+                params: list = [etype, eid]
+                if platform_sel:
+                    sql += " AND platform=?"
+                    params.append(platform_sel)
+                rows = self.db.fetchall(sql, tuple(params))
+                postiz = self.comps.get("postiz")
+                sch = self.comps.get("scheduler")
+                pub = getattr(sch, "publisher", None)
+                updated = 0
+                recreated = 0
+                for r in rows:
+                    plat = r["platform"]
+                    pid = r.get("postiz_post_id")
+                    if pid and postiz is not None and hasattr(postiz, "set_status"):
+                        try:
+                            postiz.set_status(str(pid), "draft")
+                        except Exception:
+                            logger.warning("queue edit: не удалось отменить %s", pid, exc_info=True)
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (etype, eid, plat),
+                    )
+                    self.db.log(etype, eid, plat, "queue_edit", "")
+                    updated += 1
+                    if pub is None:
+                        continue
+                    entity = self.db.fetchone(f"SELECT * FROM {table} WHERE id=?", (eid,))
+                    if not entity:
+                        continue
+                    pcfg = self.cfg.platforms.get(plat)
+                    path = None
+                    if sch is not None and hasattr(sch, "_pick_path"):
+                        try:
+                            if etype == "long_video":
+                                path = sch._pick_path(entity, plat, pcfg)
+                            else:
+                                path = sch._pick_path(entity, plat) or entity.get("video_path")
+                        except Exception:
+                            path = entity.get("video_path")
+                    if not path:
+                        path = entity.get("video_path") or entity.get("vertical_path")                             or entity.get("wide_path")
+                    when = r.get("postiz_scheduled_for")
+                    sched_dt = None
+                    if when:
+                        from datetime import datetime as _dt
+                        try:
+                            sched_dt = _dt.fromisoformat(str(when))
+                        except Exception:
+                            sched_dt = None
+                    content = {"title": title, "description": desc, "hashtags": tags}
+                    try:
+                        post = pub.publish(etype, eid, plat, path, content, sched_dt)
+                        if post:
+                            recreated += 1
+                    except Exception:
+                        logger.exception("queue edit: пересоздание не удалось (%s/%s %s)",
+                                         etype, eid, plat)
+                return 200, {"ok": True, "updated": updated, "recreated": recreated}, \
+                    "application/json"
             if method == "POST" and route == "queue/remove":
                 etype = str(data.get("entity_type") or "").strip()
                 platform = str(data.get("platform") or "").strip()
@@ -822,7 +903,9 @@ class WebAppAPI:
             """
             SELECT eps.entity_type, eps.entity_id, eps.platform, eps.status,
                    eps.postiz_scheduled_for,
-                   COALESCE(lv.title_text, lv.title, sh.title_text) AS title
+                   COALESCE(lv.title_text, lv.title, sh.title_text) AS title,
+                   COALESCE(lv.description_text, sh.description_text) AS description_text,
+                   COALESCE(lv.hashtags_text, sh.hashtags_text) AS hashtags_text
             FROM entity_platform_status eps
             LEFT JOIN long_videos lv
                    ON eps.entity_type='long_video' AND lv.id = eps.entity_id
@@ -846,6 +929,9 @@ class WebAppAPI:
                 "date": date_l,
                 "time": time_l,
                 "title": f"{kind}: {title}"[:140],
+                "title_text": (r.get("title") or "").strip(),
+                "description_text": r.get("description_text") or "",
+                "hashtags_text": r.get("hashtags_text") or "",
             })
         return {"items": items}
 

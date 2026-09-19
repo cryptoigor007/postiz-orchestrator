@@ -122,6 +122,8 @@ class Runner:
         self.comps["tail"].expire_pending_questions()
         if n or n2:
             logger.info("Status sync updates: %s (fresh %s)", n, n2)
+        self.metrics.incr("sync_updates", n + n2)
+        self.metrics.flush()
 
     def _cycle_recon(self) -> None:
         r = self.comps["recon"].run()

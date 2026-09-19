@@ -15,7 +15,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "16"
+WEBAPP_BUILD = "17"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -257,12 +257,27 @@ class WebAppAPI:
 
     def _metrics(self) -> dict:
         path = Path(self.db.path).parent / "metrics.json"
+        data: dict = {"cycles": 0, "note": "no metrics yet"}
         if path.is_file():
             try:
-                return json.loads(path.read_text())
+                data = json.loads(path.read_text())
             except Exception:
                 pass
-        return {"cycles": 0, "note": "no metrics yet"}
+        live: dict = {}
+        try:
+            rows = self.db.fetchall(
+                "SELECT status, COUNT(*) AS c FROM entity_platform_status GROUP BY status"
+            )
+            counts = {r["status"]: r["c"] for r in rows}
+            live = {
+                "queue": sum(counts.get(s, 0) for s in ("ready", "scheduled", "updating")),
+                "published": counts.get("published", 0),
+                "failed": sum(counts.get(s, 0) for s in ("failed", "error")),
+            }
+        except Exception:
+            logger.debug("live metrics failed", exc_info=True)
+        data["live"] = live
+        return data
 
     def _browse_roots(self) -> list[Path]:
         raw = os.getenv("WEBAPP_BROWSE_ROOT", "/mnt/video")

@@ -158,14 +158,14 @@ def test_composed_index_inlines_assets_and_key(env):
     api, db, clock, cfg, watcher = env
     os.environ["WEBAPP_ACCESS_KEY"] = "s3cret"
     try:
-        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/16/", {}, b"")
+        code, body, ctype = api.handle("GET", "/webapp/k/s3cret/b/17/", {}, b"")
         assert code == 200
         assert ctype.startswith("text/html")
         assert b'src="app.js' not in body
         assert b"__WEBAPP_KEY__" in body
         assert b'"s3cret"' in body
-        assert b"[build b16]" in body
-        code, body, _ = api.handle("GET", "/webapp/b/16/", {}, b"")
+        assert b"[build b17]" in body
+        code, body, _ = api.handle("GET", "/webapp/b/17/", {}, b"")
         assert b'__WEBAPP_KEY__=""' in body
     finally:
         os.environ.pop("WEBAPP_ACCESS_KEY", None)
@@ -173,10 +173,10 @@ def test_composed_index_inlines_assets_and_key(env):
 
 def test_build_path_serves_app_and_assets(env):
     api, db, clock, cfg, watcher = env
-    code, body, _ = api.handle("GET", "/webapp/b/16/", {}, b"")
+    code, body, _ = api.handle("GET", "/webapp/b/17/", {}, b"")
     assert code == 200
     assert b"Orchestrator" in body
-    code, body, ctype = api.handle("GET", "/webapp/b/16/app.js", {}, b"")
+    code, body, ctype = api.handle("GET", "/webapp/b/17/app.js", {}, b"")
     assert code == 200
     assert ctype.startswith("application/javascript")
 
@@ -215,6 +215,25 @@ def test_browse_multiple_roots(env, tmp_path, monkeypatch):
         "GET", f"/webapp/api/browse?root={second}", headers, b""
     )
     assert payload["path"] == str(second.resolve())
+
+
+def test_metrics_has_live_counts(env):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) VALUES ('v','/m','t',?)",
+        (now,),
+    )
+    vid = db.fetchone("SELECT id FROM long_videos")["id"]
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+        "VALUES ('long_video', ?, 'youtube', 'scheduled')",
+        (vid,),
+    )
+    code, payload, _ = api.handle("GET", "/webapp/api/metrics", headers, b"")
+    assert code == 200
+    assert payload["live"]["queue"] == 1
 
 
 def test_diag_endpoint(env):

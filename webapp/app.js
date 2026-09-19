@@ -307,24 +307,32 @@
 
   function renderMetrics(d) {
     d = d || {};
+    const live = d.live || {};
     const now = Date.now() / 1000;
     const uptime = d.started_at ? fmtDuration(now - d.started_at) : "—";
     const cards = [
       metric("Аптайм", uptime),
-      metric("Циклов", d.cycles ?? 0),
-      metric("Публикаций в очереди", (d.scheduled_long || 0) + (d.scheduled_short || 0)),
-      metric("Синхронизаций", d.sync_updates ?? 0),
-      metric("Ошибок", d.errors ?? 0),
+      metric("Циклов сканирования", d.cycles ?? 0),
+      metric("В очереди сейчас", live.queue ?? 0),
+      metric("Сбоев цикла", d.errors ?? 0),
     ].join("");
     const errRow = d.last_error
       ? `<div class="row"><span class="pill err">Ошибка</span><span class="title">${d.last_error}</span></div>`
-      : `<div class="row"><span class="pill ok">ОК</span><span class="title">Ошибок нет</span></div>`;
+      : `<div class="row"><span class="pill ok">ОК</span><span class="title">Сбоев не было</span></div>`;
     content().innerHTML = `
       <div class="grid">${cards}</div>
       <div class="panel">
-        <div class="panel-header">Активность</div>
+        <div class="panel-header">Публикации</div>
+        <div class="row"><div class="title">Опубликовано</div><span class="meta">${live.published ?? 0}</span></div>
+        <div class="row"><div class="title">В очереди (готово / запланировано)</div><span class="meta">${live.queue ?? 0}</span></div>
+        <div class="row"><div class="title">Ошибок публикаций</div><span class="meta">${live.failed ?? 0}</span></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Планировщик (с запуска)</div>
         <div class="row"><div class="title">Последний цикл</div><span class="meta">${fmtTime(d.last_cycle_at)}</span></div>
-        <div class="row"><div class="title">Запланировано (длинные / шортсы)</div><span class="meta">${d.scheduled_long || 0} / ${d.scheduled_short || 0}</span></div>
+        <div class="row"><div class="title">Запланировано длинных видео</div><span class="meta">${d.scheduled_long || 0}</span></div>
+        <div class="row"><div class="title">Запланировано шортсов</div><span class="meta">${d.scheduled_short || 0}</span></div>
+        <div class="row"><div class="title">Обновлений статуса из Postiz</div><span class="meta">${d.sync_updates || 0}</span></div>
         ${errRow}
       </div>`;
   }

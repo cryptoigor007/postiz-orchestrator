@@ -13,3 +13,9 @@
 - Plan 2: `direct:youtube` (list/update/delete/claims) + manual uploads scan/match/confirm.
 - Plan 3: UI/API/MCP + placement.
 - Plan 4: n8n. Plan 5: browser (experimental).
+
+## 2026-09-19 — Plan 2 (начало)
+- direct youtube engine (list/update/delete/claims) + tests (3) → commit f55ac2a.
+- matching score (title/date/duration) + tests (4) → commit 7df4fac.
+- Full suite: 92 passed.
+- Next: token broker (доступ к OAuth-токену YouTube из Postiz), scan/confirm service, UI/API/MCP.

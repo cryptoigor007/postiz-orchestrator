@@ -191,3 +191,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 }
 
 [hidden] { display: none !important; }
+
+/* Значки соцсетей */
+.pico { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; opacity: 0.92; }
+.pico svg { width: 16px; height: 16px; display: block; fill: currentColor; }

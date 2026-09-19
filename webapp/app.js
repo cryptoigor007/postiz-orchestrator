@@ -326,6 +326,19 @@
     }
   }
 
+  const PLATFORM_ICONS = {
+    telegram: '<svg viewBox="0 0 24 24"><path d="M21.9 4.6 18.7 19c-.2 1-.9 1.2-1.7.8l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.5-7.7c.4-.3-.1-.5-.6-.2L6.8 12.9l-4.5-1.4c-1-.3-1-1 .2-1.5l17.7-6.8c.8-.3 1.6.2 1.7 1.4z"/></svg>',
+    youtube: '<svg viewBox="0 0 24 24"><path d="M23 12s0-3.8-.5-5.6c-.3-1-1-1.8-2-2C18.6 4 12 4 12 4s-6.6 0-8.5.4c-1 .2-1.7 1-2 2C1 8.2 1 12 1 12s0 3.8.5 5.6c.3 1 1 1.8 2 2 1.9.4 8.5.4 8.5.4s6.6 0 8.5-.4c1-.2 1.7-1 2-2 .5-1.8.5-5.6.5-5.6zM9.8 15.5v-7l6 3.5-6 3.5z"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24"><path d="M12 2c-2.7 0-3 .01-4.1.06-1 .05-1.7.2-2.3.44-.6.24-1.1.56-1.6 1.06-.5.5-.8 1-1.06 1.6-.24.6-.4 1.3-.44 2.3C2 8.6 2 8.9 2 12s.01 3.4.06 4.5c.05 1 .2 1.7.44 2.3.24.6.56 1.1 1.06 1.6.5.5 1 .8 1.6 1.06.6.24 1.3.4 2.3.44 1.1.05 1.4.06 4.1.06s3-.01 4.1-.06c1-.05 1.7-.2 2.3-.44.6-.24 1.1-.56 1.6-1.06.5-.5.8-1 1.06-1.6.24-.6.4-1.3.44-2.3.05-1.1.06-1.4.06-4.5s-.01-3.4-.06-4.5c-.05-1-.2-1.7-.44-2.3-.24-.6-.56-1.1-1.06-1.6-.5-.5-1-.8-1.6-1.06-.6-.24-1.3-.4-2.3-.44C15.4 2 15.1 2 12 2zm0 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 8.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zm5.2-8.4a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0z"/></svg>',
+    tiktok: '<svg viewBox="0 0 24 24"><path d="M16.6 3c.3 2 1.5 3.6 3.4 4.2v3c-1.3 0-2.5-.4-3.4-1v6.3c0 3.3-2.4 5.5-5.5 5.5S5.6 18.8 5.6 15.5c0-2.9 1.9-5.1 4.7-5.4v3c-.3.06-.6.1-.9.1-1.4 0-2.4 1-2.4 2.3 0 1.4 1 2.4 2.4 2.4s2.5-1 2.5-2.4V3h4.7z"/></svg>',
+    facebook: '<svg viewBox="0 0 24 24"><path d="M13.5 21v-7h2.3l.4-3h-2.7V9.2c0-.9.3-1.5 1.6-1.5h1.2V5.2c-.6-.1-1.4-.2-2.3-.2-2.3 0-3.8 1.4-3.8 3.9V11H8v3h2.2v7h3.3z"/></svg>',
+  };
+  function pIcon(name) {
+    const key = String(name || "").toLowerCase();
+    const svg = PLATFORM_ICONS[key] || '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z"/></svg>';
+    return `<span class="pico" title="${name || ""}">${svg}</span>`;
+  }
+
   function renderStatus(d) {
     const counts = d.counts || {};
     const cards = Object.entries(counts)
@@ -423,7 +436,7 @@
         const link = it.url ? ` <a href="${it.url}" target="_blank" rel="noopener">↗</a>` : "";
         return `<div class="row"><span class="mono">${it.time || ""}</span>
           <div class="title">${title}${link}</div>
-          <span class="meta">${it.platform || ""}</span>${pill(it.status)}</div>`;
+          <span class="meta">${pIcon(it.platform)}${it.platform || ""}</span>${pill(it.status)}</div>`;
       }).join("");
       return `<div class="panel"><div class="panel-header">${day.date} <span class="meta">${day.count || 0}</span></div>${rows}</div>`;
     }).join("");
@@ -432,7 +445,7 @@
   function renderQueue(d) {
     const rows = (d.items || []).map((it) =>
       `<div class="row"><div class="title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
-       <span class="meta">${it.platform}</span>${pill(it.status)}
+       <span class="meta">${pIcon(it.platform)}${it.platform}</span>${pill(it.status)}
        <span class="mono meta">${it.date || ""} ${it.time || ""}</span>
        <button class="btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button></div>`).join("");
     content().innerHTML = `<div class="panel"><div class="panel-header">${t("nav_queue")}</div>${
@@ -441,7 +454,7 @@
 
   function renderPlatforms(d) {
     const rows = (d.platforms || []).map((p) => `
-      <div class="row"><div class="title">${p.name}</div>
+      <div class="row"><div class="title">${pIcon(p.name)}${p.name}</div>
         ${p.enabled ? pill("ok") : pill("off")}${p.paused ? pill("paused") : ""}
         <span class="meta">${t("limit")} ${p.daily_limit}</span>
         <button class="btn secondary" data-act="resume-one" data-p="${p.name}">${t("resume")}</button>
@@ -467,7 +480,7 @@
         ? pill(t("backlog_awaiting"))
         : (p.tail_mode ? pill(t("backlog_on")) : pill(t("backlog_off")));
       const slot = p.slot ? `<span class="mono meta">${String(p.slot).slice(0, 16).replace("T", " ")}</span>` : "";
-      return `<div class="row"><div class="title">${p.platform}</div>
+      return `<div class="row"><div class="title">${pIcon(p.platform)}${p.platform}</div>
           <span class="meta">${t("backlog_unposted")}: ${p.count}</span>
           ${state}${slot}</div>
         <div class="form-row">
@@ -685,7 +698,7 @@
     const groups = d.groups || [];
     const eff = d.effective || {};
     const plats = d.platforms || [];
-    const platformsHtml = plats.map((p) => schedBlock(p, p, eff[p] || {}, settings[p] || {}, true)).join("");
+    const platformsHtml = plats.map((p) => schedBlock(p, pIcon(p) + p, eff[p] || {}, settings[p] || {}, true)).join("");
     const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `👥 ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
     return platformsHtml + groupsHtmlBlocks;
   }

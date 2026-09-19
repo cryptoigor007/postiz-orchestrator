@@ -69,7 +69,7 @@ flowchart TD
 
 | Что | Значение |
 |---|---|
-| PVE-хост | `ssh root@100.95.225.71` (tailscale) / `192.168.100.50` (LAN), hostname `pve` |
+| PVE-хост | `ssh root@100.95.225.71` (tailscale) / `192.168.100.50` (LAN), hostname `pve`. **Если на Mac Tailscale выключен** — работает LAN-адрес; `deploy.sh`/`runvm.sh` выбирают доступный сами |
 | VM Postiz | прямой `ssh postiz@192.168.100.60` с Mac (docker + passwordless sudo работают); хелпер `./scripts/runvm.sh '<cmd>'`; либо `qm guest exec 120 -- ...` с pve |
 | Docker-стек | `postiz`, `postiz-nginx-https-1`, `postiz-db`, `postiz-redis`, `postiz-temporal`, `postiz-media` |
 | Оркестратор | `/opt/orchestrator` на `pve`, пользователь `orchestrator` (systemd) |

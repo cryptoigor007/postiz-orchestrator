@@ -2,9 +2,23 @@
 # Деплой оркестратора на pve: безопасный rsync (НЕ меняет владельца) + рестарт + проверка.
 # Использование: scripts/deploy.sh
 set -euo pipefail
-HOST="${PVE_HOST:-root@100.95.225.71}"
+HOST="${PVE_HOST:-}"
 DEST="${PVE_DEST:-/opt/orchestrator}"
 cd "$(dirname "$0")/.."
+
+if [ -z "$HOST" ]; then
+  # Авто-выбор доступного адреса: Tailscale, затем LAN.
+  for cand in root@100.95.225.71 root@192.168.100.50; do
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$cand" true 2>/dev/null; then
+      HOST="$cand"; break
+    fi
+  done
+fi
+if [ -z "$HOST" ]; then
+  echo "ERROR: pve недоступен ни по tailscale, ни по LAN (проверь сеть/Tailscale)" >&2
+  exit 1
+fi
+echo ">> host: $HOST"
 
 echo ">> rsync -> $HOST:$DEST"
 rsync -az --delete --no-owner --no-group \

@@ -3,6 +3,7 @@
 
   const I18N = {
     ru: {
+      folders_hint: "Как это работает: добавь папку (кнопки «+ Сериалы», «+ Шортсы», «+ Авто») → нажми «Сканировать» → появится панель «Найдено» и кнопка «Да, запустить» (или выбери дату). Система сама найдёт фильмы и шортсы и разложит их по расписанию.",
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
       edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
       queue_remove: "Убрать", queue_remove_series: "Убрать серию", queue_removed: "Убрано из очереди", edit_date: "Дата", edit_time: "Время", confirm_series: "Убрать фильм и ВСЕ его шортсы со всех платформ?",
@@ -114,6 +115,7 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      folders_hint: "How it works: add a folder (+ Series / + Shorts / + Auto) → press Scan → you will see the Found panel with a Start button (or pick a date). The system finds films and shorts and schedules them automatically.",
       queue_edit: "Edit", queue_edit_save: "Save", queue_edit_cancel: "Cancel",
       edit_title: "Title", edit_desc: "Description", edit_tags: "Hashtags", t_saved: "Saved",
       queue_remove: "Remove", queue_remove_series: "Remove series", queue_removed: "Removed from queue", edit_date: "Date", edit_time: "Time", confirm_series: "Remove the film and ALL its shorts from all networks?",
@@ -403,6 +405,7 @@
       .join("");
     content().innerHTML = `
       <div class="panel"><div class="panel-header">${t("folders_to_scan")}</div>
+        <div class="row"><span class="meta">${t("folders_hint")}</span></div>
         ${roots || `<div class="empty">${t("folders_none")}</div>`}
       </div>
       <div class="panel">

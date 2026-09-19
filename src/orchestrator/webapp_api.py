@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "34"
+WEBAPP_BUILD = "35"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -263,6 +263,43 @@ class WebAppAPI:
                         return 400, {"error": f"unknown platform: {key}"}, "application/json"
                 sched_settings.save_schedule_settings(self.db, payload)
                 return 200, {"ok": True}, "application/json"
+            if method == "POST" and route == "queue/remove":
+                etype = str(data.get("entity_type") or "").strip()
+                platform = str(data.get("platform") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                sql = ("SELECT platform, postiz_post_id, status FROM entity_platform_status "
+                       "WHERE entity_type=? AND entity_id=? AND status IN "
+                       "('scheduled','updating','ready','error')")
+                params: list = [etype, eid]
+                if platform:
+                    sql += " AND platform=?"
+                    params.append(platform)
+                rows = self.db.fetchall(sql, tuple(params))
+                postiz = self.comps.get("postiz")
+                removed = 0
+                for r in rows:
+                    pid = r.get("postiz_post_id")
+                    if pid and postiz is not None and hasattr(postiz, "set_status"):
+                        try:
+                            postiz.set_status(str(pid), "draft")
+                        except Exception:
+                            logger.warning("queue remove: не удалось перевести %s в draft", pid,
+                                           exc_info=True)
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='skipped', "
+                        "last_error='removed_by_user' WHERE entity_type=? AND entity_id=? "
+                        "AND platform=?",
+                        (etype, eid, r["platform"]),
+                    )
+                    self.db.log(etype, eid, r["platform"], "queue_remove", str(pid or ""))
+                    removed += 1
+                return 200, {"ok": True, "removed": removed,
+                             "platforms": [r["platform"] for r in rows]}, "application/json"
             if method == "POST" and route == "scheduling_mode":
                 mode = str(data.get("mode") or "").strip().lower()
                 if mode not in ("auto", "manual"):
@@ -783,13 +820,34 @@ class WebAppAPI:
     def _queue(self) -> dict:
         rows = self.db.fetchall(
             """
-            SELECT entity_type, entity_id, platform, status, postiz_scheduled_for
-            FROM entity_platform_status
-            WHERE status IN ('ready', 'scheduled', 'updating')
-            ORDER BY postiz_scheduled_for LIMIT 50
+            SELECT eps.entity_type, eps.entity_id, eps.platform, eps.status,
+                   eps.postiz_scheduled_for,
+                   COALESCE(lv.title_text, lv.title, sh.title_text) AS title
+            FROM entity_platform_status eps
+            LEFT JOIN long_videos lv
+                   ON eps.entity_type='long_video' AND lv.id = eps.entity_id
+            LEFT JOIN shorts sh
+                   ON eps.entity_type='short' AND sh.id = eps.entity_id
+            WHERE eps.status IN ('ready', 'scheduled', 'updating')
+            ORDER BY eps.postiz_scheduled_for LIMIT 50
             """
         )
-        return {"items": rows}
+        items = []
+        for r in rows:
+            kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+            date_l, time_l = self._to_local(r["postiz_scheduled_for"] or "")
+            title = (r.get("title") or "").strip() or f"{kind} #{r['entity_id']}"
+            items.append({
+                "entity_type": r["entity_type"],
+                "entity_id": r["entity_id"],
+                "platform": r["platform"],
+                "status": r["status"],
+                "postiz_scheduled_for": r["postiz_scheduled_for"],
+                "date": date_l,
+                "time": time_l,
+                "title": f"{kind}: {title}"[:140],
+            })
+        return {"items": items}
 
     def _platforms(self) -> dict:
         return self._status()

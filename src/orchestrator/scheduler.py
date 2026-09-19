@@ -112,7 +112,8 @@ class Scheduler:
             for video in videos:
                 exists = self.db.fetchone(
                     "SELECT 1 FROM entity_platform_status WHERE entity_type='long_video' "
-                    "AND entity_id=? AND platform=? AND status IN ('scheduled','published')",
+                    "AND entity_id=? AND platform=? "
+                    "AND status IN ('scheduled','published','skipped')",
                     (video["id"], platform))
                 if exists:
                     continue

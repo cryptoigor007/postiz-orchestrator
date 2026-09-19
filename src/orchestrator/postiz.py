@@ -84,6 +84,14 @@ class MockPostizClient:
     def delete_post(self, post_id: str) -> None:
         self.posts.pop(post_id, None)
 
+    def set_status(self, post_id: str, status: str) -> None:
+        post = self.posts.get(post_id)
+        if post:
+            self.posts[post_id] = PostizPost(
+                id=post.id, platform=post.platform, scheduled_for=post.scheduled_for,
+                status=status, release_url=post.release_url, content=post.content,
+            )
+
     def get_post(self, post_id: str) -> PostizPost | None:
         return self.posts.get(post_id)
 

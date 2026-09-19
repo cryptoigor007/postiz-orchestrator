@@ -3,6 +3,7 @@
 
   const I18N = {
     ru: {
+      queue_remove: "Убрать из очереди", queue_removed: "Убрано из очереди",
       mode_auto: "Авто-планирование: ВКЛ", mode_manual: "Авто-планирование: ВЫКЛ",
       mode_hint: "ВКЛ — система сама раскладывает видео по слотам. ВЫКЛ — ждёт, пока ты нажмёшь «Запустить» или выберешь дату после сканирования.",
       settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
@@ -115,6 +116,7 @@
       help_st_off: "Выключено.",
     },
     en: {
+      queue_remove: "Remove from queue", queue_removed: "Removed from queue",
       mode_auto: "Auto-scheduling: ON", mode_manual: "Auto-scheduling: OFF",
       mode_hint: "ON — the system places videos into slots automatically. OFF — waits for you to press Start or pick a date after scanning.",
       settings_tab_sched: "Groups and schedule", settings_tab_errors: "Errors", settings_tab_help: "Help",
@@ -429,9 +431,10 @@
 
   function renderQueue(d) {
     const rows = (d.items || []).map((it) =>
-      `<div class="row"><div class="title">${it.entity_type}#${it.entity_id}</div>
+      `<div class="row"><div class="title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
        <span class="meta">${it.platform}</span>${pill(it.status)}
-       <span class="mono meta">${it.postiz_scheduled_for || ""}</span></div>`).join("");
+       <span class="mono meta">${it.date || ""} ${it.time || ""}</span>
+       <button class="btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button></div>`).join("");
     content().innerHTML = `<div class="panel"><div class="panel-header">${t("nav_queue")}</div>${
       rows || `<div class="empty">${t("queue_empty")}</div>`}</div>`;
   }
@@ -936,6 +939,18 @@
         state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        return load();
+      }
+      if (act === "queue-remove") {
+        const r = await api("/queue/remove", {
+          method: "POST",
+          body: JSON.stringify({
+            entity_type: el.dataset.et,
+            entity_id: Number(el.dataset.eid),
+            platform: el.dataset.p,
+          }),
+        });
+        toast(`${t("queue_removed")}: ${r.removed || 0}`);
         return load();
       }
       if (act === "toggle-mode") {

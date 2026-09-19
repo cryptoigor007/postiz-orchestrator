@@ -157,7 +157,7 @@ class TelegramTransport:
                     self._q.put((chat_id, text))
                 if new_count == 0 and self.no_ack:
                     # старые (неподтверждённые) апдейты возвращаются мгновенно — не долбим API
-                    time.sleep(float(os.getenv("TELEGRAM_POLL_IDLE_SEC", "10")))
+                    time.sleep(float(os.getenv("TELEGRAM_POLL_IDLE_SEC", "2")))
             except Exception:
                 logger.exception("poll error")
                 time.sleep(5)

@@ -179,30 +179,82 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         safety.resume_platform(p)
         return f"Resumed {p}"
 
+    def _fmt_local(iso: str) -> str:
+        from datetime import UTC, datetime
+        from zoneinfo import ZoneInfo
+        try:
+            dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(ZoneInfo(cfg.timezone)).strftime("%d.%m %H:%M")
+        except Exception:
+            return str(iso or "")[:16]
+
+    def _upcoming_rows(limit: int = 30) -> list[dict]:
+        return db.fetchall(
+            """
+            SELECT eps.entity_type, eps.entity_id, eps.platform, eps.status,
+                   eps.postiz_scheduled_for,
+                   COALESCE(lv.title_text, lv.title, sh.title_text) AS title
+            FROM entity_platform_status eps
+            LEFT JOIN long_videos lv
+                   ON eps.entity_type='long_video' AND lv.id = eps.entity_id
+            LEFT JOIN shorts sh
+                   ON eps.entity_type='short' AND sh.id = eps.entity_id
+            WHERE eps.status IN ('ready', 'scheduled') AND eps.postiz_scheduled_for IS NOT NULL
+            ORDER BY eps.postiz_scheduled_for LIMIT ?
+            """,
+            (limit,),
+        )
+
+    def _item_lines(limit: int = 30, max_groups: int = 14) -> list[str]:
+        """Строки «когда · Фильм/Шортс: название · платформы» (одна на видео-время)."""
+        rows = _upcoming_rows(limit)
+        grouped: dict[tuple, dict] = {}
+        for r in rows:
+            when = _fmt_local(r["postiz_scheduled_for"])
+            key = (r["entity_type"], r["entity_id"], when)
+            kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+            title = (r.get("title") or "").strip() or f"#{r['entity_id']}"
+            if len(title) > 44:
+                title = title[:43] + "…"
+            g = grouped.setdefault(key, {"when": when, "label": f"{kind}: {title}", "plats": []})
+            g["plats"].append(r["platform"])
+        out = []
+        for g in list(grouped.values())[:max_groups]:
+            plats = ", ".join(dict.fromkeys(g["plats"]))
+            out.append(f"{g['when']} · {g['label']} · {plats}")
+        return out
+
     def cmd_queue(chat_id: int, arg: str) -> str:
-        rows = db.fetchall(
-            "SELECT entity_type, entity_id, platform, status, postiz_scheduled_for "
-            "FROM entity_platform_status WHERE status IN ('ready','scheduled') "
-            "ORDER BY postiz_scheduled_for LIMIT 30"
-        )
-        if not rows:
-            return "Queue empty"
-        return "\n".join(
-            f"{r['entity_type']}#{r['entity_id']} {r['platform']} {r['status']} {r['postiz_scheduled_for']}"
-            for r in rows
-        )
+        lines = _item_lines(limit=30)
+        if not lines:
+            return "Очередь пуста."
+        return "Очередь публикаций:\n" + "\n".join(lines)
 
     def cmd_failed(chat_id: int, arg: str) -> str:
         rows = db.fetchall(
-            "SELECT entity_type, entity_id, platform, last_error FROM entity_platform_status "
-            "WHERE status IN ('failed','error') LIMIT 20"
+            """
+            SELECT eps.entity_type, eps.entity_id, eps.platform, eps.last_error,
+                   COALESCE(lv.title_text, lv.title, sh.title_text) AS title
+            FROM entity_platform_status eps
+            LEFT JOIN long_videos lv
+                   ON eps.entity_type='long_video' AND lv.id = eps.entity_id
+            LEFT JOIN shorts sh
+                   ON eps.entity_type='short' AND sh.id = eps.entity_id
+            WHERE eps.status IN ('failed','error') LIMIT 20
+            """
         )
         if not rows:
-            return "No failures"
-        return "\n".join(
-            f"{r['entity_type']}#{r['entity_id']} {r['platform']}: {r['last_error']}"
-            for r in rows
-        )
+            return "Ошибок нет."
+        out = ["Ошибки публикаций:"]
+        for r in rows:
+            kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+            title = (r.get("title") or "").strip() or f"#{r['entity_id']}"
+            if len(title) > 40:
+                title = title[:39] + "…"
+            out.append(f"{kind}: {title} · {r['platform']} · {r['last_error'] or '—'}")
+        return "\n".join(out)
 
     def cmd_tail(chat_id: int, arg: str) -> str:
         rows = db.fetchall(
@@ -228,14 +280,10 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         return f"Distributed long videos: {n}"
 
     def cmd_calendar(chat_id: int, arg: str) -> str:
-        rows = db.fetchall(
-            "SELECT platform, date(postiz_scheduled_for) AS d, COUNT(*) AS cnt "
-            "FROM entity_platform_status WHERE postiz_scheduled_for IS NOT NULL "
-            "GROUP BY platform, d ORDER BY d LIMIT 40"
-        )
-        if not rows:
-            return "Calendar empty"
-        return "\n".join(f"{r['d']} {r['platform']}: {r['cnt']}" for r in rows)
+        lines = _item_lines(limit=60, max_groups=20)
+        if not lines:
+            return "Календарь пуст."
+        return "Ближайшие публикации:\n" + "\n".join(lines)
 
     def cmd_series_end(chat_id: int, arg: str) -> str:
         p = arg.strip().lower() or "youtube"

@@ -95,6 +95,7 @@ class AppConfig(BaseModel):
     safety: SafetyCfg = Field(default_factory=SafetyCfg)
     telegram: TelegramCfg = Field(default_factory=TelegramCfg)
     backup: BackupCfg = Field(default_factory=BackupCfg)
+    engines: dict[str, str] = Field(default_factory=dict)
     reconciliation_interval_hours: int = 24
     timezone: str = "Europe/Moscow"
     watcher_interval_sec: int = 75
@@ -106,6 +107,10 @@ class AppConfig(BaseModel):
     @classmethod
     def parse_platforms(cls, v: dict) -> dict:
         return {k: PlatformCfg(**val) if isinstance(val, dict) else val for k, val in v.items()}
+
+    def engine_for(self, platform: str) -> str:
+        """Publication engine for a platform (default: postiz)."""
+        return self.engines.get(platform, "postiz")
 
 
 def load_config(path: str | Path) -> AppConfig:

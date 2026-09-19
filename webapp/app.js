@@ -3,6 +3,7 @@
 
   const I18N = {
     ru: {
+      scan_in_base: "В базе по этим папкам", scan_skipped: "удалённых", scan_restore_btn: "Вернуть удалённое и запустить", t_restored: "Возвращено",
       folders_hint: "Как это работает: добавь папку (кнопки «+ Сериалы», «+ Шортсы», «+ Авто») → нажми «Сканировать» → появится панель «Найдено» и кнопка «Да, запустить» (или выбери дату). Система сама найдёт фильмы и шортсы и разложит их по расписанию.",
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
       edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
@@ -115,6 +116,7 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      scan_in_base: "In base for these folders", scan_skipped: "removed", scan_restore_btn: "Restore removed and start", t_restored: "Restored",
       folders_hint: "How it works: add a folder (+ Series / + Shorts / + Auto) → press Scan → you will see the Found panel with a Start button (or pick a date). The system finds films and shorts and schedules them automatically.",
       queue_edit: "Edit", queue_edit_save: "Save", queue_edit_cancel: "Cancel",
       edit_title: "Title", edit_desc: "Description", edit_tags: "Hashtags", t_saved: "Saved",
@@ -389,14 +391,17 @@
     const warnRow = b.warning ? `<div class="row"><span class="meta">⚠ ${b.warning}</span></div>` : "";
     const sc = state.scan;
     const st = sc ? (sc.stats || {}) : null;
+    const tot = sc ? (sc.totals || {}) : {};
     const scanPanel = sc ? `<div class="panel"><div class="panel-header">${t("scan")}</div>
       <div class="row"><span class="meta">${t("scan_found")}: ${t("scan_films")} ${st.long || 0} · ${t("scan_shorts")} ${st.shorts || 0} · ${t("scan_standalone")} ${st.standalone || 0}</span></div>
+      <div class="row"><span class="meta">${t("scan_in_base")}: ${t("scan_films")} ${tot.long || 0} · ${t("scan_shorts")} ${tot.shorts || 0} · ${t("scan_skipped")}: ${sc.skipped || 0}</span></div>
       <div class="row"><span class="meta">${t("scan_last")}: ${(sc.last_scheduled || "").slice(0, 16).replace("T", " ") || t("scan_none")}</span></div>
       <div class="row"><span class="meta">${t("scan_run_q")}</span></div>
       <div class="form-row">
         <button class="btn primary" data-act="scan-start">${t("scan_run_now")}</button>
         <label class="meta">${t("scan_run_from")} <input id="scan-date" type="date" /></label>
         <button class="btn secondary" data-act="scan-start-date">${t("scan_run_go")}</button>
+        ${(sc.skipped || 0) > 0 ? `<button class="btn secondary" data-act="scan-restore">${t("scan_restore_btn")} (${sc.skipped})</button>` : ""}
       </div></div>` : "";
 
     const dirs = (b.dirs || [])
@@ -1052,6 +1057,13 @@
       if (act === "toggle-mode") {
         const cur = (state.data?.sched?.mode === "auto") ? "auto" : "manual";
         await api("/scheduling_mode", { method: "POST", body: JSON.stringify({ mode: cur === "auto" ? "manual" : "auto" }) });
+        return load();
+      }
+      if (act === "scan-restore") {
+        const rr = await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
+        const rs = await api("/schedule", { method: "POST", body: "{}" });
+        toast(`${t("t_restored")}: ${rr.restored || 0} · ${t("t_sched_started")}: ${rs.long || 0}/${rs.standalone || 0}`);
+        state.scan = null;
         return load();
       }
       if (act === "settings-tab") {

@@ -457,3 +457,18 @@ def test_api_queue_remove_single_platform(env, tmp_path):
     rows = db.fetchall("SELECT platform, status FROM entity_platform_status ORDER BY platform")
     states = {r["platform"]: r["status"] for r in rows}
     assert states == {"telegram": "skipped", "youtube": "scheduled"}
+
+
+def test_api_queue_restore(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_post_id, last_error) VALUES ('long_video', 1, 'telegram', 'skipped', "
+        "'p1', 'removed_by_user')"
+    )
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/restore", headers,
+                                  json.dumps({"all": True}).encode())
+    assert code == 200 and payload["restored"] == 1
+    row = db.fetchone("SELECT status, postiz_post_id, last_error FROM entity_platform_status")
+    assert row["status"] == "ready" and row["postiz_post_id"] is None and row["last_error"] is None

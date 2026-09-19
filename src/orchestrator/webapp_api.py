@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "44"
+WEBAPP_BUILD = "45"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -365,6 +365,27 @@ class WebAppAPI:
                                          etype, eid, plat)
                 return 200, {"ok": True, "updated": updated, "recreated": recreated}, \
                     "application/json"
+            if method == "POST" and route == "queue/restore":
+                etype = str(data.get("entity_type") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype in ("long_video", "short") and eid:
+                    before = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped' "
+                        "AND entity_type=? AND entity_id=?", (etype, eid))
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE status='skipped' AND entity_type=? AND entity_id=?",
+                        (etype, eid))
+                else:
+                    before = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE status='skipped'")
+                return 200, {"ok": True, "restored": (before or {}).get("c", 0)}, "application/json"
             if method == "POST" and route == "queue/remove":
                 etype = str(data.get("entity_type") or "").strip()
                 platform = str(data.get("platform") or "").strip()
@@ -538,6 +559,27 @@ class WebAppAPI:
                                          etype, eid, plat)
                 return 200, {"ok": True, "updated": updated, "recreated": recreated}, \
                     "application/json"
+            if method == "POST" and route == "queue/restore":
+                etype = str(data.get("entity_type") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype in ("long_video", "short") and eid:
+                    before = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped' "
+                        "AND entity_type=? AND entity_id=?", (etype, eid))
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE status='skipped' AND entity_type=? AND entity_id=?",
+                        (etype, eid))
+                else:
+                    before = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE status='skipped'")
+                return 200, {"ok": True, "restored": (before or {}).get("c", 0)}, "application/json"
             if method == "POST" and route == "queue/remove":
                 etype = str(data.get("entity_type") or "").strip()
                 platform = str(data.get("platform") or "").strip()
@@ -673,14 +715,29 @@ class WebAppAPI:
                 if not watcher:
                     return 500, {"error": "watcher unavailable"}, "application/json"
                 stats = watcher.scan()
+                roots = [str(r) for r in watcher.effective_roots()]
+
+                def _under(path: str) -> bool:
+                    return any(path == r or path.startswith(r.rstrip("/") + "/") for r in roots)
+
+                longs = self.db.fetchall("SELECT folder_path FROM long_videos")
+                shorts_rows = self.db.fetchall("SELECT folder_path FROM shorts")
+                totals = {
+                    "long": sum(1 for r in longs if _under(r["folder_path"] or "")),
+                    "shorts": sum(1 for r in shorts_rows if _under(r["folder_path"] or "")),
+                }
+                skipped = self.db.fetchone(
+                    "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
                 last = self.db.fetchone(
                     "SELECT MAX(postiz_scheduled_for) AS m FROM entity_platform_status "
-                    "WHERE postiz_scheduled_for IS NOT NULL")
+                    "WHERE status IN ('scheduled','updating','ready')")
                 return 200, {
                     "ok": True,
                     "stats": stats,
+                    "totals": totals,
+                    "skipped": (skipped or {}).get("c", 0),
                     "last_scheduled": (last or {}).get("m") if last else None,
-                    "roots": [str(r) for r in watcher.effective_roots()],
+                    "roots": roots,
                 }, "application/json"
             if route == "manual/plan" and method == "GET":
                 return 200, self._manual_plan(), "application/json"

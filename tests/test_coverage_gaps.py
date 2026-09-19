@@ -244,7 +244,10 @@ def test_tg_bot_ack_and_help(tmp_path):
     db = Database(tmp_path / "tg.sqlite")
     clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     bot = TelegramNotifier(cfg, db, clock)
-    setup_commands(bot, {})
+    class _Comps(dict):
+        def __missing__(self, key):
+            return None
+    setup_commands(bot, _Comps())
     own = cfg.telegram.allowed_chat_ids[0]
     assert "Принято" in bot.handle_update(own, "привет")
     assert "Неизвестная" in bot.handle_update(own, "/nosuchcmd")

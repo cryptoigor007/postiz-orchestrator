@@ -66,7 +66,7 @@ def test_tg_commands(env):
     db, cfg, clock, tg, tail, link = env
     resp = tg.handle_update(7004751908, "/status")
     # status handler not registered in this isolated test
-    assert resp is None or "Unknown" in (resp or "") or "Status" in (resp or "") or "No entities" in (resp or "")
+    assert resp is None or "Неизвестная" in (resp or "") or "Unknown" in (resp or "") or "Status" in (resp or "") or "No entities" in (resp or "")
     assert tg.handle_update(111, "/status") == "Access denied"
 
 

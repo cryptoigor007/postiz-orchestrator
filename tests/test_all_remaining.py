@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -8,11 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from orchestrator.clock import FakeClock
 from orchestrator.config import load_config
 from orchestrator.db import Database
+from orchestrator.metrics import Metrics
 from orchestrator.postiz import MockPostizClient
 from orchestrator.publisher import Publisher
 from orchestrator.safety import SafetyChecker
 from orchestrator.scheduler import Scheduler
-from orchestrator.metrics import Metrics
 from orchestrator.telegram_transport import TelegramTransport
 
 
@@ -20,7 +21,7 @@ def test_multi_platform_schedule(tmp_path):
     db = Database(tmp_path / "m.sqlite")
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     db.ensure_platform_states(list(cfg.platforms.keys()))
-    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
@@ -47,7 +48,7 @@ def test_orphan_on_create_fail(tmp_path):
     db = Database(tmp_path / "o.sqlite")
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     db.ensure_platform_states(["youtube"])
-    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     postiz.fail_create = True
     safety = SafetyChecker(db, cfg, clock)
@@ -61,7 +62,7 @@ def test_orphan_on_create_fail(tmp_path):
     try:
         pub.publish(
             "long_video", vid, "youtube", "/or/w.mp4", {"title": "x"},
-            datetime(2026, 3, 11, 13, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 11, 13, 0, tzinfo=UTC),
         )
     except Exception:
         pass

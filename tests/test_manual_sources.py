@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from orchestrator.config import load_config
-from orchestrator.postiz import MockPostizClient
-from orchestrator.manual_sources import build_manual_sources
-from orchestrator.engines.postiz_engine import PostizEngine
 from orchestrator.engines.direct_youtube import YouTubeEngine
+from orchestrator.engines.postiz_engine import PostizEngine
+from orchestrator.manual_sources import build_manual_sources
+from orchestrator.postiz import MockPostizClient
 
 ROOT = Path(__file__).resolve().parents[1]
 

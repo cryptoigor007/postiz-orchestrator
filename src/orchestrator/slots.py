@@ -1,8 +1,9 @@
 from __future__ import annotations
-from datetime import datetime, timedelta, time, timezone, date
-from typing import Iterator
-from zoneinfo import ZoneInfo
+
 import hashlib
+from collections.abc import Iterator
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 DAY_MAP = {
     "mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6,
@@ -25,7 +26,7 @@ def local_to_utc(d: date, t: time, tz_name: str) -> datetime:
     """Interpret wall-clock date+time in tz_name, return UTC datetime."""
     tz = get_tz(tz_name)
     local = datetime.combine(d, t, tzinfo=tz)
-    return local.astimezone(timezone.utc)
+    return local.astimezone(UTC)
 
 
 def daterange_dates(start: date, end: date) -> Iterator[date]:
@@ -46,7 +47,7 @@ def thematic_slot_days(
     Times are wall-clock in tz_name, returned as UTC.
     """
     if long_video_date.tzinfo is None:
-        long_video_date = long_video_date.replace(tzinfo=timezone.utc)
+        long_video_date = long_video_date.replace(tzinfo=UTC)
     tz = get_tz(tz_name)
     local_long = long_video_date.astimezone(tz)
     t = parse_time(default_time)
@@ -55,7 +56,7 @@ def thematic_slot_days(
         return [local_to_utc(local_long.date(), t, tz_name)]
 
     if next_long_date.tzinfo is None:
-        next_long_date = next_long_date.replace(tzinfo=timezone.utc)
+        next_long_date = next_long_date.replace(tzinfo=UTC)
     local_next = next_long_date.astimezone(tz)
     end_day = local_next.date() - timedelta(days=1)
     if end_day < local_long.date():
@@ -116,7 +117,7 @@ def next_long_video_dates(
     tz = get_tz(tz_name)
 
     if from_dt.tzinfo is None:
-        from_dt = from_dt.replace(tzinfo=timezone.utc)
+        from_dt = from_dt.replace(tzinfo=UTC)
     local_from = from_dt.astimezone(tz)
 
     result: list[datetime] = []

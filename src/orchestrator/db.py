@@ -1,10 +1,11 @@
 from __future__ import annotations
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Generator, Iterable
 
+import sqlite3
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -138,7 +139,7 @@ SCHEMA_VERSION = 9
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class Database:

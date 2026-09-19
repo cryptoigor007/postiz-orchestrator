@@ -1,6 +1,7 @@
 from __future__ import annotations
-from datetime import datetime, timedelta, timezone
+
 import logging
+from datetime import datetime, timedelta
 
 from .clock import Clock
 from .config import AppConfig
@@ -121,7 +122,6 @@ class LinkUpdater:
                     "WHERE entity_type='short' AND entity_id=? AND platform=?",
                     (r["entity_id"], platform),
                 )
-                from .publisher import Publisher
                 # use scheduler's publisher if available
                 pub = getattr(scheduler, "publisher", None)
                 if pub is None:

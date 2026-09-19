@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def test_upload_confirm_unique_per_entity(tmp_path):
     assert row["matched_entity_id"] == 10
     # same entity on same platform -> unique index must reject a second confirmed match
     import sqlite3
+
     import pytest
     with pytest.raises(sqlite3.IntegrityError):
         db.set_upload_match(u2["id"], "long_video", 10, 0.8, "confirmed")

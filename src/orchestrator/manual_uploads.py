@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _WORD = re.compile(r"[^\w]+", re.UNICODE)
@@ -27,7 +28,7 @@ def _parse(ts: str | None) -> datetime | None:
         return None
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
     except Exception:
         return None
 

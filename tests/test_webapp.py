@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -9,13 +10,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from orchestrator.clock import FakeClock
 from orchestrator.config import load_config
 from orchestrator.db import Database
+from orchestrator.link_updater import LinkUpdater
 from orchestrator.postiz import MockPostizClient
 from orchestrator.publisher import Publisher
 from orchestrator.safety import SafetyChecker
 from orchestrator.scheduler import Scheduler
-from orchestrator.link_updater import LinkUpdater
 from orchestrator.telegram_bot import TelegramNotifier
-from orchestrator.webapp_api import WebAppAPI, validate_init_data, WEBAPP_DIR
+from orchestrator.webapp_api import WEBAPP_DIR, WebAppAPI, validate_init_data
 
 
 def test_webapp_static_exists():
@@ -35,7 +36,7 @@ def test_api_status(tmp_path):
     db = Database(tmp_path / "w.sqlite")
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     db.ensure_platform_states(list(cfg.platforms.keys()))
-    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=True)

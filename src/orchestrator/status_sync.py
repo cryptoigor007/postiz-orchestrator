@@ -1,6 +1,7 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+
 import logging
+from datetime import UTC, datetime
 
 from .clock import Clock
 from .config import AppConfig
@@ -29,7 +30,6 @@ class StatusSync:
         """
         rows = self.db.fetchall(sql)
         if fresh_only:
-            from datetime import timedelta
             window = self.cfg.confirm_published_interval_sec
             now = self.clock.now()
             filtered = []
@@ -40,7 +40,7 @@ class StatusSync:
                 try:
                     st = datetime.fromisoformat(r["postiz_scheduled_for"])
                     if st.tzinfo is None:
-                        st = st.replace(tzinfo=timezone.utc)
+                        st = st.replace(tzinfo=UTC)
                     if abs((st - now).total_seconds()) <= window * 3:
                         filtered.append(r)
                 except Exception:

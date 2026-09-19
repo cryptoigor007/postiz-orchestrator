@@ -1,18 +1,19 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from orchestrator.postiz import MockPostizClient
 from orchestrator.engines.postiz_engine import PostizEngine
+from orchestrator.postiz import MockPostizClient
 
 
 def test_postiz_engine_publish_delegates():
     client = MockPostizClient()
     eng = PostizEngine(client)
-    sched = datetime(2026, 9, 20, 10, 0, tzinfo=timezone.utc)
+    sched = datetime(2026, 9, 20, 10, 0, tzinfo=UTC)
     r = eng.publish("telegram", "/tmp/v.mp4",
                     {"description": "hi", "integration_id": "int1"}, sched)
     assert r.engine == "postiz"

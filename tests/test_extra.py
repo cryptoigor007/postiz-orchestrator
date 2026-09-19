@@ -1,19 +1,18 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from orchestrator.slots import apply_jitter
-from orchestrator.reload import reload_config
 from orchestrator.config import load_config
-from orchestrator.db import Database
-from orchestrator.clock import FakeClock
+from orchestrator.reload import reload_config
+from orchestrator.slots import apply_jitter
 
 
 def test_jitter_changes_time():
-    dt = datetime(2026, 3, 10, 16, 0, tzinfo=timezone.utc)
+    dt = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
     j = apply_jitter(dt, 90)
     assert abs((j - dt).total_seconds()) <= 90
 

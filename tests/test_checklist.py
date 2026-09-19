@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,14 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from orchestrator.clock import FakeClock
 from orchestrator.config import load_config
 from orchestrator.db import Database
+from orchestrator.link_updater import LinkUpdater
 from orchestrator.postiz import MockPostizClient, PostizPost
+from orchestrator.postiz_factory import create_postiz_client
 from orchestrator.publisher import Publisher
 from orchestrator.safety import SafetyChecker
 from orchestrator.scheduler import Scheduler
 from orchestrator.status_sync import StatusSync
-from orchestrator.link_updater import LinkUpdater
 from orchestrator.telegram_bot import TelegramNotifier, setup_commands
-from orchestrator.postiz_factory import create_postiz_client
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def env(tmp_path):
     db = Database(tmp_path / "c.sqlite")
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     db.ensure_platform_states(list(cfg.platforms.keys()))
-    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
@@ -92,7 +93,7 @@ def test_refresh_thematic_with_url(env):
         (now,),
     )
     vid = db.fetchone("SELECT id FROM long_videos")["id"]
-    pub_time = datetime(2026, 3, 10, 16, 0, tzinfo=timezone.utc)
+    pub_time = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
     db.execute(
         "INSERT INTO entity_platform_status "
         "(entity_type, entity_id, platform, status, postiz_post_id, "

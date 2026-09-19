@@ -11,12 +11,13 @@ Env:
   BROKER_PLATFORMS   comma list allowed (default youtube)
 """
 from __future__ import annotations
+
 import json
 import os
 import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 SECRET = os.getenv("BROKER_SECRET", "")
 BIND = os.getenv("BROKER_BIND", "0.0.0.0")

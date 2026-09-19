@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from orchestrator.clock import FakeClock
-from orchestrator.config import load_config, AppConfig
+from orchestrator.config import load_config
 from orchestrator.db import Database
 from orchestrator.safety import SafetyChecker
 
@@ -27,7 +28,7 @@ def cfg():
 
 @pytest.fixture
 def clock():
-    return FakeClock(datetime(2026, 3, 10, 12, 0, 0, tzinfo=timezone.utc))
+    return FakeClock(datetime(2026, 3, 10, 12, 0, 0, tzinfo=UTC))
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ def safety(db, cfg, clock):
 def test_daily_limit_future_date(db, safety, clock):
     platform = "youtube"
     # insert 7 posts on 2026-03-12
-    base = datetime(2026, 3, 12, 10, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 3, 12, 10, 0, tzinfo=UTC)
     for i in range(7):
         db.execute(
             """
@@ -49,20 +50,20 @@ def test_daily_limit_future_date(db, safety, clock):
             (i + 1, platform, (base + timedelta(hours=i)).isoformat()),
         )
     ok, reason = safety.can_schedule(
-        platform, datetime(2026, 3, 12, 20, 0, tzinfo=timezone.utc), 7
+        platform, datetime(2026, 3, 12, 20, 0, tzinfo=UTC), 7
     )
     assert not ok
     assert "daily_limit" in reason
 
     ok2, _ = safety.can_schedule(
-        platform, datetime(2026, 3, 13, 10, 0, tzinfo=timezone.utc), 7
+        platform, datetime(2026, 3, 13, 10, 0, tzinfo=UTC), 7
     )
     assert ok2
 
 
 def test_min_interval(db, safety):
     platform = "tiktok"
-    t1 = datetime(2026, 3, 10, 14, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 3, 10, 14, 0, tzinfo=UTC)
     db.execute(
         """
         INSERT INTO entity_platform_status
@@ -85,7 +86,7 @@ def test_min_interval(db, safety):
 
 def test_find_next_slot(db, safety):
     platform = "youtube"
-    t0 = datetime(2026, 3, 11, 16, 0, tzinfo=timezone.utc)
+    t0 = datetime(2026, 3, 11, 16, 0, tzinfo=UTC)
     db.execute(
         """
         INSERT INTO entity_platform_status

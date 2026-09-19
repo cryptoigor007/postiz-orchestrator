@@ -1,14 +1,14 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-from typing import Any
+
 import logging
+from datetime import UTC, datetime
 
 from .clock import Clock
 from .config import AppConfig
 from .db import Database
 from .publisher import Publisher
 from .safety import SafetyChecker
-from .slots import thematic_slot_days, distribute_shorts, next_long_video_dates
+from .slots import distribute_shorts, next_long_video_dates, thematic_slot_days
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ class Scheduler:
         long_sched = parent.get("postiz_scheduled_for") or parent.get("published_at")
         long_dt = datetime.fromisoformat(long_sched) if long_sched else self.clock.now()
         if long_dt.tzinfo is None:
-            long_dt = long_dt.replace(tzinfo=timezone.utc)
+            long_dt = long_dt.replace(tzinfo=UTC)
 
         # next long for this platform
         next_long = self.db.fetchone(
@@ -136,7 +136,7 @@ class Scheduler:
         if next_long and next_long["postiz_scheduled_for"]:
             next_dt = datetime.fromisoformat(next_long["postiz_scheduled_for"])
             if next_dt.tzinfo is None:
-                next_dt = next_dt.replace(tzinfo=timezone.utc)
+                next_dt = next_dt.replace(tzinfo=UTC)
 
         default_time = self.cfg.schedules.get("shorts_thematic", {}).get("default_time", "20:30")
         slots = thematic_slot_days(long_dt, next_dt, default_time, tz_name=self.cfg.timezone)
@@ -196,21 +196,22 @@ class Scheduler:
                 continue
             long_dt = datetime.fromisoformat(raw)
             if long_dt.tzinfo is None:
-                long_dt = long_dt.replace(tzinfo=timezone.utc)
+                long_dt = long_dt.replace(tzinfo=UTC)
             next_dt = None
             if i + 1 < len(rows):
                 nraw = rows[i + 1]["postiz_scheduled_for"] or rows[i + 1]["published_at"]
                 if nraw:
                     next_dt = datetime.fromisoformat(nraw)
                     if next_dt.tzinfo is None:
-                        next_dt = next_dt.replace(tzinfo=timezone.utc)
+                        next_dt = next_dt.replace(tzinfo=UTC)
             occupied |= thematic_days_set(long_dt, next_dt, self.cfg.timezone)
         return occupied
 
     def schedule_standalone_shorts(self, tail_manager=None) -> int:
         """Schedule ShortsMaker standalone shorts on free (non-thematic) days."""
-        from .slots import DAY_MAP, parse_time, local_to_utc, get_tz
         from datetime import timedelta
+
+        from .slots import DAY_MAP, get_tz, local_to_utc, parse_time
 
         sched = self.cfg.schedules.get("shorts_standalone", {})
         days = sched.get("days", ["mon", "wed", "thu", "sat", "sun"])

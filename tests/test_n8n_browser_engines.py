@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from orchestrator.engines.n8n_engine import N8nEngine
 from orchestrator.engines.browser_engine import BrowserEngine
+from orchestrator.engines.n8n_engine import N8nEngine
 
 
 def test_n8n_publish_and_list():

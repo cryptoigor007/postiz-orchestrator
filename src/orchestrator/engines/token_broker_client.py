@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 def _urllib_http(method: str, url: str, params: dict, headers: dict) -> dict:

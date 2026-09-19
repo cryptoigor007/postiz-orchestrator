@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def test_token_broker_error_message(monkeypatch):
     import io
     import urllib.error
     import urllib.request
+
     import pytest
 
     def fake_urlopen(req, timeout=None):

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -23,7 +24,7 @@ from .postiz_factory import create_postiz_client
 from .publisher import Publisher
 from .safety import SafetyChecker
 from .scheduler import Scheduler
-from .status_sync import StatusSync, Reconciliation
+from .status_sync import Reconciliation, StatusSync
 from .tail import TailManager
 from .telegram_bot import TelegramNotifier, setup_commands
 from .telegram_transport import TelegramTransport

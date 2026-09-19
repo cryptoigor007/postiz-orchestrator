@@ -1,7 +1,8 @@
 from __future__ import annotations
-from pathlib import Path
+
 import logging
 import shutil
+from pathlib import Path
 
 from .config import AppConfig, load_config
 

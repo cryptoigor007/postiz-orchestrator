@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from orchestrator.watcher import Watcher
 def env(tmp_path):
     db = Database(tmp_path / "w.sqlite")
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
-    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     root = tmp_path / "content"
     series = root / "my_series"
     (series / "wide").mkdir(parents=True)

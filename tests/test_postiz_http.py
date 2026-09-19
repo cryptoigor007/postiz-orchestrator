@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -30,7 +31,7 @@ def test_create_post_body_matches_postiz_dto():
         return httpx.Response(200, json=[{"postId": "abc-123", "integration": "int-1"}])
 
     client = _client(handler)
-    scheduled_for = datetime(2026, 9, 19, 15, 0, tzinfo=timezone.utc)
+    scheduled_for = datetime(2026, 9, 19, 15, 0, tzinfo=UTC)
     post = client.create_post(
         platform="telegram",
         media=MediaRef(id="media-1", path="https://host/uploads/a.mp4"),

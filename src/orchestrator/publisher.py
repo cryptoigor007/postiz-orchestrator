@@ -1,7 +1,8 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-from typing import Any
+
 import logging
+from datetime import UTC, datetime
+from typing import Any
 
 from .clock import Clock
 from .config import AppConfig
@@ -57,7 +58,7 @@ class Publisher:
     ) -> PostizPost | None:
         """Full publish pipeline with safety + idempotency."""
         if scheduled_for and scheduled_for.tzinfo is None:
-            scheduled_for = scheduled_for.replace(tzinfo=timezone.utc)
+            scheduled_for = scheduled_for.replace(tzinfo=UTC)
 
         # jitter
         if scheduled_for and self.cfg.safety.jitter_seconds:

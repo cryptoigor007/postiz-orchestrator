@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ def setup(tmp_path):
     db = Database(tmp_path / "t.sqlite")
     db.ensure_platform_states(["youtube"])
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
-    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
@@ -35,7 +36,7 @@ def test_idempotent_create(setup):
         (clock.now().isoformat(),),
     )
     vid = db.fetchone("SELECT id FROM long_videos")["id"]
-    sched = datetime(2026, 3, 10, 16, 0, tzinfo=timezone.utc)
+    sched = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
     content = {"title": "T", "description": "D"}
 
     p1 = pub.publish("long_video", vid, "youtube", "/a/w.mp4", content, sched)
@@ -57,7 +58,7 @@ def test_safety_blocks(setup):
         (clock.now().isoformat(),),
     )
     vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/b'")["id"]
-    sched = datetime(2026, 3, 11, 16, 0, tzinfo=timezone.utc)
+    sched = datetime(2026, 3, 11, 16, 0, tzinfo=UTC)
     p = pub.publish("long_video", vid, "youtube", "/b/w.mp4", {"title": "x"}, sched)
     assert p is None
 
@@ -73,7 +74,7 @@ def test_dry_run(setup):
     vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/c'")["id"]
     p = pub.publish(
         "long_video", vid, "youtube", "/c/w.mp4", {"title": "x"},
-        datetime(2026, 3, 12, 16, 0, tzinfo=timezone.utc),
+        datetime(2026, 3, 12, 16, 0, tzinfo=UTC),
     )
     assert p is None
     assert len(postiz.posts) == 0

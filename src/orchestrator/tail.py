@@ -1,6 +1,7 @@
 from __future__ import annotations
-from datetime import datetime, timedelta, timezone
+
 import logging
+from datetime import UTC, datetime
 
 from .clock import Clock
 from .config import AppConfig
@@ -56,7 +57,7 @@ class TailManager:
             return
         last_dt = datetime.fromisoformat(last)
         if last_dt.tzinfo is None:
-            last_dt = last_dt.replace(tzinfo=timezone.utc)
+            last_dt = last_dt.replace(tzinfo=UTC)
         days = (self.clock.now() - last_dt).days
         if days < self.cfg.tail.soft_enter_days:
             return
@@ -64,7 +65,7 @@ class TailManager:
         if row["last_series_end_question_at"]:
             prev = datetime.fromisoformat(row["last_series_end_question_at"])
             if prev.tzinfo is None:
-                prev = prev.replace(tzinfo=timezone.utc)
+                prev = prev.replace(tzinfo=UTC)
             if (self.clock.now() - prev).days < self.cfg.tail.series_end_question_cooldown_days:
                 return
         now = self.clock.now().isoformat()
@@ -94,7 +95,7 @@ class TailManager:
             try:
                 at = datetime.fromisoformat(r["pending_series_end_at"])
                 if at.tzinfo is None:
-                    at = at.replace(tzinfo=timezone.utc)
+                    at = at.replace(tzinfo=UTC)
             except Exception:
                 continue
             if (now - at).days >= ttl:

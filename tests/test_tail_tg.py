@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,11 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from orchestrator.clock import FakeClock
 from orchestrator.config import load_config
 from orchestrator.db import Database
-from orchestrator.tail import TailManager
-from orchestrator.telegram_bot import TelegramNotifier, setup_commands
-from orchestrator.overflow import move_excess_shorts
 from orchestrator.link_updater import LinkUpdater
+from orchestrator.overflow import move_excess_shorts
 from orchestrator.postiz import MockPostizClient
+from orchestrator.tail import TailManager
+from orchestrator.telegram_bot import TelegramNotifier
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def env(tmp_path):
     db = Database(tmp_path / "t.sqlite")
     db.ensure_platform_states(["youtube"])
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
-    clock = FakeClock(datetime(2026, 3, 20, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 20, 12, 0, tzinfo=UTC))
     tg = TelegramNotifier(cfg, db, clock)
     tail = TailManager(db, cfg, clock, tg)
     postiz = MockPostizClient()

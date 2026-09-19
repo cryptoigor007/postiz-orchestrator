@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from orchestrator.engines.registry import REGISTRY, capabilities, select_engine
 from orchestrator.engines.base import PublishResult
+from orchestrator.engines.registry import REGISTRY, capabilities, select_engine
 
 
 def test_capabilities_matrix():

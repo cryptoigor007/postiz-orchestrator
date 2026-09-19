@@ -1,15 +1,16 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from orchestrator.slots import local_to_utc, next_long_video_dates, thematic_slot_days
 from orchestrator.clock import FakeClock
 from orchestrator.config import load_config
 from orchestrator.db import Database
 from orchestrator.safety import SafetyChecker
+from orchestrator.slots import local_to_utc, next_long_video_dates
 
 
 def test_msk_wall_to_utc():
@@ -17,11 +18,11 @@ def test_msk_wall_to_utc():
     utc = local_to_utc(date(2026, 3, 10), time(16, 0), "Europe/Moscow")
     # MSK = UTC+3 → 13:00 UTC
     assert utc.hour == 13
-    assert utc.tzinfo == timezone.utc
+    assert utc.tzinfo == UTC
 
 
 def test_next_long_in_msk():
-    from_dt = datetime(2026, 3, 9, 10, 0, tzinfo=timezone.utc)
+    from_dt = datetime(2026, 3, 9, 10, 0, tzinfo=UTC)
     dates = next_long_video_dates(
         ["tue", "fri"], "16:00", from_dt, count=2, tz_name="Europe/Moscow"
     )
@@ -36,7 +37,7 @@ def test_auto_resume(tmp_path):
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     # force pause_hours = 1 for test
     cfg.safety.on_serious_error["pause_hours"] = 1
-    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
     safety = SafetyChecker(db, cfg, clock)
     safety.pause_platform("youtube", "test")
     assert safety.is_platform_paused("youtube")

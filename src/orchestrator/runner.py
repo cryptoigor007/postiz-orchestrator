@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import logging
 import signal
 import time
-from typing import Any
 from pathlib import Path
+from typing import Any
 
-from .metrics import Metrics
 from .http_server import start_http_server
+from .metrics import Metrics
 from .webapp_api import WebAppAPI
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,7 @@ class Runner:
 
     def _cycle_backup(self) -> None:
         from pathlib import Path
+
         from .backup import run_backup
         db_path = Path(self.comps["db"].path)
         bdir = db_path.parent.parent / "backups"

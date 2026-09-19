@@ -1,6 +1,6 @@
 from __future__ import annotations
-from datetime import datetime, timedelta, timezone
-from typing import Any
+
+from datetime import UTC, datetime, timedelta
 
 from .clock import Clock
 from .config import AppConfig, SafetyCfg
@@ -12,7 +12,7 @@ def _parse_dt(s: str | None) -> datetime | None:
         return None
     dt = datetime.fromisoformat(s)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -105,7 +105,7 @@ class SafetyChecker:
             return False, "platform_paused"
 
         if scheduled_for.tzinfo is None:
-            scheduled_for = scheduled_for.replace(tzinfo=timezone.utc)
+            scheduled_for = scheduled_for.replace(tzinfo=UTC)
 
         target_date = scheduled_for.date().isoformat()
         count = self._count_posts_on_date(platform, target_date)
@@ -139,7 +139,7 @@ class SafetyChecker:
         """Find nearest time >= base_time that satisfies limits and min_interval."""
         candidate = base_time
         if candidate.tzinfo is None:
-            candidate = candidate.replace(tzinfo=timezone.utc)
+            candidate = candidate.replace(tzinfo=UTC)
         interval = timedelta(minutes=self.safety.min_interval_minutes)
 
         for _ in range(max_attempts):

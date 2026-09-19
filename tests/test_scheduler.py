@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ from orchestrator.postiz import MockPostizClient
 from orchestrator.publisher import Publisher
 from orchestrator.safety import SafetyChecker
 from orchestrator.scheduler import Scheduler
-from orchestrator.status_sync import StatusSync, Reconciliation
+from orchestrator.status_sync import Reconciliation
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def env(tmp_path):
     db = Database(tmp_path / "s.sqlite")
     db.ensure_platform_states(["youtube", "tiktok"])
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
-    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=timezone.utc))  # Mon
+    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))  # Mon
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
@@ -60,7 +61,7 @@ def test_thematic_after_publish(env):
     )
     vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/s2'")["id"]
     # mark as published with url
-    pub_time = datetime(2026, 3, 10, 16, 0, tzinfo=timezone.utc)
+    pub_time = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
     db.execute(
         """
         INSERT INTO entity_platform_status

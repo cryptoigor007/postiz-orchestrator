@@ -7,6 +7,7 @@ Env:
   POSTIZ_VERIFY_TLS  "1" to verify TLS (default 0 — self-signed self-hosted)
 """
 from __future__ import annotations
+
 import json
 import os
 import ssl

@@ -1,8 +1,9 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-from pathlib import Path
+
 import logging
 import sqlite3
+from datetime import UTC, datetime
+from pathlib import Path
 
 from .config import AppConfig
 from .db import Database
@@ -15,7 +16,7 @@ def run_backup(db: Database, cfg: AppConfig, backup_dir: str | Path) -> Path | N
         return None
     backup_dir = Path(backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     dest = backup_dir / f"data_{ts}.sqlite"
     # VACUUM INTO is safe online backup for SQLite
     try:

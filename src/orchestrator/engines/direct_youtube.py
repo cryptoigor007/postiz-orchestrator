@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import json as _json
 import re
 import ssl
 import urllib.parse
 import urllib.request
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .registry import capabilities
 

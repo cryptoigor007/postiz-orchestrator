@@ -1,8 +1,9 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-from typing import Any
+
 import logging
 import os
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 
@@ -135,12 +136,12 @@ class HttpPostizClient:
         # Postiz CreatePostDto: { type, shortLink, date, tags, posts:[{integration,value,settings}] }
         if scheduled_for:
             if scheduled_for.tzinfo is None:
-                scheduled_for = scheduled_for.replace(tzinfo=timezone.utc)
+                scheduled_for = scheduled_for.replace(tzinfo=UTC)
             post_type = content.get("post_type", "schedule")
-            date = scheduled_for.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            date = scheduled_for.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         else:
             post_type = content.get("post_type", "now")
-            date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         entry: dict[str, Any] = {
             "integration": {"id": integration_id},
@@ -224,7 +225,7 @@ class HttpPostizClient:
     def list_scheduled(self, platform: str | None = None) -> list[PostizPost]:
         # API: GET /public/v1/posts?startDate=&endDate=  ->  {"posts":[...]}
         from datetime import timedelta
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         params = {
             "startDate": (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "endDate": (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ"),

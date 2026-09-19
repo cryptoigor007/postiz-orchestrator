@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def make(tmp_path):
     db = Database(tmp_path / "m.sqlite")
     cfg = load_config(ROOT / "config.yaml")
-    clock = FakeClock(datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 9, 19, 12, 0, tzinfo=UTC))
     return ManualUploadsService(db, cfg, clock), db, clock
 
 

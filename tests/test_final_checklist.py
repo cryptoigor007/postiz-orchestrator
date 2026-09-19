@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from orchestrator.clock import FakeClock
 from orchestrator.config import load_config
 from orchestrator.db import Database
+from orchestrator.link_updater import LinkUpdater
 from orchestrator.postiz import MockPostizClient
 from orchestrator.publisher import Publisher
 from orchestrator.safety import SafetyChecker
@@ -17,7 +19,6 @@ from orchestrator.scheduler import Scheduler
 from orchestrator.status_sync import StatusSync
 from orchestrator.tail import TailManager
 from orchestrator.telegram_bot import TelegramNotifier, setup_commands
-from orchestrator.link_updater import LinkUpdater
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def env(tmp_path):
     db = Database(tmp_path / "f.sqlite")
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
     db.ensure_platform_states(list(cfg.platforms.keys()))
-    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))
     postiz = MockPostizClient()
     safety = SafetyChecker(db, cfg, clock)
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
@@ -47,7 +48,7 @@ def env(tmp_path):
 
 
 def test_e2e_long_to_thematic(env):
-    db, clock, postiz, pub, sched, sync = (
+    db, clock, postiz, _pub, sched, sync = (
         env["db"], env["clock"], env["postiz"], env["pub"], env["sched"], env["sync"]
     )
     now = clock.now().isoformat()

@@ -1,9 +1,10 @@
 from __future__ import annotations
+
+import hashlib
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
-import hashlib
-import logging
 
 logger = logging.getLogger(__name__)
 

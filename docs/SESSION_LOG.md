@@ -67,3 +67,10 @@
 - Menu-button sync-скрипт сделал авто-версионным (BUILD читается из кода) — устранён дрейф
   версии; скрипт добавлен в репозиторий (deploy/cloudflared_url_sync.sh).
 - Tests: 112 passed; lint чист. Сборка b24 задеплоена (menu → b24).
+
+## 2026-09-19 — Проверки и прикрутка
+- scan: учёт `lookback_days` и `page_size` из конфига (окно поиска, размер страницы).
+- MCP: добавлены инструменты sync/reconcile/backup/schedule/pause_platform (+ тесты).
+- Полный чеклист проверки: docs/VERIFICATION.md.
+- Telegram: очищена история сообщений бота (18 удалено), отправлено одно чистое.
+- Tests: 115 passed; lint чист.

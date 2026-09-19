@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import json
+import sys
+import urllib.error
+import urllib.request
+from datetime import UTC, datetime
+from pathlib import Path
+
+import httpx
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from orchestrator.clock import FakeClock
+from orchestrator.config import load_config
+from orchestrator.db import Database
+from orchestrator.overflow import move_excess_shorts
+from orchestrator.postiz import MockPostizClient
+from orchestrator.postiz_factory import create_postiz_client
+from orchestrator.postiz_http import HttpPostizClient
+from orchestrator.publisher import Publisher
+from orchestrator.safety import SafetyChecker
+from orchestrator.scheduler import Scheduler
+from orchestrator.watcher import Watcher
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+# ---------- postiz_http: полный набор методов ----------
+
+def _http_client(handler):
+    return HttpPostizClient(base_url="https://host", token="tok",
+                            transport=httpx.MockTransport(handler))
+
+
+def test_postiz_http_delete_status_release():
+    seen = []
+
+    def handler(req):
+        seen.append((req.method, req.url.path, req.content.decode() if req.content else ""))
+        if req.method == "DELETE":
+            return httpx.Response(204)
+        return httpx.Response(200, json={"ok": True})
+
+    c = _http_client(handler)
+    c.delete_post("p1")
+    c.set_status("p1", "draft")
+    c.set_release_id("p1", "https://youtu.be/x")
+    assert ("DELETE", "/public/v1/posts/p1", "") in seen
+    assert ("PUT", "/public/v1/posts/p1/status", '{"status":"draft"}') in seen
+    assert ("PUT", "/public/v1/posts/p1/release-id",
+            '{"releaseId":"https://youtu.be/x","release_id":"https://youtu.be/x"}') in seen
+    c.close()
+
+
+def test_postiz_http_get_post_404_and_ok():
+    def handler404(req):
+        return httpx.Response(404, json={"message": "no"})
+
+    c = _http_client(handler404)
+    assert c.get_post("missing") is None
+    c.close()
+
+    def handler_ok(req):
+        return httpx.Response(200, json={
+            "id": "p2", "state": "QUEUE", "publishDate": "2027-01-02T09:00:00.000Z",
+            "content": "hi", "integration": {"providerIdentifier": "telegram"},
+            "releaseURL": None,
+        })
+
+    c2 = _http_client(handler_ok)
+    post = c2.get_post("p2")
+    assert post is not None and post.status.lower() == "queue"
+    c2.close()
+
+
+def test_postiz_http_list_scheduled_parses_and_filters():
+    def handler(req):
+        return httpx.Response(200, json={"posts": [
+            {"id": "a", "content": "keep", "publishDate": "2027-01-02T09:00:00.000Z",
+             "state": "QUEUE", "integration": {"providerIdentifier": "telegram"},
+             "releaseURL": None},
+            {"id": "b", "content": "skip", "publishDate": "2027-01-03T09:00:00.000Z",
+             "state": "ERROR", "integration": {"providerIdentifier": "youtube"}},
+        ]})
+
+    c = _http_client(handler)
+    rows = c.list_scheduled()
+    assert [r.id for r in rows] == ["a"]
+    assert rows[0].platform == "telegram"
+    assert rows[0].content == {"text": "keep"}
+    c.close()
+
+
+def test_postiz_factory_real_and_mock(monkeypatch):
+    monkeypatch.setenv("POSTIZ_API_TOKEN", "x")
+    assert isinstance(create_postiz_client(dry_run=False), HttpPostizClient)
+    monkeypatch.delenv("POSTIZ_API_TOKEN")
+    assert isinstance(create_postiz_client(dry_run=False), MockPostizClient)
+
+
+# ---------- main ----------
+
+def test_main_version_returns_zero(capsys):
+    from orchestrator import __version__
+    from orchestrator.main import main
+    assert main(["--version"]) == 0
+    assert __version__ in capsys.readouterr().out
+
+
+# ---------- scheduler: standalone shorts ----------
+
+def test_schedule_standalone_shorts(tmp_path):
+    db = Database(tmp_path / "st.sqlite")
+    cfg = load_config(ROOT / "config.yaml")
+    db.ensure_platform_states(list(cfg.platforms.keys()))
+    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))  # Monday
+    postiz = MockPostizClient()
+    safety = SafetyChecker(db, cfg, clock)
+    pub = Publisher(db, cfg, postiz, safety, clock, dry_run=False)
+    sched = Scheduler(db, cfg, pub, safety, clock)
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, order_index, video_path, title_text, created_at) "
+        "VALUES ('shortsmaker','/sm/s0',0,'/sm/s0/v.mp4','S','" + clock.now().isoformat() + "')"
+    )
+    n = sched.schedule_standalone_shorts(None)
+    assert n >= 1
+    rows = db.fetchall("SELECT platform, status FROM entity_platform_status WHERE entity_type='short'")
+    assert rows and all(r["status"] == "scheduled" for r in rows)
+
+
+# ---------- watcher: ShortsMaker root ----------
+
+def test_watcher_standalone_root(tmp_path):
+    db = Database(tmp_path / "w.sqlite")
+    cfg = load_config(ROOT / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))
+    root = tmp_path / "shortsmaker_output"
+    (root / "a").mkdir(parents=True)
+    (root / "a" / "clip.mp4").write_bytes(b"x")
+    w = Watcher(db, cfg, clock, [str(root)])
+    total = 0
+    for _ in range(3):
+        total += w.scan()["standalone"]
+    assert total == 1
+    assert db.fetchone("SELECT id FROM shorts WHERE source='shortsmaker'")
+
+
+# ---------- overflow ----------
+
+def test_move_excess_shorts(tmp_path):
+    db = Database(tmp_path / "o.sqlite")
+    cfg = load_config(ROOT / "config.yaml")
+    cfg.limits.max_shorts_per_long_video = 2
+    clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))
+    series = tmp_path / "series"
+    (series / "shorts").mkdir(parents=True)
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) VALUES ('v',?, 't', ?)",
+        (str(series), clock.now().isoformat()),
+    )
+    vid = db.fetchone("SELECT id FROM long_videos")["id"]
+    for i in range(4):
+        d = series / "shorts" / f"short_{i}"
+        d.mkdir()
+        db.execute(
+            "INSERT INTO shorts (source, parent_video_id, folder_path, order_index, created_at) "
+            "VALUES ('videomaker', ?, ?, ?, ?)",
+            (vid, str(d), i, clock.now().isoformat()),
+        )
+    moved = move_excess_shorts(db, cfg, clock, vid)
+    assert moved == 2
+    assert (series / "shorts_overflow").is_dir()
+    skipped = db.fetchall("SELECT status FROM entity_platform_status WHERE entity_type='short' AND status='skipped'")
+    assert len(skipped) >= 2
+
+
+# ---------- http_server ----------
+
+def test_http_server_health_and_webapp_404(tmp_path):
+    import socket
+
+    from orchestrator.http_server import start_http_server
+
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    free_port = s.getsockname()[1]
+    s.close()
+    srv = start_http_server(free_port, lambda: {"ok": True, "n": 1})
+    assert srv is not None
+    try:
+        port = srv.server_address[1]
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as r:
+            body = json.loads(r.read().decode())
+        assert body["ok"] is True
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/nope", timeout=5)
+        assert e.value.code == 404
+    finally:
+        srv.shutdown()

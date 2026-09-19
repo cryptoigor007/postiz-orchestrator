@@ -202,24 +202,32 @@ class HttpPostizClient:
             r.raise_for_status()
 
     def get_post(self, post_id: str) -> PostizPost | None:
-        # list endpoint may be the only way until single-get is confirmed
         r = self._client.get(f"{self.path_posts}/{post_id}")
         if r.status_code == 404:
             return None
         if r.status_code >= 400:
-            # fallback: not supported
+            # fallback: single-get not supported -> look it up in the list
+            try:
+                for p in self.list_scheduled():
+                    if p.id == post_id:
+                        return p
+            except Exception:
+                logger.debug("get_post fallback failed", exc_info=True)
             return None
         data = r.json()
         if isinstance(data, list):
             data = data[0] if data else {}
-        sched = _first(data, "scheduledFor", "scheduled_for", "date")
+        integration = data.get("integration") or {}
+        sched = _first(data, "publishDate", "scheduledFor", "scheduled_for", "date")
+        status = _first(data, "state", "status", default="unknown")
         return PostizPost(
             id=str(_first(data, "id", "postId") or post_id),
-            platform=_first(data, "platform", default=""),
+            platform=_first(integration, "providerIdentifier", "name",
+                            "platform", default=""),
             scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
-            status=_first(data, "status", default="unknown"),
-            release_url=_first(data, "releaseUrl", "release_url", "url", "releaseId"),
-            content=data.get("content"),
+            status=str(status).lower(),
+            release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
+            content=({"text": data["content"]} if data.get("content") else None),
         )
 
     def list_scheduled(self, platform: str | None = None) -> list[PostizPost]:

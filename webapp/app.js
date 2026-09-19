@@ -5,7 +5,7 @@
     ru: {
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
       edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
-      queue_remove: "Убрать из очереди", queue_removed: "Убрано из очереди",
+      queue_remove: "Убрать", queue_removed: "Убрано из очереди", edit_date: "Дата", edit_time: "Время",
       mode_auto: "Авто-планирование: ВКЛ", mode_manual: "Авто-планирование: ВЫКЛ",
       mode_hint: "ВКЛ — система сама раскладывает видео по слотам. ВЫКЛ — ждёт, пока ты нажмёшь «Запустить» или выберешь дату после сканирования.",
       settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
@@ -120,7 +120,7 @@
     en: {
       queue_edit: "Edit", queue_edit_save: "Save", queue_edit_cancel: "Cancel",
       edit_title: "Title", edit_desc: "Description", edit_tags: "Hashtags", t_saved: "Saved",
-      queue_remove: "Remove from queue", queue_removed: "Removed from queue",
+      queue_remove: "Remove", queue_removed: "Removed from queue", edit_date: "Date", edit_time: "Time",
       mode_auto: "Auto-scheduling: ON", mode_manual: "Auto-scheduling: OFF",
       mode_hint: "ON — the system places videos into slots automatically. OFF — waits for you to press Start or pick a date after scanning.",
       settings_tab_sched: "Groups and schedule", settings_tab_errors: "Errors", settings_tab_help: "Help",
@@ -469,18 +469,22 @@
              <div class="form-row"><label class="meta">${t("edit_tags")}
                <input id="qe-tags" type="text" value="${(it.hashtags_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
              <div class="form-row">
+               <label class="meta">${t("edit_date")} <input id="qe-date" type="date" value="${it.date || ""}"/></label>
+               <label class="meta">${t("edit_time")} <input id="qe-time" type="time" value="${it.time || ""}"/></label>
+             </div>
+             <div class="form-row">
                <button class="btn primary" data-act="queue-edit-save" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_edit_save")}</button>
                <button class="btn secondary" data-act="queue-edit-cancel">${t("queue_edit_cancel")}</button>
              </div>
            </div>`
         : "";
-      return `<div class="row"><div class="title" style="flex:1">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
-       <span class="mono meta">${it.date || ""} ${it.time || ""}</span>
-       <span class="meta">${pIcon(it.platform)}${it.platform}</span>
+      return `<div class="row"><div class="title q-title">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+       <span class="mono meta q-time">${it.date || ""} ${it.time || ""}</span>
+       <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
          <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
-         <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
          ${statusBtn(it.status)}
+         <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
        ${form}</div>`;
     }).join("");
@@ -1012,6 +1016,8 @@
             title: val("qe-title"),
             description: val("qe-desc"),
             hashtags: val("qe-tags"),
+            date: val("qe-date"),
+            time: val("qe-time"),
           }),
         });
         state.queueEdit = null;

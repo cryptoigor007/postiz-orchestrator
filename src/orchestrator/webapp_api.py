@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "38"
+WEBAPP_BUILD = "39"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -328,7 +328,19 @@ class WebAppAPI:
                         path = entity.get("video_path") or entity.get("vertical_path")                             or entity.get("wide_path")
                     when = r.get("postiz_scheduled_for")
                     sched_dt = None
-                    if when:
+                    new_date = str(data.get("date") or "").strip()
+                    new_time = str(data.get("time") or "").strip()
+                    if new_date and new_time:
+                        try:
+                            from datetime import date as _date
+
+                            from .slots import local_to_utc, parse_time
+                            y, m, d = (int(x) for x in new_date.split("-"))
+                            sched_dt = local_to_utc(_date(y, m, d), parse_time(new_time),
+                                                    self.cfg.timezone)
+                        except Exception:
+                            sched_dt = None
+                    if sched_dt is None and when:
                         from datetime import datetime as _dt
                         try:
                             sched_dt = _dt.fromisoformat(str(when))
@@ -339,6 +351,12 @@ class WebAppAPI:
                         post = pub.publish(etype, eid, plat, path, content, sched_dt)
                         if post:
                             recreated += 1
+                        elif sched_dt is not None:
+                            self.db.execute(
+                                "UPDATE entity_platform_status SET postiz_scheduled_for=? "
+                                "WHERE entity_type=? AND entity_id=? AND platform=?",
+                                (sched_dt.isoformat(), etype, eid, plat),
+                            )
                     except Exception:
                         logger.exception("queue edit: пересоздание не удалось (%s/%s %s)",
                                          etype, eid, plat)

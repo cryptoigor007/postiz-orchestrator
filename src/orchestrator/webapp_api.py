@@ -250,6 +250,102 @@ class WebAppAPI:
                     "stats": stats,
                     "roots": [str(r) for r in watcher.effective_roots()],
                 }, "application/json"
+            if route == "manual/plan" and method == "GET":
+                return 200, self._manual_plan(), "application/json"
+            if route == "manual/uploads" and method == "GET":
+                manual = self.comps.get("manual")
+                if not manual:
+                    return 500, {"error": "manual service unavailable"}, "application/json"
+                rows = self.db.list_uploads(
+                    status=query.get("status"), platform=query.get("platform")
+                )
+                out = []
+                for r in rows:
+                    item = {k: r.get(k) for k in (
+                        "id", "engine", "platform", "platform_video_id", "url", "title",
+                        "published_at", "origin", "match_status", "confidence",
+                        "matched_entity_type", "matched_entity_id", "claim_status")}
+                    item["candidates"] = (
+                        manual.candidates(r["id"])
+                        if r["match_status"] in ("unmatched", "suggested") else []
+                    )
+                    out.append(item)
+                return 200, {"items": out}, "application/json"
+            if route == "manual/scan" and method == "POST":
+                manual = self.comps.get("manual")
+                sources = self.comps.get("manual_sources") or {}
+                if not manual:
+                    return 500, {"error": "manual service unavailable"}, "application/json"
+                want = data.get("platform")
+                targets = [want] if want else list(sources.keys())
+                stats: dict = {}
+                for p in targets:
+                    src = sources.get(p)
+                    if not src:
+                        stats[p] = {"error": "no source configured"}
+                        continue
+                    try:
+                        uploads = src.list_uploads()
+                    except Exception as e:
+                        stats[p] = {"error": str(e)}
+                        continue
+                    stats[p] = manual.scan(p, uploads, engine=self.cfg.engine_for(p))
+                self.db.set_setting("manual_last_scan", json.dumps(
+                    {"at": self.comps["clock"].now().isoformat(), "stats": stats}))
+                return 200, {"ok": True, "stats": stats}, "application/json"
+            if route.startswith("manual/uploads/") and method in ("GET", "POST"):
+                manual = self.comps.get("manual")
+                if not manual:
+                    return 500, {"error": "manual service unavailable"}, "application/json"
+                seg = route.split("/")
+                try:
+                    uid = int(seg[2])
+                except (IndexError, ValueError):
+                    return 400, {"error": "bad upload id"}, "application/json"
+                action = seg[3] if len(seg) > 3 else ""
+                if action == "candidates" and method == "GET":
+                    return 200, {"items": manual.candidates(uid)}, "application/json"
+                row = self.db.get_upload(uid)
+                if not row:
+                    return 404, {"error": "upload not found"}, "application/json"
+                sources = self.comps.get("manual_sources") or {}
+                engine = sources.get(row["platform"])
+                if action in ("confirm", "reassign") and method == "POST":
+                    et = data.get("entity_type")
+                    eid = data.get("entity_id")
+                    if not et or eid is None:
+                        return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                    ok = manual.confirm(
+                        uid, et, int(eid),
+                        apply_edits=bool(data.get("apply_edits")) if action == "confirm" else False,
+                        engine=engine,
+                    )
+                    return 200, {"ok": ok}, "application/json"
+                if action == "reject" and method == "POST":
+                    return 200, {"ok": manual.reject(uid)}, "application/json"
+                if action == "ignore" and method == "POST":
+                    return 200, {"ok": manual.ignore(uid)}, "application/json"
+                if action == "claim-action" and method == "POST":
+                    act = data.get("action")
+                    if act == "delete":
+                        if engine is not None:
+                            try:
+                                engine.delete(str(row["platform_video_id"]))
+                            except Exception as e:
+                                return 500, {"error": str(e)}, "application/json"
+                        self.db.execute(
+                            "UPDATE platform_uploads SET claim_status='none', claim_info='deleted' WHERE id=?",
+                            (uid,))
+                    elif act == "keep":
+                        self.db.execute(
+                            "UPDATE platform_uploads SET claim_status='claimed', claim_info='kept' WHERE id=?",
+                            (uid,))
+                    else:
+                        self.db.execute(
+                            "UPDATE platform_uploads SET claim_status='none', claim_info='ignored' WHERE id=?",
+                            (uid,))
+                    return 200, {"ok": True}, "application/json"
+                return 404, {"error": "unknown manual action"}, "application/json"
             return 404, {"error": "unknown route"}, "application/json"
         except Exception as e:
             logger.exception("webapp api")
@@ -300,6 +396,23 @@ class WebAppAPI:
             return k
         m = re.match(r"^/webapp/k/([^/]+)", qpath)
         return m.group(1) if m else ""
+
+    def _manual_plan(self) -> dict:
+        rows = self.db.list_uploads()
+        by_status: dict[str, int] = {}
+        by_platform: dict[str, int] = {}
+        for r in rows:
+            by_status[r["match_status"]] = by_status.get(r["match_status"], 0) + 1
+            by_platform[r["platform"]] = by_platform.get(r["platform"], 0) + 1
+        last = None
+        raw = self.db.get_setting("manual_last_scan")
+        if raw:
+            try:
+                last = json.loads(raw)
+            except Exception:
+                last = None
+        return {"total": len(rows), "by_status": by_status,
+                "by_platform": by_platform, "last_scan": last}
 
     def _roots(self) -> list[str]:
         raw = self.db.get_setting(WATCH_ROOTS_KEY)

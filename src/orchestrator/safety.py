@@ -124,12 +124,22 @@ class SafetyChecker:
         if count >= limit:
             return False, f"daily_limit_reached ({count}/{limit})"
 
-        # min_interval
-        last = self._get_last_scheduled(platform)
-        if last:
-            delta = (scheduled_for - last).total_seconds() / 60.0
-            if delta < self.safety.min_interval_minutes:
-                return False, f"min_interval ({delta:.1f} < {self.safety.min_interval_minutes})"
+        # min_interval: рядом со слотом (в обе стороны) не должно быть других постов
+        win = self.safety.min_interval_minutes
+        lo = (scheduled_for - timedelta(minutes=win)).isoformat()
+        hi = (scheduled_for + timedelta(minutes=win)).isoformat()
+        near = self.db.fetchone(
+            """
+            SELECT postiz_scheduled_for FROM entity_platform_status
+            WHERE platform = ? AND postiz_scheduled_for IS NOT NULL
+              AND status IN ('scheduled', 'updating', 'published')
+              AND postiz_scheduled_for > ? AND postiz_scheduled_for < ?
+            LIMIT 1
+            """,
+            (platform, lo, hi),
+        )
+        if near:
+            return False, f"min_interval_conflict ({near['postiz_scheduled_for']})"
 
         return True, "ok"
 

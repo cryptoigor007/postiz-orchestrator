@@ -15,7 +15,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "17"
+WEBAPP_BUILD = "18"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -320,14 +320,16 @@ class WebAppAPI:
             js = (WEBAPP_DIR / "app.js").read_text(encoding="utf-8")
         except OSError:
             return (WEBAPP_DIR / "index.html").read_bytes()
-        html = html.replace(
-            '<link rel="stylesheet" href="styles.css?v=2" />',
+        html = re.sub(
+            r'<link rel="stylesheet" href="styles\.css\?v=\d+"\s*/?>',
             f"<style>\n{css}\n</style>",
+            html,
         )
-        html = html.replace(
-            '<script src="app.js?v=2"></script>',
+        html = re.sub(
+            r'<script src="app\.js\?v=\d+"></script>',
             "<script>window.__WEBAPP_KEY__=" + json.dumps(key) + ";</script>\n"
             f"<script>\n{js}\n</script>",
+            html,
         )
         return html.encode("utf-8")
 

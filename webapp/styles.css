@@ -65,6 +65,16 @@ html, body {
 .nav button .ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.92; }
 .nav button .ico svg { width: 18px; height: 18px; display: block; }
 .sidebar-footer { padding: 12px 12px 6px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--sep); margin-top: 8px; }
+.lang { display: inline-flex; gap: 6px; margin-top: 8px; }
+.lang-btn {
+  all: unset; box-sizing: border-box; padding: 4px 10px; border-radius: 8px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  background: rgba(120,120,128,0.14); color: var(--text);
+  transition: background var(--dur-press) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+.lang-btn:active { transform: scale(0.97); }
+.lang-btn.active { background: var(--accent); color: #fff; }
+.lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .main { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; display: flex; flex-direction: column; background: var(--bg); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(18px + env(safe-area-inset-top)) 22px 10px; }
 .topbar h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }

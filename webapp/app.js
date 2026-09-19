@@ -3,6 +3,8 @@
 
   const I18N = {
     ru: {
+      mode_auto: "Авто-планирование: ВКЛ", mode_manual: "Авто-планирование: ВЫКЛ",
+      mode_hint: "ВКЛ — система сама раскладывает видео по слотам. ВЫКЛ — ждёт, пока ты нажмёшь «Запустить» или выберешь дату после сканирования.",
       settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
       scan_found: "Найдено", scan_films: "фильмов", scan_shorts: "шортсов", scan_standalone: "самостоятельных шортсов",
       scan_last: "Последнее запланированное видео", scan_none: "нет",
@@ -113,6 +115,8 @@
       help_st_off: "Выключено.",
     },
     en: {
+      mode_auto: "Auto-scheduling: ON", mode_manual: "Auto-scheduling: OFF",
+      mode_hint: "ON — the system places videos into slots automatically. OFF — waits for you to press Start or pick a date after scanning.",
       settings_tab_sched: "Groups and schedule", settings_tab_errors: "Errors", settings_tab_help: "Help",
       scan_found: "Found", scan_films: "films", scan_shorts: "shorts", scan_standalone: "standalone shorts",
       scan_last: "Last scheduled video", scan_none: "none",
@@ -691,9 +695,16 @@
     let body = "";
     if (tab === "errors") body = failedHtml(d.failed || {});
     else if (tab === "help") body = helpHtml();
-    else body = groupsHtml(sched)
-      + `<div class="panel"><div class="panel-header">${t("sched_title")}</div><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>`
-      + scheduleHtml(sched);
+    else {
+      const mode = (sched.mode === "auto") ? "auto" : "manual";
+      const modePanel = `<div class="panel"><div class="panel-header">${t("sched_title")}</div>
+        <div class="row"><span class="meta">${t("mode_hint")}</span></div>
+        <div class="form-row"><button class="btn ${mode === "auto" ? "success" : "secondary"}" data-act="toggle-mode">${mode === "auto" ? t("mode_auto") : t("mode_manual")}</button></div></div>`;
+      body = groupsHtml(sched)
+        + modePanel
+        + `<div class="panel"><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>`
+        + scheduleHtml(sched);
+    }
     content().innerHTML = `<div class="view-enter">${tabBtns}${body}</div>`;
   }
   function helpHtml() {
@@ -925,6 +936,11 @@
         state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        return load();
+      }
+      if (act === "toggle-mode") {
+        const cur = (state.data?.sched?.mode === "auto") ? "auto" : "manual";
+        await api("/scheduling_mode", { method: "POST", body: JSON.stringify({ mode: cur === "auto" ? "manual" : "auto" }) });
         return load();
       }
       if (act === "settings-tab") {

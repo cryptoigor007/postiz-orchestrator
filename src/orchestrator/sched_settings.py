@@ -190,3 +190,16 @@ def validate_groups(groups: Any, known_platforms: list[str]) -> tuple[bool, str]
             if p not in known_platforms:
                 return False, f"group {name}: unknown platform {p}"
     return True, ""
+
+
+SCHEDULING_MODE_KEY = "scheduling_mode"
+
+
+def scheduling_mode(db: Database) -> str:
+    """auto — раскладывать без подтверждения; manual — ждать кнопку/дату в панели."""
+    raw = db.get_setting(SCHEDULING_MODE_KEY)
+    return "auto" if str(raw or "").strip().lower() == "auto" else "manual"
+
+
+def set_scheduling_mode(db: Database, mode: str) -> None:
+    db.set_setting(SCHEDULING_MODE_KEY, "auto" if mode == "auto" else "manual")

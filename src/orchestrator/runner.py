@@ -90,8 +90,12 @@ class Runner:
             move_excess_shorts(
                 self.comps["db"], self.cfg, self.comps["clock"], p["parent_video_id"]
             )
-        n = self.comps["scheduler"].schedule_long_videos()
-        n2 = self.comps["scheduler"].schedule_standalone_shorts(self.comps["tail"])
+        from . import sched_settings
+        if sched_settings.scheduling_mode(self.comps["db"]) == "auto":
+            n = self.comps["scheduler"].schedule_long_videos()
+            n2 = self.comps["scheduler"].schedule_standalone_shorts(self.comps["tail"])
+        else:
+            n = n2 = 0
         pubs = self.comps["db"].fetchall(
             "SELECT entity_id, platform FROM entity_platform_status "
             "WHERE entity_type='long_video' AND status='published'"

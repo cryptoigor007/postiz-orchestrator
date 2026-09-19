@@ -74,3 +74,12 @@ def test_validation(tmp_path):
     bad, _ = ss.validate_groups([{"name": "A", "platforms": ["youtube"]},
                                  {"name": "A", "platforms": ["youtube"]}], ["youtube"])
     assert not bad
+
+
+def test_scheduling_mode(tmp_path):
+    db, cfg = _env(tmp_path)
+    assert ss.scheduling_mode(db) == "manual"  # по умолчанию спрашиваем
+    ss.set_scheduling_mode(db, "auto")
+    assert ss.scheduling_mode(db) == "auto"
+    ss.set_scheduling_mode(db, "wat")
+    assert ss.scheduling_mode(db) == "manual"

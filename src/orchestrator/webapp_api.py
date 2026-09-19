@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "33"
+WEBAPP_BUILD = "34"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -246,6 +246,7 @@ class WebAppAPI:
                     "settings": settings,
                     "groups": groups,
                     "platforms": platforms,
+                    "mode": sched_settings.scheduling_mode(self.db),
                     "effective": effective,
                 }, "application/json"
             if method == "POST" and route == "schedule_settings":
@@ -262,6 +263,12 @@ class WebAppAPI:
                         return 400, {"error": f"unknown platform: {key}"}, "application/json"
                 sched_settings.save_schedule_settings(self.db, payload)
                 return 200, {"ok": True}, "application/json"
+            if method == "POST" and route == "scheduling_mode":
+                mode = str(data.get("mode") or "").strip().lower()
+                if mode not in ("auto", "manual"):
+                    return 400, {"error": "mode must be auto or manual"}, "application/json"
+                sched_settings.set_scheduling_mode(self.db, mode)
+                return 200, {"ok": True, "mode": mode}, "application/json"
             if method == "POST" and route == "groups":
                 payload = data.get("groups")
                 ok, msg = sched_settings.validate_groups(payload, list(self.cfg.platforms.keys()))

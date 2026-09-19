@@ -59,8 +59,19 @@ def test_postiz_http_get_post_404_and_ok():
         return httpx.Response(404, json={"message": "no"})
 
     c = _http_client(handler404)
-    assert c.get_post("missing") is None
+    # single-get не поддерживается (404) и список недоступен -> ошибка, НЕ «missing»
+    with pytest.raises(httpx.HTTPStatusError):
+        c.get_post("missing")
     c.close()
+
+    def handler_list_only(req):
+        if req.method == "GET" and req.url.path.endswith("/public/v1/posts"):
+            return httpx.Response(200, json={"posts": []})
+        return httpx.Response(404, json={})
+
+    c3 = _http_client(handler_list_only)
+    assert c3.get_post("missing") is None
+    c3.close()
 
     def handler_ok(req):
         return httpx.Response(200, json={

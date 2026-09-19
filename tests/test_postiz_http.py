@@ -130,3 +130,29 @@ def test_tls_verification_can_be_enabled(monkeypatch):
     monkeypatch.setenv("POSTIZ_VERIFY_TLS", "1")
     client = _client(lambda r: httpx.Response(200, json={}))
     assert client.verify_tls is True
+
+
+def test_create_post_youtube_settings():
+    captured = {}
+
+    def handler(request):
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "yt-1"})
+
+    client = _client(handler)
+    client.create_post(
+        platform="youtube",
+        media=MediaRef(id="m1", path="p1"),
+        content={
+            "title": "Заголовок ролика",
+            "description": "Описание",
+            "hashtags": "#деньги #психология",
+            "integration_id": "int-yt",
+        },
+        scheduled_for=datetime(2026, 9, 22, 12, 59, tzinfo=UTC),
+    )
+    settings = captured["json"]["posts"][0]["settings"]
+    assert settings["title"] == "Заголовок ролика"
+    assert settings["type"] == "public"
+    assert settings["selfDeclaredMadeForKids"] == "no"
+    assert {"value": "деньги", "label": "деньги"} in settings["tags"]

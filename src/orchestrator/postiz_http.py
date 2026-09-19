@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -104,6 +105,37 @@ class HttpPostizClient:
             raise RuntimeError(f"upload: no media path in {data}")
         return MediaRef(id=str(mid), path=str(mpath))
 
+    def _platform_settings(self, platform: str, content: dict[str, Any]) -> dict[str, Any]:
+        """Postiz-специфичные settings: YouTube требует title/type/madeForKids."""
+        if platform != "youtube":
+            return {}
+        raw_title = str(content.get("title") or content.get("description") or "").strip()
+        title = raw_title.splitlines()[0][:100] if raw_title else ""
+        if len(title) < 2:
+            title = (title + " видео")[:100]
+        privacy = str(content.get("privacy") or "public")
+        if privacy not in ("public", "private", "unlisted"):
+            privacy = "public"
+        settings: dict[str, Any] = {
+            "title": title,
+            "type": privacy,
+            "selfDeclaredMadeForKids": "no",
+        }
+        tags = []
+        total = 0
+        for token in re.findall(r"#\S+", str(content.get("hashtags") or "")):
+            label = token.lstrip("#").strip().strip(",.")
+            if not label:
+                continue
+            add = len(label) + (2 if any(ch.isspace() for ch in label) else 0)
+            if total + add > 480:
+                break
+            tags.append({"value": label, "label": label})
+            total += add
+        if tags:
+            settings["tags"] = tags
+        return settings
+
     def create_post(
         self,
         platform: str,
@@ -146,7 +178,7 @@ class HttpPostizClient:
         entry: dict[str, Any] = {
             "integration": {"id": integration_id},
             "value": [{"content": message, "image": image}],
-            "settings": content.get("settings") or {},
+            "settings": content.get("settings") or self._platform_settings(platform, content),
         }
         if content.get("group"):
             entry["group"] = content["group"]

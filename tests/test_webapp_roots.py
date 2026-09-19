@@ -379,26 +379,21 @@ def test_api_queue_remove(env, tmp_path):
     api, db, clock, cfg, watcher = env
     headers = {"X-Telegram-Init-Data": "dev"}
     db.execute(
-        "INSERT INTO long_videos (source, folder_path, title, title_text, created_at) "
-        "VALUES ('videomaker', ?, 's1', 'Фильм-1', '2026-01-01T00:00:00+00:00')",
-        (str(tmp_path / "s1"),),
+        "INSERT INTO long_videos (source, folder_path, title, created_at) "
+        "VALUES ('videomaker', '/s1', 'S1', '2026-01-01T00:00:00+00:00')"
     )
     lv = db.fetchone("SELECT id FROM long_videos")
     db.execute(
         "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
         "postiz_scheduled_for, postiz_post_id) VALUES ('long_video', ?, 'telegram', "
-        "'scheduled', '2026-09-22T13:00:00+00:00', 'pid-1')",
+        "'scheduled', '2026-09-22T13:00:00+00:00', 'p1')",
         (lv["id"],),
     )
-    body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"],
-                       "platform": "telegram"}).encode()
+    body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"]}).encode()
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
     assert code == 200 and payload["removed"] == 1
-    row = db.fetchone("SELECT status, last_error FROM entity_platform_status")
-    assert row["status"] == "skipped" and row["last_error"] == "removed_by_user"
-    # очередь больше не показывает
-    code, payload, _ = api.handle("GET", "/webapp/api/queue", headers, b"")
-    assert all(i["status"] != "skipped" for i in payload["items"])
+    assert db.fetchone("SELECT * FROM entity_platform_status") is None
+    assert db.fetchone("SELECT * FROM long_videos") is None
 
 
 def test_api_queue_remove_cascade_to_shorts(env, tmp_path):
@@ -428,16 +423,16 @@ def test_api_queue_remove_cascade_to_shorts(env, tmp_path):
         "'scheduled', '2026-09-22T17:30:00+00:00', 'p-short')",
         (sh["id"],),
     )
-    body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"],
-                       "series": True}).encode()
+    body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"]}).encode()
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
     assert code == 200
     assert payload["removed"] == 2  # фильм + его шортс
-    rows = db.fetchall("SELECT entity_type, status FROM entity_platform_status")
-    assert all(r["status"] == "skipped" for r in rows)
+    assert db.fetchone("SELECT * FROM entity_platform_status") is None
+    assert db.fetchone("SELECT * FROM long_videos") is None
+    assert db.fetchone("SELECT * FROM shorts") is None
 
 
-def test_api_queue_remove_single_platform(env, tmp_path):
+def test_api_queue_remove_published_blocked(env, tmp_path):
     api, db, clock, cfg, watcher = env
     headers = {"X-Telegram-Init-Data": "dev"}
     db.execute(
@@ -450,13 +445,13 @@ def test_api_queue_remove_single_platform(env, tmp_path):
         "postiz_scheduled_for, postiz_post_id) VALUES ('long_video', 1, 'youtube', "
         "'scheduled', '2026-09-22T13:00:00+00:00', 'p-yt')"
     )
-    body = json.dumps({"entity_type": "long_video", "entity_id": 1,
-                       "platform": "telegram"}).encode()
+    db.execute(
+        "UPDATE entity_platform_status SET status='published' WHERE platform='telegram'"
+    )
+    body = json.dumps({"entity_type": "long_video", "entity_id": 1}).encode()
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
-    assert code == 200 and payload["removed"] == 1
-    rows = db.fetchall("SELECT platform, status FROM entity_platform_status ORDER BY platform")
-    states = {r["platform"]: r["status"] for r in rows}
-    assert states == {"telegram": "skipped", "youtube": "scheduled"}
+    assert code == 200 and payload["removed"] == 0 and payload["blocked"]
+    assert db.fetchone("SELECT COUNT(*) AS c FROM entity_platform_status")["c"] == 2
 
 
 def test_api_queue_restore(env, tmp_path):

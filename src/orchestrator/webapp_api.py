@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "45"
+WEBAPP_BUILD = "46"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -364,6 +364,103 @@ class WebAppAPI:
                         logger.exception("queue edit: пересоздание не удалось (%s/%s %s)",
                                          etype, eid, plat)
                 return 200, {"ok": True, "updated": updated, "recreated": recreated}, \
+                    "application/json"
+            if method == "POST" and route == "queue/restore":
+                etype = str(data.get("entity_type") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype in ("long_video", "short") and eid:
+                    before = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped' "
+                        "AND entity_type=? AND entity_id=?", (etype, eid))
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE status='skipped' AND entity_type=? AND entity_id=?",
+                        (etype, eid))
+                else:
+                    before = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                        "last_error=NULL WHERE status='skipped'")
+                return 200, {"ok": True, "restored": (before or {}).get("c", 0)}, "application/json"
+            if method == "POST" and route == "queue/remove":
+                etype = str(data.get("entity_type") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                postiz = self.comps.get("postiz")
+
+                def _kill_posts(t: str, i: int) -> None:
+                    rows = self.db.fetchall(
+                        "SELECT postiz_post_id FROM entity_platform_status "
+                        "WHERE entity_type=? AND entity_id=?", (t, i))
+                    for r in rows:
+                        pid = r.get("postiz_post_id")
+                        if not pid or postiz is None:
+                            continue
+                        try:
+                            if hasattr(postiz, "delete_post"):
+                                postiz.delete_post(str(pid))
+                            elif hasattr(postiz, "set_status"):
+                                postiz.set_status(str(pid), "draft")
+                        except Exception:
+                            logger.warning("queue remove: удаление поста %s не удалось", pid,
+                                           exc_info=True)
+
+                removed = 0
+                blocked: list[str] = []
+                if etype == "long_video":
+                    shorts_ids = [r["id"] for r in self.db.fetchall(
+                        "SELECT id FROM shorts WHERE parent_video_id=?", (eid,))]
+                    rows = self.db.fetchall(
+                        "SELECT status FROM entity_platform_status "
+                        "WHERE entity_type='long_video' AND entity_id=?", (eid,))
+                    published = any((r["status"] or "") == "published" for r in rows)
+                    for sid in shorts_ids:
+                        srows = self.db.fetchall(
+                            "SELECT status FROM entity_platform_status "
+                            "WHERE entity_type='short' AND entity_id=?", (sid,))
+                        if any((r["status"] or "") == "published" for r in srows):
+                            published = True
+                    if published:
+                        blocked.append(f"long_video#{eid}")
+                    else:
+                        for sid in shorts_ids:
+                            _kill_posts("short", sid)
+                            self.db.execute(
+                                "DELETE FROM entity_platform_status "
+                                "WHERE entity_type='short' AND entity_id=?", (sid,))
+                            self.db.execute("DELETE FROM shorts WHERE id=?", (sid,))
+                            self.db.log("short", sid, "", "queue_delete", "hard")
+                            removed += 1
+                        _kill_posts("long_video", eid)
+                        self.db.execute(
+                            "DELETE FROM entity_platform_status "
+                            "WHERE entity_type='long_video' AND entity_id=?", (eid,))
+                        self.db.execute("DELETE FROM long_videos WHERE id=?", (eid,))
+                        self.db.log("long_video", eid, "", "queue_delete", "hard")
+                        removed += 1
+                else:
+                    rows = self.db.fetchall(
+                        "SELECT status FROM entity_platform_status "
+                        "WHERE entity_type='short' AND entity_id=?", (eid,))
+                    if any((r["status"] or "") == "published" for r in rows):
+                        blocked.append(f"short#{eid}")
+                    else:
+                        _kill_posts("short", eid)
+                        self.db.execute(
+                            "DELETE FROM entity_platform_status "
+                            "WHERE entity_type='short' AND entity_id=?", (eid,))
+                        self.db.execute("DELETE FROM shorts WHERE id=?", (eid,))
+                        self.db.log("short", eid, "", "queue_delete", "hard")
+                        removed += 1
+                return 200, {"ok": True, "removed": removed, "blocked": blocked}, \
                     "application/json"
             if method == "POST" and route == "queue/restore":
                 etype = str(data.get("entity_type") or "").strip()

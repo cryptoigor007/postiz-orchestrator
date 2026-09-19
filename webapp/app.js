@@ -3,6 +3,9 @@
 
   const I18N = {
     ru: {
+      confirm_delete_film: "Удалить фильм, все его шортсы и посты (включая базу)? После этого скан добавит его заново.",
+      scan_none_new_hint: "Новых не найдено: всё уже в базе. Если хочешь добавить заново — удали из очереди (кнопка «Убрать» удаляет и из базы).",
+      scan_empty_hint: "В этих папках видео не найдено. Проверь структуру: серия/vertical+wide, серия/shorts/short_001, или папка шортсов.",
       scan_in_base: "В базе по этим папкам", scan_skipped: "удалённых", scan_restore_btn: "Вернуть удалённое и запустить", t_restored: "Возвращено",
       folders_hint: "Как это работает: добавь папку (кнопки «+ Сериалы», «+ Шортсы», «+ Авто») → нажми «Сканировать» → появится панель «Найдено» и кнопка «Да, запустить» (или выбери дату). Система сама найдёт фильмы и шортсы и разложит их по расписанию.",
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
@@ -116,6 +119,9 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      confirm_delete_film: "Delete the film, all its shorts and posts (including the database)? A scan can re-add it later.",
+      scan_none_new_hint: "Nothing new: everything is already in the database. To re-add, delete from the queue (Remove also deletes from the database).",
+      scan_empty_hint: "No videos found in these folders. Check the structure: series/vertical+wide, series/shorts/short_001, or a shorts folder.",
       scan_in_base: "In base for these folders", scan_skipped: "removed", scan_restore_btn: "Restore removed and start", t_restored: "Restored",
       folders_hint: "How it works: add a folder (+ Series / + Shorts / + Auto) → press Scan → you will see the Found panel with a Start button (or pick a date). The system finds films and shorts and schedules them automatically.",
       queue_edit: "Edit", queue_edit_save: "Save", queue_edit_cancel: "Cancel",
@@ -396,6 +402,9 @@
       <div class="row"><span class="meta">${t("scan_found")}: ${t("scan_films")} ${st.long || 0} · ${t("scan_shorts")} ${st.shorts || 0} · ${t("scan_standalone")} ${st.standalone || 0}</span></div>
       <div class="row"><span class="meta">${t("scan_in_base")}: ${t("scan_films")} ${tot.long || 0} · ${t("scan_shorts")} ${tot.shorts || 0} · ${t("scan_skipped")}: ${sc.skipped || 0}</span></div>
       <div class="row"><span class="meta">${t("scan_last")}: ${(sc.last_scheduled || "").slice(0, 16).replace("T", " ") || t("scan_none")}</span></div>
+      ${((st.long || 0) + (st.shorts || 0) + (st.standalone || 0)) === 0
+          ? `<div class="row"><span class="meta">${(tot.long || 0) + (tot.shorts || 0) > 0 ? t("scan_none_new_hint") : t("scan_empty_hint")}</span></div>`
+          : ""}
       <div class="row"><span class="meta">${t("scan_run_q")}</span></div>
       <div class="form-row">
         <button class="btn primary" data-act="scan-start">${t("scan_run_now")}</button>
@@ -482,8 +491,7 @@
        <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
-         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_remove")}</button>
-         ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-series" data-eid="${it.entity_id}">${t("queue_remove_series")}</button>` : ""}
+         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}">${t("queue_remove")}</button>
          ${statusBtn(it.status)}
          <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
@@ -1026,30 +1034,23 @@
         return load();
       }
       if (act === "queue-remove") {
+        if (el.dataset.film === "1") {
+          const ask = t("confirm_delete_film");
+          const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+          let ok = true;
+          if (tgConfirm) {
+            ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
+          } else if (typeof window.confirm === "function") {
+            ok = window.confirm(ask);
+          }
+          if (!ok) return;
+        }
         const r = await api("/queue/remove", {
           method: "POST",
           body: JSON.stringify({
             entity_type: el.dataset.et,
             entity_id: Number(el.dataset.eid),
-            platform: el.dataset.p,
           }),
-        });
-        toast(`${t("queue_removed")}: ${r.removed || 0}`);
-        return load();
-      }
-      if (act === "queue-remove-series") {
-        const ask = t("confirm_series");
-        const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-        let ok = true;
-        if (tgConfirm) {
-          ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
-        } else if (typeof window.confirm === "function") {
-          ok = window.confirm(ask);
-        }
-        if (!ok) return;
-        const r = await api("/queue/remove", {
-          method: "POST",
-          body: JSON.stringify({ entity_type: "long_video", entity_id: Number(el.dataset.eid), series: true }),
         });
         toast(`${t("queue_removed")}: ${r.removed || 0}`);
         return load();

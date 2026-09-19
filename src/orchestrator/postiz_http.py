@@ -206,13 +206,11 @@ class HttpPostizClient:
         if r.status_code == 404:
             return None
         if r.status_code >= 400:
-            # fallback: single-get not supported -> look it up in the list
-            try:
-                for p in self.list_scheduled():
-                    if p.id == post_id:
-                        return p
-            except Exception:
-                logger.debug("get_post fallback failed", exc_info=True)
+            # single-get может не поддерживаться; ищем в списке (ошибки не глотаем —
+            # иначе reconcile ложно помечает пост «missing»)
+            for p in self.list_scheduled():
+                if p.id == post_id:
+                    return p
             return None
         data = r.json()
         if isinstance(data, list):
@@ -265,6 +263,8 @@ class HttpPostizClient:
                 release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
                 content=({"text": content} if content else None),
             ))
+        if platform:
+            result = [p for p in result if p.platform == platform]
         return result
 
     def orphan_media_ids(self) -> list[str]:

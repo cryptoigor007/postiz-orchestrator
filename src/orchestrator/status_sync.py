@@ -48,7 +48,12 @@ class StatusSync:
             rows = filtered
         updated = 0
         for row in rows:
-            post = self.postiz.get_post(row["postiz_post_id"])
+            try:
+                post = self.postiz.get_post(row["postiz_post_id"])
+            except Exception:
+                logger.warning("get_post failed for %s (skip)", row["postiz_post_id"],
+                               exc_info=True)
+                continue
             if not post:
                 self.db.execute(
                     "UPDATE entity_platform_status SET status='error', last_error='missing_in_postiz' "

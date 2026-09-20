@@ -32,6 +32,7 @@ class LimitsCfg(BaseModel):
     max_posts_per_distribute: int = 12
     postiz_create_per_hour: int = 30
     max_shorts_per_long_video: int = 8
+    overflow_move_files: bool = False  # true = физически переносить лишние шорты (по умолчанию нет)
 
 
 class LinkUpdateCfg(BaseModel):

@@ -31,12 +31,14 @@ def move_excess_shorts(
         src = Path(s["folder_path"])
         if not src.exists():
             continue
-        # series root = parent of shorts/
-        series = src.parent.parent if src.parent.name == "shorts" else src.parent
-        overflow = series / "shorts_overflow" / src.name
-        overflow.parent.mkdir(parents=True, exist_ok=True)
-        if not overflow.exists():
-            shutil.move(str(src), str(overflow))
+        move_files = bool(getattr(cfg.limits, "overflow_move_files", False))
+        if move_files:
+            # series root = parent of shorts/
+            series = src.parent.parent if src.parent.name == "shorts" else src.parent
+            overflow = series / "shorts_overflow" / src.name
+            overflow.parent.mkdir(parents=True, exist_ok=True)
+            if not overflow.exists():
+                shutil.move(str(src), str(overflow))
         for platform in cfg.platforms:
             db.execute(
                 """
@@ -48,7 +50,11 @@ def move_excess_shorts(
                 """,
                 (s["id"], platform),
             )
-        db.log("short", s["id"], None, "overflow_moved", str(overflow))
+        db.log("short", s["id"], None,
+               "overflow_moved" if move_files else "overflow_skipped", "")
         moved += 1
-        logger.info("Moved excess short %s -> %s", src, overflow)
+        if move_files:
+            logger.info("Moved excess short %s -> %s", src, overflow)
+        else:
+            logger.info("Excess short skipped (files kept): %s", src)
     return moved

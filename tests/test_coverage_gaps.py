@@ -166,6 +166,7 @@ def test_move_excess_shorts(tmp_path):
     db = Database(tmp_path / "o.sqlite")
     cfg = load_config(ROOT / "config.yaml")
     cfg.limits.max_shorts_per_long_video = 2
+    cfg.limits.overflow_move_files = True  # перенос файлов — опционально
     clock = FakeClock(datetime(2026, 3, 9, 10, 0, tzinfo=UTC))
     series = tmp_path / "series"
     (series / "shorts").mkdir(parents=True)

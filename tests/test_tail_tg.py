@@ -72,6 +72,7 @@ def test_tg_commands(env):
 
 def test_overflow(env, tmp_path):
     db, cfg, clock, tg, tail, link = env
+    cfg.limits.overflow_move_files = True  # перенос файлов — опционально
     series = tmp_path / "ser"
     (series / "shorts").mkdir(parents=True)
     now = clock.now().isoformat()

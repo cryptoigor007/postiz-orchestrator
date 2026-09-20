@@ -303,3 +303,45 @@ def test_remove_platform_scoped_blocked_when_published(env):
         "SELECT status FROM entity_platform_status "
         "WHERE entity_type='short' AND entity_id=? AND platform='youtube'", (sid,))
     assert row["status"] == "published"
+
+
+def test_remove_youtube_cascades_waiting_telegram(env):
+    """Удаление YouTube-поста убирает и Telegram-ссылку, ждущую премьеру."""
+    import json as _json
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute("INSERT INTO shorts (source, folder_path, title_text, created_at) "
+               "VALUES ('videomaker', '/c1', 't', ?)", (clock.now().isoformat(),))
+    sid = db.fetchone("SELECT id FROM shorts ORDER BY id DESC")["id"]
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('short', ?, 'youtube', 'scheduled')", (sid,))
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, last_error) "
+               "VALUES ('short', ?, 'telegram', 'ready', 'waiting_for_youtube')", (sid,))
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers,
+                                  _json.dumps({"entity_type": "short", "entity_id": sid,
+                                               "platform": "youtube"}).encode())
+    assert payload["cascade"] == ["telegram"]
+    row = db.fetchone("SELECT status FROM entity_platform_status "
+                      "WHERE entity_type='short' AND entity_id=? AND platform='telegram'", (sid,))
+    assert row["status"] == "skipped"
+
+
+def test_remove_youtube_asks_about_scheduled_telegram(env):
+    """Если Telegram-пост уже поставлен — он не удаляется автоматически (только флаг dependent)."""
+    import json as _json
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute("INSERT INTO shorts (source, folder_path, title_text, created_at) "
+               "VALUES ('videomaker', '/c2', 't', ?)", (clock.now().isoformat(),))
+    sid = db.fetchone("SELECT id FROM shorts ORDER BY id DESC")["id"]
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('short', ?, 'youtube', 'scheduled')", (sid,))
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('short', ?, 'telegram', 'scheduled')", (sid,))
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers,
+                                  _json.dumps({"entity_type": "short", "entity_id": sid,
+                                               "platform": "youtube"}).encode())
+    assert payload["dependent"] == ["telegram"] and payload["cascade"] == []
+    row = db.fetchone("SELECT status FROM entity_platform_status "
+                      "WHERE entity_type='short' AND entity_id=? AND platform='telegram'", (sid,))
+    assert row["status"] == "scheduled"

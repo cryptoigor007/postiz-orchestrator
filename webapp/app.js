@@ -67,7 +67,7 @@
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
       backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
       delete_everywhere: "Удалить везде (все платформы + база)",
       confirm_delete_everywhere: "Удалить ролик со ВСЕХ платформ и из базы? Файлы на диске останутся (скан вернёт).",
       remove_posts: "Удалить посты", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
@@ -217,7 +217,7 @@
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
       backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
-      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
+      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", confirm_cascade_tg_bulk: "%s items have a scheduled Telegram link post. Delete those too?", confirm_cascade_tg: "A Telegram post with the link is already scheduled. Delete it too?", cascade_deleted: "Deleted together with the Telegram link", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
       delete_everywhere: "Delete everywhere (all platforms + DB)",
       confirm_delete_everywhere: "Delete the item from ALL platforms and the DB? Files on disk stay.",
       remove_posts: "Delete posts", search: "Search", search_placeholder: "Find folder by name…", search_none: "Nothing found", searching: "Searching…", search_short: "Type at least 2 characters", queue_all: "All", queue_select: "Select", queue_done: "Done",
@@ -880,19 +880,39 @@
     const prog = (n) => t("queue_bulk_prog").replace("%s", n).replace("%s", uniq.length);
     busy(prog(1));
     let done = 0;
+    let cascaded = 0;
+    const deps = [];
     for (const it of uniq) {
       done++;
       const el = document.getElementById("busy");
       if (el) el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${prog(done)}</span></div></div>`;
       try {
-        await api("/queue/remove", { method: "POST",
+        const r = await api("/queue/remove", { method: "POST",
           body: JSON.stringify({ entity_type: it.entity_type, entity_id: it.entity_id,
                                  platform: it.platform }) });
+        if (r && r.cascade && r.cascade.length) cascaded++;
+        if (r && r.dependent && r.dependent.includes("telegram")) deps.push(it);
       } catch (_) { /* продолжаем по остальным */ }
+    }
+    if (deps.length) {
+      const ask2 = t("confirm_cascade_tg_bulk").replace("%s", deps.length);
+      const tgC2 = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+      let ok2 = true;
+      if (tgC2) ok2 = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask2, res));
+      else if (typeof window.confirm === "function") ok2 = window.confirm(ask2);
+      if (ok2) {
+        for (const it of deps) {
+          try {
+            await api("/queue/remove", { method: "POST", body: JSON.stringify({
+              entity_type: it.entity_type, entity_id: it.entity_id, platform: "telegram" }) });
+            cascaded++;
+          } catch (_) {}
+        }
+      }
     }
     unbusy();
     state.queueSelected = {};
-    toast(`${t("queue_removed")}: ${uniq.length}`);
+    toast(cascaded ? t("cascade_deleted") : `${t("queue_removed")}: ${uniq.length}`);
     return load();
   }
 
@@ -1732,9 +1752,24 @@
             return load();
           }
         }
+        if (r && r.dependent && r.dependent.includes("telegram")) {
+          const ask2 = t("confirm_cascade_tg");
+          let ok2 = true;
+          const tgConfirm2 = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+          if (tgConfirm2) ok2 = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask2, res));
+          else if (typeof window.confirm === "function") ok2 = window.confirm(ask2);
+          if (ok2) {
+            try {
+              await api("/queue/remove", { method: "POST", body: JSON.stringify({
+                entity_type: el.dataset.et, entity_id: Number(el.dataset.eid),
+                platform: "telegram" }) });
+            } catch (_) {}
+          }
+        }
         unbusy();
         if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
         else if (!r || !r.removed) toast(t("already_removed"));
+        else if (r.cascade && r.cascade.length) toast(t("cascade_deleted"));
         else toast(`${t("queue_removed")}: ${r.removed}`);
         return load();
       }

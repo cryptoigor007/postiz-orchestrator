@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "72"
+WEBAPP_BUILD = "73"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -470,9 +470,29 @@ class WebAppAPI:
                         "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL "
                         "WHERE entity_type=? AND entity_id=? AND platform=?", (etype, eid, platform))
                     self.db.log(etype, eid, platform, "queue_delete", "platform_skipped")
-                    logger.info("queue remove: %s#%s %s -> removed=1 (только платформа, soft)",
-                                etype, eid, platform)
-                    return 200, {"ok": True, "removed": 1, "blocked": []}, "application/json"
+                    # зависимости: YouTube — источник премьеры для Telegram-ссылки
+                    cascade: list[str] = []
+                    dependent: list[str] = []
+                    if platform == "youtube":
+                        for r_ in self.db.fetchall(
+                                "SELECT status FROM entity_platform_status "
+                                "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                                (etype, eid)):
+                            st = (r_["status"] or "").lower()
+                            if st == "ready":
+                                # ссылка без премьеры бессмысленна — убираем сразу
+                                self.db.execute(
+                                    "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL "
+                                    "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                                    (etype, eid))
+                                self.db.log(etype, eid, "telegram", "queue_delete", "cascade_youtube")
+                                cascade.append("telegram")
+                            elif st in ("scheduled", "updating"):
+                                dependent.append("telegram")  # спросим пользователя
+                    logger.info("queue remove: %s#%s %s -> removed=1 (только платформа, soft)"
+                                " cascade=%s dependent=%s", etype, eid, platform, cascade, dependent)
+                    return 200, {"ok": True, "removed": 1, "blocked": [],
+                                 "cascade": cascade, "dependent": dependent}, "application/json"
                 postiz = self.comps.get("postiz")
 
                 def _kill_posts(*targets: tuple) -> None:

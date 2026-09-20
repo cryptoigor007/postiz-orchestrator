@@ -553,6 +553,12 @@ class WebAppAPI:
                 target = query.get("path") or str(root)
                 base = Path(target).expanduser()
                 base = base.resolve() if base.is_dir() else root
+                # если путь внутри другого разрешённого корня — переключаемся на него
+                # (раньше дерево залипало на первом корне и «не открывалось»)
+                for r in roots:
+                    if base == r or r in base.parents:
+                        root = r
+                        break
                 if base != root and root not in base.parents:
                     base = root
                 dirs = []

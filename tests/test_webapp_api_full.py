@@ -126,3 +126,40 @@ def test_unauthorized_without_init(env):
     code, payload, _ = api.handle("GET", "/webapp/api/status", {}, b"")
     assert code == 401
     os.environ["WEBAPP_DEV"] = "1"
+
+
+def test_browse_switches_root_for_path(env, tmp_path, monkeypatch):
+    """browse?path= под другим корнем должен открывать этот корень (раньше дерево залипало)."""
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    r1 = tmp_path / "rootA"
+    (r1 / "sub").mkdir(parents=True)
+    r2 = tmp_path / "rootB"
+    (r2 / "dir2").mkdir(parents=True)
+    monkeypatch.setenv("WEBAPP_BROWSE_ROOT", f"{r1},{r2}")
+    code, payload, _ = api.handle(
+        "GET", f"/webapp/api/browse?path={r2 / 'dir2'}", headers, b"")
+    assert code == 200
+    assert payload["path"] == str((r2 / "dir2").resolve())
+    assert payload["root"] == str(r2.resolve())
+    code, payload, _ = api.handle("GET", "/webapp/api/browse", headers, b"")
+    assert code == 200
+    assert payload["root"] == str(r1.resolve())
+
+
+def test_cover_list_and_thumb_under_roots(env, tmp_path, monkeypatch):
+    """cover/list и cover/thumb работают по разрешённым корням и отдают картинку."""
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    root = tmp_path / "media"
+    root.mkdir()
+    img = root / "c.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 40)
+    monkeypatch.setenv("WEBAPP_BROWSE_ROOT", str(root))
+    code, payload, _ = api.handle(
+        "GET", f"/webapp/api/cover/list?path={root}", headers, b"")
+    assert code == 200
+    assert [i["name"] for i in payload["images"]] == ["c.png"]
+    code, blob, ctype = api.handle(
+        "GET", f"/webapp/api/cover/thumb?path={img}", headers, b"")
+    assert code == 200 and ctype == "image/png" and blob.startswith(b"\x89PNG")

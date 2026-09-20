@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "62"
+WEBAPP_BUILD = "63"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -1423,7 +1423,7 @@ class WebAppAPI:
         rows = self.db.fetchall(
             """
             SELECT eps.entity_type, eps.entity_id, eps.platform, eps.status,
-                   eps.postiz_scheduled_for,
+                   eps.last_error, eps.postiz_scheduled_for,
                    COALESCE(lv.title_text, lv.title, sh.title_text) AS title,
                    COALESCE(lv.description_text, sh.description_text) AS description_text,
                    COALESCE(lv.hashtags_text, sh.hashtags_text) AS hashtags_text,
@@ -1460,6 +1460,7 @@ class WebAppAPI:
                 "description_text": r.get("description_text") or "",
                 "hashtags_text": r.get("hashtags_text") or "",
                 "cover_path": r.get("cover_path") or "",
+                "waiting": (r.get("last_error") or "") == "waiting_for_youtube",
                 "covers": self._cover_candidates(r.get("video_path") or ""),
                 "video_path": r.get("video_path") or "",
                 "has_tg": bool(r.get("has_tg")),

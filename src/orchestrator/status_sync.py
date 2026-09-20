@@ -114,6 +114,11 @@ class Reconciliation:
         # 2. Postiz scheduled not in our DB (черновики не считаем — они паркуются осознанно)
         postiz_posts = self.postiz.list_scheduled()
         known_ids = {r["postiz_post_id"] for r in our}
+        # published-строки тоже считаются «нашими» (иначе ложные orphans)
+        for r in self.db.fetchall(
+                "SELECT postiz_post_id FROM entity_platform_status "
+                "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''"):
+            known_ids.add(r["postiz_post_id"])
         orphans = 0
         for p in postiz_posts:
             if p.id not in known_ids:

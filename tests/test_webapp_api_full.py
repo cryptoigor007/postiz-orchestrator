@@ -214,3 +214,30 @@ def test_link_post_bypasses_hourly_limit(env, tmp_path):
                        {"title": "", "description": "ссылка", "hashtags": "",
                         "priority": "link"}, clock.now())
     assert post is not None
+
+
+def test_reconcile_does_not_flag_published_as_orphan(env):
+    """Опубликованные посты (published) не должны считаться «лишними» при сверке."""
+    from orchestrator.status_sync import Reconciliation
+
+    api, db, clock, cfg = env
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) "
+        "VALUES ('v', '/lv', 't', ?)", (now,))
+    lv = db.fetchone("SELECT id FROM long_videos ORDER BY id DESC")["id"]
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, "
+        "status, postiz_post_id, release_url, published_at) "
+        "VALUES ('long_video', ?, 'youtube', 'published', 'pub1', 'https://y', ?)",
+        (lv, now))
+    postiz = api.comps.get("postiz")
+    if postiz is None:
+        from orchestrator.postiz import MockPostizClient, PostizPost
+        postiz = MockPostizClient()
+        postiz.posts["pub1"] = PostizPost(id="pub1", platform="youtube",
+                                          scheduled_for=None, status="published",
+                                          content={"text": "x"})
+    recon = Reconciliation(db, postiz, clock)
+    res = recon.run()
+    assert res["orphans"] == 0

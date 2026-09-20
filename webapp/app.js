@@ -88,8 +88,10 @@
       fl_hint: "Укажи ID видео (номер из «Очереди» или «Календаря»), платформу и ссылку — она подставится в описания.",
       fl_id_ph: "ID видео",
       st_ok: "ок", st_published: "опубликовано", st_scheduled: "запланировано",
-      st_updating: "обновляется", st_queue: "в очереди", st_ready: "готово",
+      st_updating: "обновляется", st_queue: "в очереди", st_ready: "в ожидании",
       st_draft: "черновик", st_failed: "ошибка", st_error: "ошибка", st_paused: "пауза",
+      st_waiting: "ждёт премьеру",
+      waiting_hint: "Telegram-пост уйдёт автоматически после выхода видео на YouTube",
       st_skipped: "пропущено", st_on: "включено", st_off: "выключено",
       st_manual: "ручная", st_postiz: "из Postiz", st_suggested: "предложено",
       st_unmatched: "не найдено", st_confirmed: "подтверждено", st_rejected: "отклонено",
@@ -227,8 +229,10 @@
       fl_hint: "Provide the video ID (number from Queue or Calendar), platform and URL — it will be added to descriptions.",
       fl_id_ph: "video ID",
       st_ok: "ok", st_published: "published", st_scheduled: "scheduled",
-      st_updating: "updating", st_queue: "queued", st_ready: "ready",
+      st_updating: "updating", st_queue: "queued", st_ready: "waiting",
       st_draft: "draft", st_failed: "failed", st_error: "error", st_paused: "paused",
+      st_waiting: "waiting for premiere",
+      waiting_hint: "The Telegram post will be published automatically after the YouTube video goes live",
       st_skipped: "skipped", st_on: "on", st_off: "off",
       st_manual: "manual", st_postiz: "from Postiz", st_suggested: "suggested",
       st_unmatched: "not found", st_confirmed: "confirmed", st_rejected: "rejected",
@@ -597,7 +601,10 @@
     return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || status || "—";
   }
 
-  function statusBtn(status) {
+  function statusBtn(status, waiting) {
+    if (waiting) {
+      return `<span class="btn secondary status-btn" title="${t("waiting_hint")}">${t("st_waiting")}</span>`;
+    }
     return `<span class="btn secondary status-btn">${statusText(status)}</span>`;
   }
 
@@ -844,7 +851,7 @@
        <div class="queue-col">
          <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove")}</button>
          ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
-         ${statusBtn(it.status)}
+         ${statusBtn(it.status, it.waiting)}
          <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
        ${form}</div>`;

@@ -112,6 +112,20 @@ def main() -> int:
     if not Path("/var/lib/cloudflared-webapp.url").is_file():
         problems.append("неизвестен публичный URL панели")
 
+    # защита от повторного включения сетевого «спама» (война маршрутов и шторм переподключений)
+    for unit in ("pve-wifi-route-watchdog.service", "route-guard.service",
+                 "usb-net-monitor.service", "broll-downloader.service"):
+        if _service_active(unit):
+            problems.append(f"опасный юнит активен: {unit} (сетевой шторм)")
+    try:
+        rg = subprocess.run(
+            ["pgrep", "-f", "pve-wifi-route-watchdog|route-guard.sh|network-failover"],
+            capture_output=True, text=True, timeout=10)
+        if rg.returncode == 0:
+            problems.append("опасный сетевой скрипт запущен вручную (война маршрутов)")
+    except Exception:
+        pass
+
     now = time.time()
     state = {}
     try:

@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "52"
+WEBAPP_BUILD = "53"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -284,10 +284,13 @@ class WebAppAPI:
                 title = str(data.get("title") or "")
                 desc = str(data.get("description") or "")
                 tags = str(data.get("hashtags") or "")
+                cover = str(data.get("cover") or "").strip()
+                if cover and not Path(cover).is_file():
+                    return 400, {"error": "cover file not found"}, "application/json"
                 self.db.execute(
-                    f"UPDATE {table} SET title_text=?, description_text=?, hashtags_text=? "
-                    "WHERE id=?",
-                    (title[:200], desc, tags, eid),
+                    f"UPDATE {table} SET title_text=?, description_text=?, hashtags_text=?, "
+                    "cover_path=? WHERE id=?",
+                    (title[:200], desc, tags, (cover or None), eid),
                 )
                 sql = ("SELECT platform, postiz_post_id, postiz_scheduled_for, status "
                        "FROM entity_platform_status WHERE entity_type=? AND entity_id=? "
@@ -875,6 +878,36 @@ class WebAppAPI:
     def _roots(self) -> list[str]:
         return [it["path"] for it in self._root_items()]
 
+    def _cover_candidates(self, video_path: str) -> list[str]:
+        """Картинки-обложки рядом с видео (в папке и на уровень выше)."""
+        if not video_path:
+            return []
+        try:
+            vp = Path(video_path)
+        except Exception:
+            return []
+        out: list[str] = []
+        for base in (vp.parent, vp.parent.parent):
+            if not base.is_dir():
+                continue
+            try:
+                for f in sorted(base.iterdir()):
+                    if not f.is_file():
+                        continue
+                    if f.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                        continue
+                    if f.name.startswith("._"):
+                        continue
+                    if base is vp.parent or "cover" in f.name.lower():
+                        out.append(str(f.resolve()))
+            except OSError:
+                continue
+        seen: list[str] = []
+        for p in out:
+            if p not in seen:
+                seen.append(p)
+        return seen[:30]
+
     def _root_items(self) -> list[dict[str, str]]:
         raw = self.db.get_setting(WATCH_ROOTS_KEY)
         out: list[dict[str, str]] = []
@@ -1057,7 +1090,9 @@ class WebAppAPI:
                    eps.postiz_scheduled_for,
                    COALESCE(lv.title_text, lv.title, sh.title_text) AS title,
                    COALESCE(lv.description_text, sh.description_text) AS description_text,
-                   COALESCE(lv.hashtags_text, sh.hashtags_text) AS hashtags_text
+                   COALESCE(lv.hashtags_text, sh.hashtags_text) AS hashtags_text,
+                   COALESCE(lv.cover_path, sh.cover_path) AS cover_path,
+                   COALESCE(lv.vertical_path, lv.wide_path, sh.video_path) AS video_path
             FROM entity_platform_status eps
             LEFT JOIN long_videos lv
                    ON eps.entity_type='long_video' AND lv.id = eps.entity_id
@@ -1084,6 +1119,8 @@ class WebAppAPI:
                 "title_text": (r.get("title") or "").strip(),
                 "description_text": r.get("description_text") or "",
                 "hashtags_text": r.get("hashtags_text") or "",
+                "cover_path": r.get("cover_path") or "",
+                "covers": self._cover_candidates(r.get("video_path") or ""),
             })
         return {"items": items}
 

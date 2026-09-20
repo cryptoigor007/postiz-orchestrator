@@ -124,6 +124,15 @@ class Publisher:
         pcfg = self.cfg.platforms.get(platform)
         if pcfg and getattr(pcfg, "integration_id", None):
             content = {**content, "integration_id": pcfg.integration_id}
+        cover_path = str(content.get("cover") or "").strip()
+        if platform == "youtube" and cover_path:
+            try:
+                cref = self.postiz.upload_media(cover_path, platform)
+                content = {**content,
+                           "settings": {"thumbnail": {"id": cref.id, "path": cref.path}}}
+            except Exception:
+                logger.warning("cover upload failed: %s", cover_path, exc_info=True)
+
         media = None
         if media_path:
             try:

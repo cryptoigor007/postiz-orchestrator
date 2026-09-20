@@ -3,6 +3,7 @@
 
   const I18N = {
     ru: {
+      edit_cover: "Обложка", cover_none: "Без обложки",
       cancel: "Отменить", left: "осталось", sec_short: "с", min_short: "мин",
       job_scheduling: "Планирование публикаций", job_restore: "Возврат удалённого",
       job_cancelling: "Отменяем…", job_cancelled: "Отменено", job_done: "Готово",
@@ -124,6 +125,7 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      edit_cover: "Cover", cover_none: "No cover",
       cancel: "Cancel", left: "left", sec_short: "s", min_short: "min",
       job_scheduling: "Scheduling posts", job_restore: "Restoring removed",
       job_cancelling: "Cancelling…", job_cancelled: "Cancelled", job_done: "Done",
@@ -572,6 +574,14 @@
                <textarea id="qe-desc" rows="4" style="width:100%">${(it.description_text || "").replace(/</g, "&lt;")}</textarea></label></div>
              <div class="form-row"><label class="meta">${t("edit_tags")}
                <input id="qe-tags" type="text" value="${(it.hashtags_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
+             <div class="form-row">
+               <label class="meta">${t("edit_cover")}
+                 <select id="qe-cover">
+                   <option value="">${t("cover_none")}</option>
+                   ${(it.covers || []).map((c) => `<option value="${c}" ${c === it.cover_path ? "selected" : ""}>${c.split("/").pop()}</option>`).join("")}
+                 </select>
+               </label>
+             </div>
              <div class="form-row">
                <label class="meta">${t("edit_date")} <input id="qe-date" type="date" value="${it.date || ""}"/></label>
                <label class="meta">${t("edit_time")} <input id="qe-time" type="time" value="${it.time || ""}"/></label>
@@ -1124,6 +1134,7 @@
             hashtags: val("qe-tags"),
             date: val("qe-date"),
             time: val("qe-time"),
+            cover: val("qe-cover"),
           }),
         });
         unbusy();

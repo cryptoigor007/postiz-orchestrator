@@ -230,3 +230,57 @@ def test_link_orphan_shorts(tmp_path):
     assert linked == 1
     row = db.fetchone("SELECT parent_video_id FROM shorts")
     assert row["parent_video_id"] == lv["id"]
+
+
+def test_shorts_maker_description_and_cover(tmp_path):
+    db = Database(tmp_path / "d.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    root = tmp_path / "content"
+    d = root / "шортс" / "ш1"
+    d.mkdir(parents=True)
+    (d / "ш1_final.mp4").write_bytes(b"v" * 200)
+    (d / "ш1_title.txt").write_text("Заголовок", encoding="utf-8")
+    (d / "ш1_description.txt").write_text("Полное описание шортса", encoding="utf-8")
+    (d / "ш1_final_cover.jpg").write_bytes(b"jpg")
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    s = db.fetchone("SELECT * FROM shorts")
+    assert s["description_text"] == "Полное описание шортса"
+    assert s["cover_path"] and s["cover_path"].endswith("ш1_final_cover.jpg")
+
+
+def test_long_cover_detected(tmp_path):
+    db = Database(tmp_path / "c.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    series = tmp_path / "content" / "s1"
+    (series / "wide").mkdir(parents=True)
+    (series / "wide" / "final_16x9.mp4").write_bytes(b"v" * 200)
+    (series / "cover.jpg").write_bytes(b"jpg")
+    w = Watcher(db, cfg, clock, [str(series.parent)])
+    for _ in range(4):
+        w.scan()
+    lv = db.fetchone("SELECT * FROM long_videos")
+    assert lv["cover_path"] and lv["cover_path"].endswith("cover.jpg")
+
+
+def test_backfill_description(tmp_path):
+    db = Database(tmp_path / "b.sqlite")
+    cfg = load_config(Path(__file__).resolve().parents[1] / "config.yaml")
+    clock = FakeClock(datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    d = tmp_path / "content" / "s1"
+    d.mkdir(parents=True)
+    video = d / "s1.mp4"
+    video.write_bytes(b"v" * 100)
+    (d / "s1_description.txt").write_text("Описание из файла", encoding="utf-8")
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, video_path, description_text, created_at) "
+        "VALUES ('shortsmaker', ?, ?, '', '2026-01-01T00:00:00+00:00')",
+        (str(d), str(video)),
+    )
+    w = Watcher(db, cfg, clock, [str(d)])
+    assert w._backfill_descriptions() == 1
+    row = db.fetchone("SELECT description_text FROM shorts")
+    assert row["description_text"] == "Описание из файла"

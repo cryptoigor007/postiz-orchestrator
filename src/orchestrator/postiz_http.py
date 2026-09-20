@@ -181,7 +181,8 @@ class HttpPostizClient:
         entry: dict[str, Any] = {
             "integration": {"id": integration_id},
             "value": [{"content": message, "image": image}],
-            "settings": content.get("settings") or self._platform_settings(platform, content),
+            "settings": {**self._platform_settings(platform, content),
+                         **(content.get("settings") or {})},
         }
         if content.get("group"):
             entry["group"] = content["group"]

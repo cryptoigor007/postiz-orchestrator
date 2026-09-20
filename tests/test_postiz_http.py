@@ -156,3 +156,28 @@ def test_create_post_youtube_settings():
     assert settings["type"] == "public"
     assert settings["selfDeclaredMadeForKids"] == "no"
     assert {"value": "деньги", "label": "деньги"} in settings["tags"]
+
+
+def test_create_post_youtube_keeps_thumbnail_and_adds_title():
+    captured = {}
+
+    def handler(request):
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "yt-2"})
+
+    client = _client(handler)
+    client.create_post(
+        platform="youtube",
+        media=MediaRef(id="m1", path="p1"),
+        content={
+            "title": "Заголовок",
+            "description": "Описание",
+            "integration_id": "int-yt",
+            "settings": {"thumbnail": {"id": "c1", "path": "https://host/c.jpg"}},
+        },
+        scheduled_for=datetime(2026, 9, 22, 12, 59, tzinfo=UTC),
+    )
+    settings = captured["json"]["posts"][0]["settings"]
+    assert settings["thumbnail"]["id"] == "c1"
+    assert settings["title"] == "Заголовок"      # платформенные поля не потерялись
+    assert settings["type"] == "public"

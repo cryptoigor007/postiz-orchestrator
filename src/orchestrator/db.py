@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS long_videos (
     description_text TEXT,
     hashtags_text TEXT,
     platform_paths TEXT,
+    cover_path TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -136,7 +137,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_confirmed
     WHERE match_status = 'confirmed';
 """
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 
@@ -185,6 +186,11 @@ class Database:
                     conn.execute(stmt)
                 except Exception:
                     pass
+        if current < 11:
+            try:
+                conn.execute("ALTER TABLE long_videos ADD COLUMN cover_path TEXT")
+            except Exception:
+                pass
         if current < SCHEMA_VERSION or current == 0:
             conn.execute(
                 "INSERT INTO system_state (key, value, updated_at) VALUES ('schema_version', ?, ?) "

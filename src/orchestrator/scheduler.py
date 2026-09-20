@@ -134,8 +134,8 @@ class Scheduler:
         now = self.clock.now()
         ref = self._start_ref(start_date) or now
         videos = self.db.fetchall(
-            "SELECT id, wide_path, vertical_path, platform_paths, title_text, description_text, hashtags_text "
-            "FROM long_videos ORDER BY created_at"
+            "SELECT id, wide_path, vertical_path, platform_paths, title_text, description_text, "
+            "hashtags_text, cover_path FROM long_videos ORDER BY created_at"
         )
         count = 0
         for platform, pcfg in self.cfg.platforms.items():
@@ -178,6 +178,7 @@ class Scheduler:
                             "title": video["title_text"] or "",
                             "description": video["description_text"] or "",
                             "hashtags": video["hashtags_text"] or "",
+                            "cover": video.get("cover_path") or "",
                         }
                         post = self._safe_publish(
                             "long_video", video["id"], platform, path, content, slot)
@@ -300,6 +301,7 @@ class Scheduler:
                 "title": short["title_text"] or "",
                 "description": desc,
                 "hashtags": short["hashtags_text"] or "",
+                "cover": short.get("cover_path") or "",
             }
             path = self._pick_path(short, platform) or short["video_path"]
             if not path:
@@ -578,7 +580,8 @@ class Scheduler:
 
         ready = self.db.fetchall(
             """
-            SELECT s.id, s.video_path, s.platform_paths, s.title_text, s.description_text, s.hashtags_text
+            SELECT s.id, s.video_path, s.platform_paths, s.title_text, s.description_text,
+                   s.hashtags_text, s.cover_path
             FROM shorts s
             WHERE s.source = 'shortsmaker'
               AND s.parent_video_id IS NULL
@@ -634,6 +637,7 @@ class Scheduler:
                                     "title": short["title_text"] or "",
                                     "description": short["description_text"] or "",
                                     "hashtags": short["hashtags_text"] or "",
+                                    "cover": short.get("cover_path") or "",
                                 }
                                 post = self._safe_publish(
                                     "short", short["id"], platform,

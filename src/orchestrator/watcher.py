@@ -196,7 +196,38 @@ class Watcher:
         linked = self._link_orphan_shorts()
         if linked:
             logger.info("Linked orphan shorts to series: %s", linked)
+        filled = self._backfill_descriptions()
+        if filled:
+            logger.info("Backfilled descriptions: %s", filled)
         return stats
+
+    def _backfill_descriptions(self) -> int:
+        """Дозаполняет пустые описания из файлов *_description.txt рядом с видео."""
+        n = 0
+        rows = self.db.fetchall(
+            "SELECT id, video_path FROM shorts "
+            "WHERE (description_text IS NULL OR description_text='') AND video_path IS NOT NULL")
+        for r in rows:
+            vp = Path(r["video_path"])
+            cand = vp.with_name(vp.stem + "_description.txt")
+            text = self._read_text(cand)
+            if text:
+                self.db.execute("UPDATE shorts SET description_text=? WHERE id=?",
+                                (text, r["id"]))
+                n += 1
+        rows = self.db.fetchall(
+            "SELECT id, folder_path FROM long_videos "
+            "WHERE (description_text IS NULL OR description_text='') AND folder_path IS NOT NULL")
+        for r in rows:
+            folder = Path(r["folder_path"])
+            name = folder.name
+            text = (self._read_text(folder / "vertical" / f"{name}_description.txt")
+                    or self._read_text(folder / "wide" / f"{name}_description.txt"))
+            if text:
+                self.db.execute("UPDATE long_videos SET description_text=? WHERE id=?",
+                                (text, r["id"]))
+                n += 1
+        return n
 
     def _walk(self, d: Path, depth: int, max_depth: int, stats: dict[str, int],
               mode: str = "auto") -> None:
@@ -245,6 +276,9 @@ class Watcher:
         )
         if existing:
             return 0
+        cover = next(series.glob("cover*"), None) or next(series.glob("*_cover.*"), None)
+        if cover is None:
+            cover = next((series / "wide").glob("*cover*"), None) if (series / "wide").is_dir() else None
 
         title = self._clean_name(series.name)
         meta_kv = self._meta_kv(series / "info_metadata.txt")
@@ -266,15 +300,17 @@ class Watcher:
             """
             INSERT INTO long_videos
                 (source, folder_path, title, wide_path, vertical_path,
-                 title_text, description_text, hashtags_text, platform_paths, created_at)
-            VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 title_text, description_text, hashtags_text, platform_paths, cover_path,
+                 created_at)
+            VALUES ('videomaker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 folder, title,
                 str(wide) if wide else None,
                 str(vert) if vert else None,
                 title_text, desc_text, tags_text,
-                (json.dumps(pmap) if pmap else None), now,
+                (json.dumps(pmap) if pmap else None),
+                str(cover) if cover else None, now,
             ),
         )
         logger.info("Registered long video: %s", folder)
@@ -359,7 +395,8 @@ class Watcher:
         hooks_text = self._read_text(d / f"{prefix}_hooks.txt")
         tags_text = self._read_text(d / f"{prefix}_hashtags.txt")
         title_text = self._first_field(titles_text, "Заголовок") or self._clean_name(d.name)
-        desc_text = self._first_field(titles_text, "Описание")
+        desc_text = (self._read_text(d / f"{prefix}_description.txt")
+                     or self._first_field(titles_text, "Описание"))
         hook_text = self._first_hook(hooks_text)
         tags_line = tags_text.splitlines()[0].strip() if tags_text else ""
         cover = next(d.glob("*_final_cover.*"), None) or next(d.glob("*cover*"), None)
@@ -410,7 +447,7 @@ class Watcher:
                 or pick("_title.txt")
                 or self._clean_name(stem)
             )
-            desc_text = self._first_field(titles_text, "Описание")
+            desc_text = pick("_description.txt") or self._first_field(titles_text, "Описание")
             hook_text = self._first_hook(pick("_hooks.txt"))
             tags = pick("_hashtags.txt").splitlines()
             cover = next(d.glob(f"{stem}*cover*"), None)

@@ -10,3 +10,5 @@ logs/
 .env
 *.bak
 .DS_Store
+tests/gui/node_modules/
+.coverage

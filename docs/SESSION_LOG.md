@@ -472,3 +472,9 @@
 - Обезврежено: 4 юнита выключены, 3 скрипта *.disabled, net-watchdog переписан безопасно,
   NM-харденинг (без рандомизации MAC, powersave off), инфра-watchdog следит за возвратом.
 - Отчёт: docs/INCIDENT-2026-09-20-network.md.
+
+## 2026-09-20 (ночь) — Failover LAN>WiFi сделан правильно
+- Профиль wd: убраны policy-routing (table 100), never-default off, gateway .1, metric 600.
+- LAN-маршрут (metric 100) — единственный владелец lan-default.sh (udev + net-watchdog 60с).
+- vm-nat.service вместо vm-nat-wifi.service: NAT через vmbr0 и wlp2s0.
+- Тесты: с выдёрнутым LAN трафик уходит на Wi-Fi, с включённым — на LAN; VM в интернете всегда.

@@ -192,6 +192,16 @@ curl -s "http://192.168.100.50:8080/webapp/api/backlog?key=<KEY>"
 
 ---
 
+## 6.5 Сеть сервера (схема после 2026-09-20)
+- Интернет: **LAN (vmbr0, .50) — приоритет**, metric 100; **Wi-Fi (.40) — резерв**, metric 600.
+  Переключение автоматическое (ядро по метрике), маршрут LAN добавляет/убирает ТОЛЬКО
+  `/usr/local/sbin/lan-default.sh` (идемпотентно, владелец один; udev + раз в 60с из net-watchdog).
+- Интернет для VM: `vm-nat.service` (`/usr/local/sbin/vm-nat.sh`) — MASQUERADE и FORWARD
+  для vmbr0 И wlp2s0 (работает при любом аплинке).
+- USB-LAN: udev `99-usb-r8152-restore.rules` -> `restore-usb-net.sh` + `lan-default.sh`.
+- ЗАПРЕЩЕНО: любые скрипты с `nmcli disconnect/connect` в циклах и «война маршрутов»
+  (см. docs/INCIDENT-2026-09-20-network.md). `infra-watchdog` алертит при их возврате.
+
 ## 7. Известные грабли и как чинить
 
 | Симптом | Причина | Решение |

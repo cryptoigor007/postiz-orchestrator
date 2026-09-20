@@ -62,3 +62,12 @@
 - Диагностика на сервере: `bash /opt/orchestrator/scripts/network_doctor.sh`
   (двойные интерфейсы, proxy_arp, конфликты), `journalctl -b -1 | grep BEACON-LOSS`,
   `wc -l /var/log/route-guard.log`.
+
+## Постфикс: схема failover (сделано после инцидента)
+- LAN приоритетен (vmbr0, metric 100), Wi-Fi резерв (wlp2s0, metric 600) — переключение
+  делает само ядро по метрике, без скриптов.
+- Единственный владелец LAN-маршрута — `/usr/local/sbin/lan-default.sh`
+  (событие udev + сверка раз в 60с; идемпотентно; никогда не трогает Wi-Fi и не рвёт соединения).
+- VM-интернет работает через любой аплинк: `vm-nat.service` (MASQUERADE+FORWARD для vmbr0 и wlp2s0).
+- Проверено: LAN выдёрнут -> трафик мгновенно уходит на Wi-Fi (host + VM = OK);
+  LAN включён -> возвращается на LAN (host + VM = OK).

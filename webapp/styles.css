@@ -409,3 +409,12 @@ html { -webkit-tap-highlight-color: transparent; }
   justify-content: center; transition: transform 140ms var(--ease-out), background 160ms ease-out; }
 .cover-x:active { transform: scale(0.94); background: var(--sep); }
 .cover-body { padding-top: 4px; }
+
+/* iOS: не даём Safari зумить при фокусе на поле (шрифт полей ≥16px) + удобные тапы */
+@media (max-width: 640px) {
+  input[type="text"], input[type="search"], input[type="url"], input[type="date"],
+  input[type="time"], input[type="number"], textarea, select { font-size: 16px; }
+  .btn { min-height: 38px; }
+  .nav button { min-height: 36px; }
+  .chip { min-height: 34px; }
+}

@@ -302,6 +302,8 @@ html { -webkit-tap-highlight-color: transparent; }
   border: 1px solid var(--sep); background: var(--bg); color: var(--text); }
 
 /* Миниатюра обложки в списке очереди */
+.q-cover-btn { background: none; border: 0; padding: 0; margin: 0 8px 0 0; cursor: pointer;
+  flex: 0 0 auto; border-radius: 6px; }
 .q-cover { width: 36px; height: 48px; object-fit: cover; border-radius: 6px;
-  background: var(--sep); flex: 0 0 auto; margin-right: 8px; }
-span.q-cover-none { display: inline-block; border: 1px dashed var(--sep); opacity: .5; }
+  background: var(--sep); display: block; }
+.q-cover-empty { width: 36px; height: 48px; border: 1px dashed var(--sep); opacity: .55; }

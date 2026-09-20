@@ -680,10 +680,17 @@ class WebAppAPI:
                     return 413, {"error": "image too large (>25MB)"}, "application/json"
                 if not _is_image_bytes(blob):
                     return 400, {"error": "not an image"}, "application/json"
-                covers = Path("/mnt/video/.covers")
-                try:
-                    covers.mkdir(parents=True, exist_ok=True)
-                except OSError:
+                covers = None
+                for cand in (Path("/mnt/video/.covers"),
+                             Path("/mnt/video/ssd_backup/.covers")):
+                    try:
+                        cand.mkdir(parents=True, exist_ok=True)
+                        if os.access(cand, os.W_OK):
+                            covers = cand
+                            break
+                    except OSError:
+                        continue
+                if covers is None:
                     return 500, {"error": "cannot create covers dir"}, "application/json"
                 stamp = time.strftime("%Y%m%d-%H%M%S")
                 dst = covers / f"{etype}_{eid}_{stamp}{ext}"

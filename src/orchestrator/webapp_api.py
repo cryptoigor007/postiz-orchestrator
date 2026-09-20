@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "74"
+WEBAPP_BUILD = "75"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -394,6 +394,31 @@ class WebAppAPI:
                                          etype, eid, plat)
                 return 200, {"ok": True, "updated": updated, "recreated": recreated}, \
                     "application/json"
+            if method == "POST" and route == "queue/cleanup_orphans":
+                postiz_c = self.comps.get("postiz")
+                if postiz_c is None:
+                    return 500, {"error": "postiz unavailable"}, "application/json"
+                known = {r["postiz_post_id"] for r in self.db.fetchall(
+                    "SELECT postiz_post_id FROM entity_platform_status "
+                    "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''")}
+                deleted = 0
+                try:
+                    posts = postiz_c.list_scheduled()
+                except Exception as e:
+                    return 502, {"error": f"list failed: {e}"}, "application/json"
+                for p_ in posts:
+                    if p_.id in known:
+                        continue
+                    state = (getattr(p_, "status", "") or "").lower()
+                    if state in ("draft", "drafts", "published"):
+                        continue  # черновики и вышедшее не трогаем
+                    try:
+                        postiz_c.delete_post(p_.id)
+                        deleted += 1
+                    except Exception:
+                        logger.warning("cleanup_orphans: не удалось удалить %s", p_.id, exc_info=True)
+                logger.info("cleanup_orphans: удалено %s", deleted)
+                return 200, {"ok": True, "deleted": deleted}, "application/json"
             if method == "POST" and route == "queue/restore":
                 etype = str(data.get("entity_type") or "").strip()
                 try:

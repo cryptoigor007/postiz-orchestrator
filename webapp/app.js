@@ -67,7 +67,7 @@
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
       backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", confirm_cascade_shorts: "У этой серии есть шортсы (%s). Удалить их тоже — со всех платформ и из базы?", shorts_deleted: "Шортсы серии удалены", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", cleanup_orphans: "Убрать лишние посты из Postiz", confirm_cleanup_orphans: "Удалить из Postiz посты, которых нет в базе (лишние)? Живые публикации не трогаются.", cleaned: "Убрано постов", confirm_cascade_shorts: "У этой серии есть шортсы (%s). Удалить их тоже — со всех платформ и из базы?", shorts_deleted: "Шортсы серии удалены", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
       delete_everywhere: "Удалить везде (все платформы + база)",
       confirm_delete_everywhere: "Удалить ролик со ВСЕХ платформ и из базы? Файлы на диске останутся (скан вернёт).",
       remove_posts: "Удалить посты", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
@@ -217,7 +217,7 @@
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
       backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
-      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", confirm_cascade_shorts: "This series has %s shorts. Delete them too — from all platforms and the DB?", shorts_deleted: "Series shorts deleted", confirm_cascade_tg_bulk: "%s items have a scheduled Telegram link post. Delete those too?", confirm_cascade_tg: "A Telegram post with the link is already scheduled. Delete it too?", cascade_deleted: "Deleted together with the Telegram link", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
+      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", cleanup_orphans: "Clean up leftover posts in Postiz", confirm_cleanup_orphans: "Delete Postiz posts that are not in the DB (leftovers)? Published ones are kept.", cleaned: "Cleaned posts", confirm_cascade_shorts: "This series has %s shorts. Delete them too — from all platforms and the DB?", shorts_deleted: "Series shorts deleted", confirm_cascade_tg_bulk: "%s items have a scheduled Telegram link post. Delete those too?", confirm_cascade_tg: "A Telegram post with the link is already scheduled. Delete it too?", cascade_deleted: "Deleted together with the Telegram link", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
       delete_everywhere: "Delete everywhere (all platforms + DB)",
       confirm_delete_everywhere: "Delete the item from ALL platforms and the DB? Files on disk stay.",
       remove_posts: "Delete posts", search: "Search", search_placeholder: "Find folder by name…", search_none: "Nothing found", searching: "Searching…", search_short: "Type at least 2 characters", queue_all: "All", queue_select: "Select", queue_done: "Done",
@@ -1138,6 +1138,7 @@
         </div>
         <div class="form-row">
           <button class="btn secondary" data-act="queue-restore-all">${t("restore_posts")}</button>
+          <button class="btn secondary" data-act="queue-cleanup-orphans">${t("cleanup_orphans")}</button>
         </div>
         <div class="form-row">
           <button class="btn secondary" data-act="sync">${t("act_sync")}</button>
@@ -1581,6 +1582,21 @@
         state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        return load();
+      }
+      if (act === "queue-cleanup-orphans") {
+        let ok = true;
+        const ask = t("confirm_cleanup_orphans");
+        const tgC = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+        if (tgC) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
+        else if (typeof window.confirm === "function") ok = window.confirm(ask);
+        if (!ok) return;
+        busy(t("working"));
+        try {
+          const r = await api("/queue/cleanup_orphans", { method: "POST", body: "{}" });
+          unbusy();
+          toast(`${t("cleaned")}: ${r.deleted || 0}`);
+        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${e.message}`); }
         return load();
       }
       if (act === "queue-restore-all") {

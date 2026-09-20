@@ -382,3 +382,20 @@ def test_remove_youtube_platform_deletes_postiz_and_reports_shorts(env):
     assert payload["removed"] >= 2
     assert db.fetchone("SELECT id FROM long_videos WHERE id=?", (fid,)) is None
     assert db.fetchone("SELECT id FROM shorts WHERE id=?", (sid,)) is None
+
+
+def test_cleanup_orphans_removes_unknown_queue_posts(env):
+    """Лишние посты Postiz (без строки в базе) удаляются, живые — нет."""
+    from orchestrator.postiz import MockPostizClient
+
+    api, db, clock, cfg = env
+    mock = MockPostizClient()
+    api.comps["postiz"] = mock
+    known = mock.create_post("youtube", None, {"title": "known", "description": "d"}, clock.now())
+    orphan = mock.create_post("youtube", None, {"title": "orphan", "description": "d"}, clock.now())
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, postiz_post_id) "
+               "VALUES ('short', 1, 'youtube', 'scheduled', ?)", (known.id,))
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/cleanup_orphans",
+                                  {"X-Telegram-Init-Data": "dev"}, b"{}")
+    assert code == 200 and payload["deleted"] == 1
+    assert known.id in mock.posts and orphan.id not in mock.posts

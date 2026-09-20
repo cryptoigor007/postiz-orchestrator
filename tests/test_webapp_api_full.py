@@ -241,3 +241,65 @@ def test_reconcile_does_not_flag_published_as_orphan(env):
     recon = Reconciliation(db, postiz, clock)
     res = recon.run()
     assert res["orphans"] == 0
+
+
+def test_remove_platform_scoped_keeps_other_platform(env):
+    """Удаление строки Telegram не должно удалять YouTube (и наоборот)."""
+    import json as _json
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, title_text, created_at) "
+        "VALUES ('videomaker', '/s', 't', ?)", (clock.now().isoformat(),))
+    sid = db.fetchone("SELECT id FROM shorts ORDER BY id DESC")["id"]
+    for plat in ("youtube", "telegram"):
+        db.execute(
+            "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+            "VALUES ('short', ?, ?, 'scheduled')", (sid, plat))
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/remove", headers,
+        _json.dumps({"entity_type": "short", "entity_id": sid, "platform": "telegram"}).encode())
+    assert code == 200 and payload["removed"] == 1
+    rows = db.fetchall(
+        "SELECT platform, status FROM entity_platform_status "
+        "WHERE entity_type='short' AND entity_id=? ORDER BY platform", (sid,))
+    assert [(r["platform"], r["status"]) for r in rows] == [("telegram", "skipped"),
+                                                            ("youtube", "scheduled")]
+    assert db.fetchone("SELECT id FROM shorts WHERE id=?", (sid,)) is not None
+    # восстановление возвращает строку
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/restore", headers,
+                                  _json.dumps({"all": True}).encode())
+    assert code == 200 and payload["restored"] == 1
+    row = db.fetchone(
+        "SELECT status FROM entity_platform_status "
+        "WHERE entity_type='short' AND entity_id=? AND platform='telegram'", (sid,))
+    assert row["status"] == "ready"
+
+
+def test_remove_platform_scoped_blocked_when_published(env):
+    """Опубликованную платформу удалять нельзя, но другие — можно."""
+    import json as _json
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, title_text, created_at) "
+        "VALUES ('videomaker', '/s2', 't', ?)", (clock.now().isoformat(),))
+    sid = db.fetchone("SELECT id FROM shorts ORDER BY id DESC")["id"]
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, release_url) "
+        "VALUES ('short', ?, 'youtube', 'published', 'https://y')", (sid,))
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+        "VALUES ('short', ?, 'telegram', 'ready')", (sid,))
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/remove", headers,
+        _json.dumps({"entity_type": "short", "entity_id": sid, "platform": "youtube"}).encode())
+    assert payload["removed"] == 0 and payload["blocked"]
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/remove", headers,
+        _json.dumps({"entity_type": "short", "entity_id": sid, "platform": "telegram"}).encode())
+    assert payload["removed"] == 1
+    row = db.fetchone(
+        "SELECT status FROM entity_platform_status "
+        "WHERE entity_type='short' AND entity_id=? AND platform='youtube'", (sid,))
+    assert row["status"] == "published"

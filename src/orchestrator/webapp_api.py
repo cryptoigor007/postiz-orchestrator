@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "71"
+WEBAPP_BUILD = "72"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -430,16 +430,66 @@ class WebAppAPI:
                     logger.info("queue remove: %s#%s уже удалено", etype, eid)
                     return 200, {"ok": True, "removed": 0, "blocked": [],
                                  "note": "already"}, "application/json"
+                platform = str(data.get("platform") or "").strip()
+                if platform:
+                    # Удаляем ТОЛЬКО эту платформу: Telegram не трогает YouTube и наоборот
+                    prows = self.db.fetchall(
+                        "SELECT status FROM entity_platform_status "
+                        "WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (etype, eid, platform))
+                    if not prows:
+                        return 200, {"ok": True, "removed": 0, "blocked": [],
+                                     "note": "already"}, "application/json"
+                    if any((r["status"] or "") == "published" for r in prows):
+                        return 200, {"ok": True, "removed": 0,
+                                     "blocked": [f"{etype}#{eid}:{platform}"]}, "application/json"
+                    postiz0 = self.comps.get("postiz")
+                    if postiz0 is not None:
+                        from concurrent.futures import ThreadPoolExecutor
+                        pids0 = [str(r["postiz_post_id"]) for r in self.db.fetchall(
+                            "SELECT postiz_post_id FROM entity_platform_status "
+                            "WHERE entity_type=? AND entity_id=? AND platform=? AND postiz_post_id IS NOT NULL",
+                            (etype, eid, platform))]
+
+                        def _del(pid: str) -> None:
+                            try:
+                                if hasattr(postiz0, "delete_post"):
+                                    postiz0.delete_post(pid)
+                                elif hasattr(postiz0, "set_status"):
+                                    postiz0.set_status(pid, "draft")
+                            except Exception:
+                                logger.warning("queue remove: удаление поста %s не удалось", pid,
+                                               exc_info=True)
+
+                        if pids0:
+                            with ThreadPoolExecutor(max_workers=8) as ex:
+                                list(ex.map(_del, pids0))
+                    # мягкое удаление: строка помечается skipped, чтобы планировщик её не создавал
+                    # заново; «Вернуть удалённое» восстанавливает
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL "
+                        "WHERE entity_type=? AND entity_id=? AND platform=?", (etype, eid, platform))
+                    self.db.log(etype, eid, platform, "queue_delete", "platform_skipped")
+                    logger.info("queue remove: %s#%s %s -> removed=1 (только платформа, soft)",
+                                etype, eid, platform)
+                    return 200, {"ok": True, "removed": 1, "blocked": []}, "application/json"
                 postiz = self.comps.get("postiz")
 
-                def _kill_posts(*targets: tuple[str, int]) -> None:
+                def _kill_posts(*targets: tuple) -> None:
                     if postiz is None:
                         return
                     pids: list[str] = []
-                    for t, i in targets:
-                        for r in self.db.fetchall(
+                    for t, i, plat in targets:
+                        if plat:
+                            rows_ = self.db.fetchall(
                                 "SELECT postiz_post_id FROM entity_platform_status "
-                                "WHERE entity_type=? AND entity_id=?", (t, i)):
+                                "WHERE entity_type=? AND entity_id=? AND platform=?",
+                                (t, i, plat))
+                        else:
+                            rows_ = self.db.fetchall(
+                                "SELECT postiz_post_id FROM entity_platform_status "
+                                "WHERE entity_type=? AND entity_id=?", (t, i))
+                        for r in rows_:
                             pid = r.get("postiz_post_id")
                             if pid:
                                 pids.append(str(pid))
@@ -482,7 +532,7 @@ class WebAppAPI:
                         blocked.append(f"long_video#{eid}")
                     elif keep_shorts:
                         # удаляем только фильм; шортсы остаются (отвязываем)
-                        _kill_posts(("long_video", eid))
+                        _kill_posts(("long_video", eid, None))
                         self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type='long_video' AND entity_id=?", (eid,))
@@ -493,7 +543,7 @@ class WebAppAPI:
                         self.db.log("long_video", eid, "", "queue_delete", "keep_shorts")
                         removed += 1
                     else:
-                        _kill_posts(*[("short", sid) for sid in shorts_ids])
+                        _kill_posts(*[("short", sid, None) for sid in shorts_ids])
                         for sid in shorts_ids:
                             self.db.execute(
                                 "DELETE FROM entity_platform_status "
@@ -501,7 +551,7 @@ class WebAppAPI:
                             self.db.execute("DELETE FROM shorts WHERE id=?", (sid,))
                             self.db.log("short", sid, "", "queue_delete", "hard")
                             removed += 1
-                        _kill_posts(("long_video", eid))
+                        _kill_posts(("long_video", eid, None))
                         self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type='long_video' AND entity_id=?", (eid,))
@@ -515,7 +565,7 @@ class WebAppAPI:
                     if any((r["status"] or "") == "published" for r in rows):
                         blocked.append(f"short#{eid}")
                     else:
-                        _kill_posts(("short", eid))
+                        _kill_posts(("short", eid, None))
                         self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type='short' AND entity_id=?", (eid,))

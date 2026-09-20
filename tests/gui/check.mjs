@@ -15,6 +15,7 @@ if (!html.includes("id=\"content\"")) {
 }
 
 const calls = [];
+const bodies = [];
 const jsErrors = [];
 const fail = (msg) => { console.error("❌ " + msg); process.exitCode = 1; };
 const ok = (msg) => console.log("✓ " + msg);
@@ -105,6 +106,7 @@ const dom = new JSDOM(html, {
       const path = s.split("?")[0].replace(/^https?:\/\/[^/]+/, "");
       const m = (opts.method || "GET") + " " + path;
       calls.push(m);
+      if (opts && opts.body) bodies.push(String(opts.body));
       const ep = path.replace(/^\/webapp\/api\//, "");
       if (ep === "roots" && opts.method === "POST") return response(fixtures.roots_post);
       if (ep.startsWith("queue/remove")) return response(fixtures["queue/remove"]);
@@ -147,6 +149,8 @@ else fail(`очередь не отрисовалась (rows=${rows}, del=${del
 
 doc.querySelector('[data-act="queue-edit"]').click();
 await wait(80);
+if (doc.querySelector('[data-act="queue-remove-everywhere"]')) ok("редактирование: кнопка «Удалить везде» есть");
+else fail("нет кнопки «Удалить везде»");
 const pickBtn = doc.querySelector('[data-act="cover-pick"]');
 if (pickBtn) ok("редактирование: кнопка «Выбрать обложку…» есть");
 else fail("нет кнопки «Выбрать обложку…»");
@@ -218,10 +222,19 @@ const qAfter = calls.filter((c) => c === "GET /webapp/api/queue").length;
 const busy = doc.getElementById("busy");
 if (calls.some((c) => c === "POST /webapp/api/queue/remove")) ok("удаление: запрос отправлен");
 else fail("удаление: запрос НЕ отправлен");
+const delBody = bodies.filter((b) => b.includes("entity_type")).slice(-1)[0] || "";
+if (delBody.includes("platform")) ok("удаление: платформенное (platform в запросе)");
+else fail(`удаление: платформа НЕ передана (body=${delBody.slice(0, 80)})`);
 if (qAfter > qBefore) ok("удаление: очередь перезагрузилась");
 else fail("удаление: очередь не перезагрузилась");
 if (busy && busy.style.display === "none") ok("удаление: спиннер погас (unbusy)");
 else fail("удаление: спиннер не погас — GUI зависнет");
+
+// 3.5 Экран «Действия»: кнопка восстановления удалённых постов
+doc.querySelector('#nav button[data-view="actions"]').click();
+await wait(250);
+if (doc.querySelector('[data-act="queue-restore-all"]')) ok("действия: кнопка «Вернуть удалённые посты» есть");
+else fail("нет кнопки восстановления постов");
 
 // 4. Папки: список корней и «добавить папку» шлёт корректный payload
 doc.querySelector('#nav button[data-view="folders"]').click();

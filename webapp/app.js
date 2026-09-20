@@ -67,10 +67,13 @@
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
       backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
+      delete_everywhere: "Удалить везде (все платформы + база)",
+      confirm_delete_everywhere: "Удалить ролик со ВСЕХ платформ и из базы? Файлы на диске останутся (скан вернёт).",
+      remove_posts: "Удалить посты", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
       queue_selected: "выбрано", queue_bulk_tags: "Хештеги…", queue_bulk_apply: "Применить",
       queue_bulk_clear: "Снять выделение",
-      queue_bulk_del: "Удалить выбранные (%s)? Посты и записи в базе будут удалены, файлы — нет.",
+      queue_bulk_del: "Удалить выбранные посты (%s)? Удаляются только выбранные платформы; файлы и другие посты остаются.",
       queue_bulk_tagp: "Новые хештеги для выбранных (%s):",
       queue_bulk_prog: "Обрабатываю %s из %s…",
       q_today: "Сегодня", q_tomorrow: "Завтра", q_yesterday: "Вчера",
@@ -214,10 +217,13 @@
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
       backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
-      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", search: "Search", search_placeholder: "Find folder by name…", search_none: "Nothing found", searching: "Searching…", search_short: "Type at least 2 characters", queue_all: "All", queue_select: "Select", queue_done: "Done",
+      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
+      delete_everywhere: "Delete everywhere (all platforms + DB)",
+      confirm_delete_everywhere: "Delete the item from ALL platforms and the DB? Files on disk stay.",
+      remove_posts: "Delete posts", search: "Search", search_placeholder: "Find folder by name…", search_none: "Nothing found", searching: "Searching…", search_short: "Type at least 2 characters", queue_all: "All", queue_select: "Select", queue_done: "Done",
       queue_selected: "selected", queue_bulk_tags: "Hashtags…", queue_bulk_apply: "Apply",
       queue_bulk_clear: "Clear selection",
-      queue_bulk_del: "Delete selected (%s)? Posts and DB records will be removed; files stay.",
+      queue_bulk_del: "Delete selected posts (%s)? Only the selected platforms are removed; files and other posts stay.",
       queue_bulk_tagp: "New hashtags for selected (%s):",
       queue_bulk_prog: "Processing %s of %s…",
       q_today: "Today", q_tomorrow: "Tomorrow", q_yesterday: "Yesterday",
@@ -870,12 +876,7 @@
     if (tgConfirm) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
     else if (typeof window.confirm === "function") ok = window.confirm(ask);
     if (!ok) return;
-    const seen = new Set();
-    const uniq = [];
-    for (const it of chosen) {
-      const k = `${it.entity_type}|${it.entity_id}`;
-      if (!seen.has(k)) { seen.add(k); uniq.push(it); }
-    }
+    const uniq = chosen.slice();
     const prog = (n) => t("queue_bulk_prog").replace("%s", n).replace("%s", uniq.length);
     busy(prog(1));
     let done = 0;
@@ -885,7 +886,8 @@
       if (el) el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${prog(done)}</span></div></div>`;
       try {
         await api("/queue/remove", { method: "POST",
-          body: JSON.stringify({ entity_type: it.entity_type, entity_id: it.entity_id }) });
+          body: JSON.stringify({ entity_type: it.entity_type, entity_id: it.entity_id,
+                                 platform: it.platform }) });
       } catch (_) { /* продолжаем по остальным */ }
     }
     unbusy();
@@ -1008,6 +1010,7 @@
              <div class="form-row">
                <button class="btn primary" data-act="queue-edit-save" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_edit_save")}</button>
                <button class="btn secondary" data-act="queue-edit-cancel">${t("queue_edit_cancel")}</button>
+               <button class="btn secondary" data-act="queue-remove-everywhere" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("delete_everywhere")}</button>
                ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
              </div>
            </div>`
@@ -1021,7 +1024,7 @@
         : `<button class="q-cover-btn q-cover-empty" data-act="queue-edit" data-key="${key}" title="${t("cover_pick")}"></button>`;
       const col = select ? "" : `<div class="queue-col">
           <button class="icon-btn" data-act="queue-edit" data-key="${key}" title="${t("queue_edit")}" aria-label="${t("queue_edit")}">${icon("edit", 18)}</button>
-          <button class="icon-btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}" title="${t("queue_remove")}" aria-label="${t("queue_remove")}">${icon("trash", 18)}</button>
+          <button class="icon-btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}" title="${t("queue_remove")}" aria-label="${t("queue_remove")}">${icon("trash", 18)}</button>
         </div>`;
       return `<div class="row q-row${checked ? " picked" : ""}">
         <div class="q-line">${check}${cover}
@@ -1112,6 +1115,9 @@
         <div class="form-row">
           <button class="btn primary" data-act="distribute">${t("distribute")}</button>
           <button class="btn secondary" data-act="schedule">${t("act_schedule")}</button>
+        </div>
+        <div class="form-row">
+          <button class="btn secondary" data-act="queue-restore-all">${t("restore_posts")}</button>
         </div>
         <div class="form-row">
           <button class="btn secondary" data-act="sync">${t("act_sync")}</button>
@@ -1557,6 +1563,37 @@
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
         return load();
       }
+      if (act === "queue-restore-all") {
+        busy(t("working"));
+        try {
+          const r = await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
+          unbusy();
+          toast(`${t("restored")}: ${r.restored || 0}`);
+        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${e.message}`); }
+        return load();
+      }
+      if (act === "queue-remove-everywhere") {
+        let ask = t("confirm_delete_everywhere");
+        if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
+        const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+        let ok = true;
+        if (tgConfirm) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
+        else if (typeof window.confirm === "function") ok = window.confirm(ask);
+        if (!ok) return;
+        busy(t("working"));
+        try {
+          const r = await api("/queue/remove", { method: "POST", body: JSON.stringify({
+            entity_type: el.dataset.et, entity_id: Number(el.dataset.eid) }) });
+          unbusy();
+          if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
+          else toast(`${t("queue_removed")}: ${r.removed || 0}`);
+        } catch (e) {
+          unbusy();
+          toast(`${t("error_prefix")}: ${e.message}`);
+        }
+        state.queueEdit = null;
+        return load();
+      }
       if (act === "queue-remove-film-only") {
         let ask = t("confirm_film_only");
         if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
@@ -1665,9 +1702,8 @@
       }
       if (act === "queue-remove") {
         {
-          const isFilm = el.dataset.film === "1";
-          let ask = isFilm ? t("confirm_delete_film") : t("confirm_delete_short");
-          if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
+          const plat = el.dataset.p || "";
+          const ask = t("confirm_delete_row").replace("%s", plat);
           const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
           let ok = true;
           if (tgConfirm) {
@@ -1681,6 +1717,7 @@
         const payload = JSON.stringify({
           entity_type: el.dataset.et,
           entity_id: Number(el.dataset.eid),
+          platform: el.dataset.p || "",
         });
         let r = null;
         try {

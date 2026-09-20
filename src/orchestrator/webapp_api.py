@@ -106,6 +106,8 @@ class WebAppAPI:
             headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or "",
         )
         is_api = qpath.startswith("/webapp/api/")
+        if is_api and len(body or b"") > 50 * 1024 * 1024:
+            return 413, {"error": "request body too large (max 50MB)"}, "application/json"
 
         # static (never intercept /webapp/api/*)
         if not is_api:
@@ -672,7 +674,7 @@ class WebAppAPI:
                                 ext = ".jpg"
                     except Exception as e:
                         return 502, {"error": f"download failed: {e}"}, "application/json"
-                if blob is None or len(blob) < 100:
+                if blob is None or len(blob) < 32:
                     return 400, {"error": "empty image"}, "application/json"
                 if len(blob) > 25 * 1024 * 1024:
                     return 413, {"error": "image too large (>25MB)"}, "application/json"

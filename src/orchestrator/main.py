@@ -62,7 +62,8 @@ def build(args: argparse.Namespace) -> dict:
     scheduler = Scheduler(db, cfg, publisher, safety, clock)
     status_sync = StatusSync(db, postiz, clock, cfg)
     recon = Reconciliation(db, postiz, clock)
-    watcher = Watcher(db, cfg, clock, args.watch_roots or [])
+    watcher = Watcher(db, cfg, clock, args.watch_roots or [],
+                     max_age_days=int(getattr(cfg, "watch_max_age_days", 3650) or 0))
     tg = TelegramNotifier(cfg, db, clock)
     tail = TailManager(db, cfg, clock, tg)
     link_upd = LinkUpdater(db, cfg, postiz, clock, tg)

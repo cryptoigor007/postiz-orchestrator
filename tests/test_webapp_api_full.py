@@ -399,3 +399,18 @@ def test_cleanup_orphans_removes_unknown_queue_posts(env):
                                   {"X-Telegram-Init-Data": "dev"}, b"{}")
     assert code == 200 and payload["deleted"] == 1
     assert known.id in mock.posts and orphan.id not in mock.posts
+
+
+def test_schedule_endpoint_single_flight(env):
+    """Вторая раскладка, пока идёт первая, не запускается (busy)."""
+    import orchestrator.webapp_api as wa
+
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    assert wa._SCHEDULE_LOCK.acquire(blocking=False)
+    try:
+        code, payload, _ = api.handle("POST", "/webapp/api/schedule", headers,
+                                      b'{"async": true}')
+        assert code == 200 and payload.get("busy") is True
+    finally:
+        wa._SCHEDULE_LOCK.release()

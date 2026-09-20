@@ -107,6 +107,7 @@ class AppConfig(BaseModel):
     confirm_published_interval_sec: int = 120
     file_stability_cycles: int = 2
     watch_max_depth: int = 5
+    watch_max_age_days: int = 3650  # 0/большое = не отсекать старое (иначе скан не вернёт удалённое)
 
     @field_validator("platforms", mode="before")
     @classmethod

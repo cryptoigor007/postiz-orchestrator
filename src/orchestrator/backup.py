@@ -36,6 +36,15 @@ def run_backup(db: Database, cfg: AppConfig, backup_dir: str | Path) -> Path | N
             except Exception:
                 logger.exception("Backup mirror failed")
         _cleanup(backup_dir, cfg.backup.keep_days)
+        # гигиена журнала: старые записи publish_log не нужны
+        try:
+            with sqlite3.connect(db.path) as c:
+                cur = c.execute(
+                    "DELETE FROM publish_log WHERE created_at < datetime('now', '-90 day')")
+                if cur.rowcount:
+                    logger.info("publish_log pruned: %s rows", cur.rowcount)
+        except Exception:
+            logger.exception("publish_log prune failed")
         return dest
     except Exception as e:
         logger.error("Backup failed: %s", e)

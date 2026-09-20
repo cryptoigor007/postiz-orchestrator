@@ -31,7 +31,7 @@ META_MARKERS = ("_titles.txt", "_title.txt", "_hashtags.txt", "_hooks.txt")
 
 class Watcher:
     def __init__(self, db: Database, cfg: AppConfig, clock: Clock, roots: list[str],
-                 max_age_days: int = 30):
+                 max_age_days: int = 3650):
         self.db = db
         self.cfg = cfg
         self.clock = clock

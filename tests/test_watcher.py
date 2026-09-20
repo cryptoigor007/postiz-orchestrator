@@ -325,3 +325,23 @@ def test_watcher_skips_archive_dirs(env):
         w.scan()
     assert db.fetchone("SELECT COUNT(*) AS c FROM long_videos WHERE folder_path LIKE '%broll_downloads%'")["c"] == 0
     assert db.fetchone("SELECT COUNT(*) AS c FROM shorts WHERE folder_path LIKE '%ютюб%'")["c"] == 0
+
+
+def test_watcher_accepts_old_files(env):
+    """Файлы старше 30 дней тоже подхватываются (скан должен возвращать удалённое)."""
+    import os
+    import time
+
+    db, cfg, clock, root, series = env
+    d = series / "shorts" / "short_010"
+    d.mkdir(parents=True)
+    old = d / "short_010.mp4"
+    old.write_bytes(b"short" * 60)
+    (d / "short_010_title.txt").write_text("Старый шорт", encoding="utf-8")
+    past = time.time() - 200 * 86400
+    os.utime(old, (past, past))
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    assert db.fetchone(
+        "SELECT COUNT(*) AS c FROM shorts WHERE folder_path LIKE '%short_010%'")["c"] == 1

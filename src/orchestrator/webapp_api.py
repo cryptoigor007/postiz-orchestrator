@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -18,6 +19,7 @@ from . import sched_settings
 from .watcher import WATCH_ROOTS_KEY
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+_SCHEDULE_LOCK = threading.Lock()  # одна раскладка за раз (защита от двойного запуска)
 
 
 def _is_image_bytes(blob: bytes) -> bool:
@@ -1138,6 +1140,8 @@ class WebAppAPI:
                 if guard is not None and hasattr(guard, "invalidate"):
                     guard.invalidate()
 
+                if not _SCHEDULE_LOCK.acquire(blocking=False):
+                    return 200, {"ok": True, "busy": True, "started": False}, "application/json"
                 jobs = self.comps.get("jobs")
                 job = jobs.start("schedule", "Планирование публикаций") if jobs is not None else None
                 before = self._sched_snapshot()
@@ -1156,15 +1160,20 @@ class WebAppAPI:
                         logger.exception("async schedule failed")
                         if job is not None:
                             job.finish("failed", str(e)[:200])
+                    finally:
+                        _SCHEDULE_LOCK.release()
 
                 if data.get("async"):
                     import threading
                     threading.Thread(target=_run, daemon=True).start()
                     return 200, {"ok": True, "started": True, "start_date": sd,
                                  "shorts_start_date": shr}, "application/json"
-                n = sc.schedule_long_videos(start_date=sd) if sc else 0
-                n2 = sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd) if sc else 0
-                self._send_schedule_summary(before)
+                try:
+                    n = sc.schedule_long_videos(start_date=sd) if sc else 0
+                    n2 = sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd) if sc else 0
+                    self._send_schedule_summary(before)
+                finally:
+                    _SCHEDULE_LOCK.release()
                 return 200, {"ok": True, "long": n, "standalone": n2, "start_date": sd,
                              "shorts_start_date": shr}, "application/json"
             if method == "POST" and route == "pause_platform":

@@ -13,16 +13,33 @@ from .postiz import MediaRef, PostizPost
 logger = logging.getLogger(__name__)
 
 
+def is_safe_retry(e: Exception) -> bool:
+    """Безопасно ли повторить запрос: точно ли он НЕ был обработан сервером.
+
+    Создание поста повтором на таймауте могло бы дать ДУБЛИКАТ, поэтому для POST
+    повторяем только когда соединение не состоялось (или 429 — лимит, пост не создан).
+    """
+    if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
+        return True
+    if isinstance(e, httpx.HTTPStatusError):
+        code = getattr(getattr(e, "response", None), "status_code", 0)
+        return code == 429
+    return False
+
+
 def _request_with_retry(client: httpx.Client, method: str, url: str, retries: int = 3, **kwargs):
+    is_post = method.upper() == "POST"
     last = None
     for i in range(retries):
         try:
             r = client.request(method, url, **kwargs)
-            if r.status_code >= 500:
+            if r.status_code >= 500 and not is_post:
                 raise httpx.HTTPStatusError("server error", request=r.request, response=r)
-            return r
+            return r  # для POST 5xx отдаём вызывающему (повтор мог бы создать дубликат)
         except Exception as e:
             last = e
+            if is_post and not is_safe_retry(e):
+                raise  # повтор на таймауте/ошибке сервера рискован для POST
             import time
             time.sleep(1.5 * (i + 1))
     raise last

@@ -167,6 +167,11 @@ class Publisher:
             except Exception as e:
                 last_err = e
                 logger.warning("CREATE attempt %s failed: %s", attempt, e)
+                from .postiz_http import is_safe_retry
+                if not is_safe_retry(e):
+                    # таймаут/5xx: не повторяем, чтобы не создать дубликат поста
+                    logger.warning("CREATE не повторяем (возможен дубликат): %s", type(e).__name__)
+                    break
         else:
             self.db.execute(
                 "UPDATE entity_platform_status SET status='error', last_error=? "

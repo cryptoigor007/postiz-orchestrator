@@ -427,3 +427,57 @@ def test_tg_queue_no_truncation(tmp_path):
     out = bot.handle_update(cfg.telegram.allowed_chat_ids[0], "/queue")
     assert long_title in out
     assert "…" not in out
+
+
+def test_post_create_not_retried_on_timeout():
+    """POST на таймауте НЕ повторяется (иначе можно создать дубликат поста)."""
+    import httpx
+
+    from orchestrator.postiz_http import _request_with_retry
+
+    class StubClient:
+        def __init__(self, exc):
+            self.calls = 0
+            self.exc = exc
+
+        def request(self, method, url, **kwargs):
+            self.calls += 1
+            raise self.exc
+
+    c = StubClient(httpx.ReadTimeout("timeout"))
+    try:
+        _request_with_retry(c, "POST", "https://x/posts")
+        raise AssertionError("должно было бросить")
+    except httpx.ReadTimeout:
+        pass
+    assert c.calls == 1, f"POST повторился {c.calls} раз — риск дубликата"
+
+    # ConnectError — повторяем (запрос точно не ушёл)
+    c2 = StubClient(httpx.ConnectError("no route"))
+    try:
+        _request_with_retry(c2, "POST", "https://x/posts")
+    except Exception:
+        pass
+    assert c2.calls == 3
+
+
+def test_get_is_retried_on_server_error():
+    """GET повторяется на 5xx (идемпотентно)."""
+    import httpx
+
+    from orchestrator.postiz_http import _request_with_retry
+
+    class StubClient:
+        def __init__(self):
+            self.calls = 0
+
+        def request(self, method, url, **kwargs):
+            self.calls += 1
+            return httpx.Response(503, request=httpx.Request(method, url))
+
+    c = StubClient()
+    try:
+        _request_with_retry(c, "GET", "https://x/posts")
+    except Exception:
+        pass
+    assert c.calls == 3

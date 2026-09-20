@@ -8,6 +8,12 @@ if [ -z "$CMD" ]; then echo "usage: $0 '<command>'" >&2; exit 2; fi
 if ssh -o ConnectTimeout=5 -o BatchMode=yes postiz@192.168.100.60 'true' 2>/dev/null; then
   exec ssh -o ConnectTimeout=10 postiz@192.168.100.60 "$CMD"
 fi
+# через pve (у сервера теперь есть ключ в VM)
+for pve in root@192.168.100.40 root@100.95.225.71 root@192.168.100.50; do
+  if ssh -o ConnectTimeout=5 -o BatchMode=yes "$pve" 'ssh -o ConnectTimeout=5 -o BatchMode=yes postiz@192.168.100.60 true' 2>/dev/null; then
+    exec ssh -o ConnectTimeout=10 "$pve" "ssh -o ConnectTimeout=10 postiz@192.168.100.60 $(printf '%q' "$CMD")"
+  fi
+done
 b64=$(printf '%s' "$CMD" | base64)
 PVE=""
 for cand in root@100.95.225.71 root@192.168.100.50 root@192.168.100.40; do

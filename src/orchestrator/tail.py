@@ -43,6 +43,30 @@ class TailManager:
         )
         logger.info("Tail reset on %s due to new long video %s", platform, video_id)
 
+    def sync_new_long(self, platform: str) -> bool:
+        """Отмечает последний запланированный/вышедший фильм.
+
+        Без этого `check_soft_enter` никогда не срабатывал (last_long_video_at пустой).
+        Возвращает True, если состояние обновилось.
+        """
+        row = self.db.fetchone(
+            "SELECT entity_id, COALESCE(published_at, postiz_scheduled_for) AS at "
+            "FROM entity_platform_status "
+            "WHERE entity_type='long_video' AND platform=? "
+            "  AND status IN ('scheduled','published','updating') "
+            "ORDER BY COALESCE(published_at, postiz_scheduled_for) DESC LIMIT 1",
+            (platform,),
+        )
+        if not row or not row["at"]:
+            return False
+        cur = self.db.fetchone(
+            "SELECT active_long_video_id, last_long_video_at FROM platform_queue_state "
+            "WHERE platform=?", (platform,))
+        if cur and cur["active_long_video_id"] == row["entity_id"] and cur["last_long_video_at"]:
+            return False
+        self.on_new_long_video(platform, row["entity_id"])
+        return True
+
     def check_soft_enter(self, platform: str) -> None:
         """If no new long video for soft_enter_days → ask user."""
         row = self.db.fetchone(

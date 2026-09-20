@@ -169,6 +169,7 @@ class Runner:
             if u:
                 logger.info("Refreshed thematic with URL: %s", u)
         for p in self.cfg.platforms:
+            self.comps["tail"].sync_new_long(p)
             self.comps["tail"].check_soft_enter(p)
         self.comps["tail"].expire_pending_questions()
         if n or n2:

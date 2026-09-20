@@ -73,7 +73,6 @@ class ManualUploadsCfg(BaseModel):
     lookback_days: int = 60
     page_size: int = 50
     schedule_scan: str = "daily"
-    placement_default: str = "end"
 
 
 class BackupCfg(BaseModel):

@@ -111,3 +111,21 @@ def test_link_default_action(env):
     )
     n = link.check_missing_urls()
     assert n == 1
+
+
+def test_sync_new_long_enables_soft_enter_state(env):
+    """sync_new_long должен заполнять last_long_video_at (иначе soft-enter мёртв)."""
+    db, cfg, clock, tg, tail, _link = env
+    now = clock.now().isoformat()
+    db.execute("INSERT INTO long_videos (source, folder_path, title, created_at) "
+               "VALUES ('videomaker', '/f', 'F', ?)", (now,))
+    fid = db.fetchone("SELECT id FROM long_videos ORDER BY id DESC")["id"]
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+               "postiz_scheduled_for) VALUES ('long_video', ?, 'youtube', 'scheduled', ?)",
+               (fid, now))
+    assert tail.sync_new_long("youtube") is True
+    row = db.fetchone("SELECT active_long_video_id, last_long_video_at "
+                      "FROM platform_queue_state WHERE platform='youtube'")
+    assert row["active_long_video_id"] == fid and row["last_long_video_at"]
+    # повторно — без изменений
+    assert tail.sync_new_long("youtube") is False

@@ -1773,6 +1773,18 @@
     const langParam = new URLSearchParams(location.search).get("lang");
     if (langParam && I18N[langParam]) state.lang = langParam;
 
+    // Полный экран + цвет зоны статус-бара iPhone: часы/батарея должны быть видны
+    try {
+      if (tg) {
+        if (tg.expand) tg.expand();
+        if (tg.requestFullscreen) { try { tg.requestFullscreen(); } catch (_) {} }
+        const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const bg = dark ? "#000000" : "#f2f2f7";
+        if (tg.setHeaderColor) { try { tg.setHeaderColor(bg); } catch (_) {} }
+        if (tg.setBackgroundColor) { try { tg.setBackgroundColor(bg); } catch (_) {} }
+        if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch (_) {} }
+      }
+    } catch (_) {}
     function applyViewportHeight() {
       const h = (tg && (tg.viewportStableHeight || tg.viewportHeight)) || window.innerHeight;
       document.documentElement.style.setProperty("--wa-h", h + "px");

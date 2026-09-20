@@ -1353,7 +1353,7 @@ class WebAppAPI:
             LEFT JOIN shorts sh
                    ON eps.entity_type='short' AND sh.id = eps.entity_id
             WHERE eps.status IN ('ready', 'scheduled', 'updating')
-            ORDER BY eps.postiz_scheduled_for LIMIT 50
+            ORDER BY eps.postiz_scheduled_for LIMIT 300
             """
         )
         items = []

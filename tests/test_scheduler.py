@@ -320,3 +320,37 @@ def test_telegram_link_placeholder_then_refresh(env):
     assert any("youtu.be/xyz" in str(p.content) for p in postiz.posts.values())
     # повторно не обновляем
     assert sched.refresh_telegram_links() == 0
+
+
+def test_telegram_ready_row_time_follows_youtube_replan(env):
+    db, cfg, clock, postiz, safety, pub, sched = env
+    cfg.platforms["telegram"].post_mode = "link"
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, title_text, "
+        "description_text, created_at) VALUES ('videomaker', '/pl2', 'PL2', 'T', 'D', ?)",
+        (now,),
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', ?, 'youtube', 'scheduled', "
+        "'2026-03-12T13:00:00+00:00')",
+        (lv["id"],),
+    )
+    sched.schedule_telegram_links()
+    # YouTube переехал на неделю вперёд
+    db.execute(
+        "UPDATE entity_platform_status SET postiz_scheduled_for='2026-03-19T13:00:00+00:00' "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='youtube'",
+        (lv["id"],),
+    )
+    sched.schedule_telegram_links()
+    row = db.fetchone(
+        "SELECT postiz_scheduled_for FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='telegram'",
+        (lv["id"],),
+    )
+    from datetime import datetime as _dt
+    t = _dt.fromisoformat(row["postiz_scheduled_for"])
+    assert t.strftime("%m-%d %H:%M") == "03-19 13:15"

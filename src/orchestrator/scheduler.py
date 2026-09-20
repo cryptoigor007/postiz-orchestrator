@@ -365,6 +365,32 @@ class Scheduler:
         delay = int(getattr(self.cfg, "telegram_link_delay_min", 15) or 0)
         limit = sched_settings.effective_daily_limit(self.db, self.cfg, "telegram")
         count = 0
+        # YouTube перепланировали -> двигаем время «ожидающей» Telegram-строки
+        from datetime import datetime as _dt2
+        for r in self.db.fetchall(
+            """
+            SELECT t.entity_type, t.entity_id, t.postiz_scheduled_for,
+                   COALESCE(y.postiz_scheduled_for, y.published_at) AS yt_when
+            FROM entity_platform_status t
+            JOIN entity_platform_status y
+              ON y.entity_type=t.entity_type AND y.entity_id=t.entity_id
+             AND y.platform='youtube'
+            WHERE t.platform='telegram' AND t.status='ready'
+              AND t.last_error='waiting_for_youtube'
+              AND COALESCE(y.postiz_scheduled_for, y.published_at) IS NOT NULL
+            """
+        ):
+            try:
+                base = _dt2.fromisoformat(str(r["yt_when"]))
+            except Exception:
+                continue
+            new_when = (base + timedelta(minutes=delay)).isoformat()
+            if str(r["postiz_scheduled_for"] or "") != new_when:
+                self.db.execute(
+                    "UPDATE entity_platform_status SET postiz_scheduled_for=? "
+                    "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                    (new_when, r["entity_type"], r["entity_id"]),
+                )
         rows = self.db.fetchall(
             """
             SELECT eps.entity_type, eps.entity_id, eps.status, eps.release_url,

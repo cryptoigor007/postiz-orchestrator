@@ -320,3 +320,60 @@ html { -webkit-tap-highlight-color: transparent; }
 .q-row .q-plat { display: inline-flex; align-items: center; }
 .q-row .q-plat .pico, .q-row .q-plat .pico svg { width: 14px; height: 14px; }
 .q-row .queue-col { min-width: 112px; }
+
+/* ===== Очередь 2.0: чипы, дни, мультивыбор, крупная обложка, мягкий градиент ===== */
+.q-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px 4px; flex-wrap: wrap; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+  border: 1px solid var(--sep); background: var(--card); color: var(--text); font-size: 12px;
+  font-weight: 600; cursor: pointer;
+  transition: transform 140ms var(--ease-out), background 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out; }
+.chip .pico { width: 14px; height: 14px; }
+.chip .cnt { font-weight: 500; color: var(--text-2); }
+.chip.on { background: var(--accent); border-color: transparent; color: #fff; }
+.chip.on .cnt { color: rgba(255,255,255,0.85); }
+.chip:active { transform: scale(0.97); }
+.q-sel-btn { padding: 6px 12px; font-size: 12px; }
+
+.day-sep { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 6px; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.day-sep .cnt { font-weight: 500; color: var(--text-3, var(--text-2)); }
+
+.q-row { flex-wrap: wrap; }
+.q-row .q-line { display: flex; gap: 8px; align-items: flex-start; width: 100%; min-width: 0; }
+.q-check { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--sep);
+  background: var(--card); color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; margin-top: 34px; cursor: pointer;
+  transition: background 140ms ease-out, transform 140ms var(--ease-out), border-color 140ms ease-out; }
+.q-check.on { background: var(--accent); border-color: transparent; }
+.q-check:active { transform: scale(0.94); }
+.row.q-row.picked { background: rgba(10, 132, 255, 0.06); }
+.q-row .q-cover, .q-row .q-cover-empty { width: 64px; height: 96px; }
+.q-row .q-cover-btn { margin-right: 2px; }
+.q-row .queue-col { min-width: 0; gap: 6px; }
+
+.icon-btn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--sep);
+  background: var(--card); color: var(--text); display: inline-flex; align-items: center;
+  justify-content: center; cursor: pointer;
+  transition: transform 140ms var(--ease-out), background 160ms ease-out; }
+.icon-btn:active { transform: scale(0.95); }
+.icon-btn.danger { color: var(--red); }
+.icon-btn[disabled], .btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+.bulk-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px;
+  border-bottom: 1px solid var(--sep); background: rgba(10, 132, 255, 0.05); }
+.bulk-tags { padding: 8px 14px 12px; border-bottom: 1px solid var(--sep); }
+.bulk-tags input { box-sizing: border-box; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--sep); background: var(--card); color: var(--text); margin-top: 4px; width: 100%; }
+.q-edit-panel { flex-basis: 100%; margin: 8px 0 4px; }
+
+.q-status .status-btn { min-height: 0; padding: 2px 8px; font-size: 11px; opacity: 0.92; }
+
+/* Мягкий градиент сверху (не бросается в глаза) */
+.topbar { background: linear-gradient(180deg, rgba(10, 132, 255, 0.07), rgba(10, 132, 255, 0)); }
+.panel-header { background: linear-gradient(180deg, rgba(10, 132, 255, 0.05), rgba(10, 132, 255, 0)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .chip, .q-check, .icon-btn { transition: none; }
+}

@@ -67,7 +67,13 @@
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
       backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
+      queue_selected: "выбрано", queue_bulk_tags: "Хештеги…", queue_bulk_apply: "Применить",
+      queue_bulk_clear: "Снять выделение",
+      queue_bulk_del: "Удалить выбранные (%s)? Посты и записи в базе будут удалены, файлы — нет.",
+      queue_bulk_tagp: "Новые хештеги для выбранных (%s):",
+      queue_bulk_prog: "Обрабатываю %s из %s…",
+      q_today: "Сегодня", q_tomorrow: "Завтра", q_yesterday: "Вчера",
       resume: "Возобновить", pause_all: "Пауза всем", resume_all: "Возобновить все", none: "Нет",
       tail_title: "Остаток шортсов серии", tail_explain: "Шортсы уже нарезаны для серии, но ещё не опубликованы. Когда новых серий больше нет, система распределяет остаток по слотам (в слот основной серии — обычные шортсы, в 20:30 — шортсы к другим сериям), и только после этого запускается следующая серия. Перед запуском она спросит подтверждение.", enable: "Включить", disable: "Выключить",
       tail_off: "выкл", no_errors: "Ошибок нет",
@@ -208,7 +214,13 @@
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
       backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
-      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty",
+      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", queue_all: "All", queue_select: "Select", queue_done: "Done",
+      queue_selected: "selected", queue_bulk_tags: "Hashtags…", queue_bulk_apply: "Apply",
+      queue_bulk_clear: "Clear selection",
+      queue_bulk_del: "Delete selected (%s)? Posts and DB records will be removed; files stay.",
+      queue_bulk_tagp: "New hashtags for selected (%s):",
+      queue_bulk_prog: "Processing %s of %s…",
+      q_today: "Today", q_tomorrow: "Tomorrow", q_yesterday: "Yesterday",
       resume: "Resume", pause_all: "Pause all", resume_all: "Resume all", none: "None",
       tail_title: "Unposted series shorts", tail_explain: "Shorts already cut for the series but not published yet. When no new episodes appear, the system distributes the backlog into slots (standard shorts in the main-series slot, other series' shorts at 20:30) and only then starts the next series. It asks for confirmation first.", enable: "Enable", disable: "Disable",
       tail_off: "off", no_errors: "No errors",
@@ -293,6 +305,10 @@
     key: window.__WEBAPP_KEY__ || readKey() || "",
     user: tg?.initDataUnsafe?.user || null,
     data: {},
+    queueFilter: (() => { try { return localStorage.getItem("queueFilter") || "all"; } catch (_) { return "all"; } })(),
+    queueSelect: false,
+    queueSelected: {},
+    queueBulkTags: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -669,6 +685,10 @@
     warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 2.4 20h19.2z"/><path d="M12 9.4v4.4"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
     swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13"/><path d="M4 14l3 3 3-3"/><path d="M17 20V7"/><path d="M14 10l3-3 3 3"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M14.5 6.5l3 3"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/><path d="M10.5 11v5M13.5 11v5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14M3 12h18"/></svg>',
   };
   function icon(name, size) {
     const sz = size || 16;
@@ -801,12 +821,131 @@
     }).join("");
   }
 
+  async function bulkDelete() {
+    const all = state.data?.items || [];
+    const sel = state.queueSelected || {};
+    const chosen = all.filter((it) => sel[`${it.entity_type}|${it.entity_id}|${it.platform}`]);
+    if (!chosen.length) return;
+    const ask = t("queue_bulk_del").replace("%s", chosen.length);
+    const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+    let ok = true;
+    if (tgConfirm) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
+    else if (typeof window.confirm === "function") ok = window.confirm(ask);
+    if (!ok) return;
+    const seen = new Set();
+    const uniq = [];
+    for (const it of chosen) {
+      const k = `${it.entity_type}|${it.entity_id}`;
+      if (!seen.has(k)) { seen.add(k); uniq.push(it); }
+    }
+    const prog = (n) => t("queue_bulk_prog").replace("%s", n).replace("%s", uniq.length);
+    busy(prog(1));
+    let done = 0;
+    for (const it of uniq) {
+      done++;
+      const el = document.getElementById("busy");
+      if (el) el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${prog(done)}</span></div></div>`;
+      try {
+        await api("/queue/remove", { method: "POST",
+          body: JSON.stringify({ entity_type: it.entity_type, entity_id: it.entity_id }) });
+      } catch (_) { /* продолжаем по остальным */ }
+    }
+    unbusy();
+    state.queueSelected = {};
+    toast(`${t("queue_removed")}: ${uniq.length}`);
+    return load();
+  }
+
+  async function bulkEditTags(tags) {
+    const all = state.data?.items || [];
+    const sel = state.queueSelected || {};
+    const chosen = all.filter((it) => sel[`${it.entity_type}|${it.entity_id}|${it.platform}`]);
+    if (!chosen.length) return;
+    const prog = (n) => t("queue_bulk_prog").replace("%s", n).replace("%s", chosen.length);
+    busy(prog(1));
+    let done = 0;
+    for (const it of chosen) {
+      done++;
+      const el = document.getElementById("busy");
+      if (el) el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${prog(done)}</span></div></div>`;
+      try {
+        await api("/queue/edit", { method: "POST", body: JSON.stringify({
+          entity_type: it.entity_type, entity_id: it.entity_id, platform: it.platform,
+          title: it.title_text || "", description: it.description_text || "",
+          hashtags: tags, date: it.date || "", time: it.time || "",
+          cover: it.cover_path || "",
+        }) });
+      } catch (_) { /* продолжаем */ }
+    }
+    unbusy();
+    state.queueBulkTags = null;
+    state.queueSelected = {};
+    toast(t("t_saved"));
+    return load();
+  }
+
   function renderQueue(d) {
     const edit = state.queueEdit;
-    const rows = (d.items || []).map((it) => {
-      const key = `${it.entity_type}|${it.entity_id}|${it.platform}`;
+    const all = d.items || [];
+    const filter = state.queueFilter || "all";
+    const items = filter === "all" ? all : all.filter((it) => it.platform === filter);
+    const sel = state.queueSelected || {};
+    const selKeys = Object.keys(sel).filter((k) => sel[k]);
+    const select = !!state.queueSelect;
+    const keyOf = (it) => `${it.entity_type}|${it.entity_id}|${it.platform}`;
+    const tgl = state.queueBulkTags !== null && state.queueBulkTags !== undefined;
+
+    // фильтры-чипы (минимально кнопок: «Все» + по платформе, с количеством)
+    const plats = Array.from(new Set(all.map((it) => it.platform)));
+    const chips = [
+      `<button class="chip${filter === "all" ? " on" : ""}" data-act="queue-filter" data-p="all" aria-pressed="${filter === "all"}">${t("queue_all")}<span class="cnt">${all.length}</span></button>`,
+      ...plats.map((p) => {
+        const n = all.filter((it) => it.platform === p).length;
+        return `<button class="chip${filter === p ? " on" : ""}" data-act="queue-filter" data-p="${p}" aria-pressed="${filter === p}">${pIcon(p)}<span class="cnt">${n}</span></button>`;
+      }),
+    ].join("");
+
+    const toolbar = `<div class="q-toolbar">
+        <div class="chips">${chips}</div>
+        <button class="btn ${select ? "primary" : "secondary"} q-sel-btn" data-act="queue-select">${select ? t("queue_done") : t("queue_select")}</button>
+      </div>`;
+
+    const bulkBar = !select ? "" : `<div class="bulk-bar">
+        <span class="meta"><b>${selKeys.length}</b> ${t("queue_selected")}</span>
+        <button class="btn secondary" data-act="queue-check-all">${t("queue_all")}</button>
+        <button class="btn secondary" data-act="queue-bulk-tags" ${selKeys.length ? "" : "disabled"}>${t("queue_bulk_tags")}</button>
+        <button class="btn danger" data-act="queue-bulk-delete" ${selKeys.length ? "" : "disabled"}>${t("queue_remove")}</button>
+      </div>`;
+
+    const bulkTags = !tgl ? "" : `<div class="bulk-tags">
+        <label class="meta">${t("queue_bulk_tagp").replace("%s", selKeys.length)}
+          <input id="qb-tags" type="text" value="${(state.queueBulkTags || "").replace(/"/g, "&quot;")}"/></label>
+        <div class="form-row">
+          <button class="btn primary" data-act="queue-bulk-tags-apply">${t("queue_bulk_apply")}</button>
+          <button class="btn secondary" data-act="queue-bulk-tags-cancel">${t("cancel")}</button>
+        </div>
+      </div>`;
+
+    const dayLabel = (ds) => {
+      if (!ds) return t("no_data");
+      let d;
+      try { d = new Date(ds + "T12:00:00"); } catch (_) { return ds; }
+      const today = new Date(); today.setHours(12, 0, 0, 0);
+      const diff = Math.round((d - today) / 86400000);
+      const rel = diff === 0 ? t("q_today") : diff === 1 ? t("q_tomorrow") : diff === -1 ? t("q_yesterday") : "";
+      let human = ds;
+      try {
+        human = new Intl.DateTimeFormat(state.lang === "ru" ? "ru-RU" : "en-US",
+          { weekday: "short", day: "numeric", month: "long" }).format(d);
+      } catch (_) {}
+      return (rel ? rel + " · " : "") + human;
+    };
+
+    const rowHtml = (it) => {
+      const key = keyOf(it);
+      const checked = !!sel[key];
       const form = (edit && edit.key === key)
-        ? `<div class="panel" style="margin:6px 0">
+        ? `<div class="panel q-edit-panel">
              <div class="form-row"><label class="meta">${t("edit_title")}
                <input id="qe-title" type="text" value="${(it.title_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
              <div class="form-row"><label class="meta">${t("edit_desc")}
@@ -831,33 +970,49 @@
              <div class="form-row">
                <button class="btn primary" data-act="queue-edit-save" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_edit_save")}</button>
                <button class="btn secondary" data-act="queue-edit-cancel">${t("queue_edit_cancel")}</button>
+               ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
              </div>
            </div>`
         : "";
+      const check = !select ? "" : `<button class="q-check${checked ? " on" : ""}" data-act="queue-check"
+          data-key="${key}" aria-pressed="${checked}" aria-label="${t("queue_select")}">${checked ? icon("check", 13) : ""}</button>`;
       const cover = it.cover_path
         ? `<button class="q-cover-btn" data-act="queue-edit" data-key="${key}" title="${t("edit_cover")}">
              <img class="q-cover" loading="lazy" alt=""
                src="/webapp/api/cover/thumb?key=${encodeURIComponent(state.key || "")}&path=${encodeURIComponent(it.cover_path)}"/></button>`
         : `<button class="q-cover-btn q-cover-empty" data-act="queue-edit" data-key="${key}" title="${t("cover_pick")}"></button>`;
-      return `<div class="row q-row">${cover}
-       <div class="q-main">
-         <div class="q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
-         <div class="q-meta mono">
-           <span class="q-date">${it.date || ""}</span>
-           <span class="q-clock">${it.time || ""}</span>
-           <span class="q-plat">${pIcon(it.platform)}</span>
-         </div>
-       </div>
-       <div class="queue-col">
-         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove")}</button>
-         ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
-         ${statusBtn(it.status, it.waiting)}
-         <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
-       </div>
-       ${form}</div>`;
-    }).join("");
-    content().innerHTML = `<div class="panel"><div class="panel-header">${t("nav_queue")}</div>${
-      rows || `<div class="empty">${t("queue_empty")}</div>`}</div>`;
+      const col = select ? "" : `<div class="queue-col">
+          <button class="icon-btn" data-act="queue-edit" data-key="${key}" title="${t("queue_edit")}" aria-label="${t("queue_edit")}">${icon("edit", 18)}</button>
+          <button class="icon-btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}" title="${t("queue_remove")}" aria-label="${t("queue_remove")}">${icon("trash", 18)}</button>
+        </div>`;
+      return `<div class="row q-row${checked ? " picked" : ""}">
+        <div class="q-line">${check}${cover}
+          <div class="q-main">
+            <div class="q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+            <div class="q-meta mono">
+              <span class="q-date">${it.date || ""}</span>
+              <span class="q-clock">${it.time || ""}</span>
+              <span class="q-plat">${pIcon(it.platform)}</span>
+              <span class="q-status">${statusBtn(it.status, it.waiting)}</span>
+            </div>
+          </div>
+          ${col}
+        </div>
+        ${form}</div>`;
+    };
+
+    const groups = [];
+    for (const it of items) {
+      let g = groups[groups.length - 1];
+      if (!g || g.date !== it.date) { g = { date: it.date, items: [] }; groups.push(g); }
+      g.items.push(it);
+    }
+    const body = groups.map((g) => `
+      <div class="day-sep"><span>${dayLabel(g.date)}</span><span class="cnt">${g.items.length}</span></div>
+      ${g.items.map(rowHtml).join("")}`).join("");
+
+    content().innerHTML = `<div class="panel">${toolbar}${bulkBar}${bulkTags}${
+      body || `<div class="empty">${t("queue_empty")}</div>`}</div>`;
   }
 
   function renderPlatforms(d) {
@@ -1389,6 +1544,49 @@
       if (act === "queue-edit-cancel") {
         state.queueEdit = null;
         return render();
+      }
+      if (act === "queue-filter") {
+        state.queueFilter = el.dataset.p || "all";
+        try { localStorage.setItem("queueFilter", state.queueFilter); } catch (_) {}
+        return render();
+      }
+      if (act === "queue-select") {
+        state.queueSelect = !state.queueSelect;
+        state.queueSelected = {};
+        state.queueBulkTags = null;
+        return render();
+      }
+      if (act === "queue-check") {
+        const k = el.dataset.key || "";
+        state.queueSelected = state.queueSelected || {};
+        state.queueSelected[k] = !state.queueSelected[k];
+        return render();
+      }
+      if (act === "queue-check-all") {
+        const all = state.data?.items || [];
+        const filter = state.queueFilter || "all";
+        const visible = filter === "all" ? all : all.filter((it) => it.platform === filter);
+        const cur = state.queueSelected || {};
+        const keys = visible.map((it) => `${it.entity_type}|${it.entity_id}|${it.platform}`);
+        const allOn = keys.length > 0 && keys.every((k) => cur[k]);
+        state.queueSelected = {};
+        if (!allOn) keys.forEach((k) => { state.queueSelected[k] = true; });
+        return render();
+      }
+      if (act === "queue-bulk-tags") {
+        state.queueBulkTags = "";
+        return render();
+      }
+      if (act === "queue-bulk-tags-cancel") {
+        state.queueBulkTags = null;
+        return render();
+      }
+      if (act === "queue-bulk-tags-apply") {
+        const val = (document.getElementById("qb-tags") || {}).value || "";
+        return bulkEditTags(val.trim());
+      }
+      if (act === "queue-bulk-delete") {
+        return bulkDelete();
       }
       if (act === "cover-pick") {
         const sel = document.getElementById("qe-cover");

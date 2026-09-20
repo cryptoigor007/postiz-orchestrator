@@ -171,6 +171,43 @@ if (pickBtn) {
   else fail("окно выбора обложки не закрылось");
 }
 
+// 2.5 Фильтры-чипы и мультивыбор
+const chips = doc.querySelectorAll('[data-act="queue-filter"]');
+if (chips.length >= 2) ok(`фильтры: чипов ${chips.length}`);
+else fail(`фильтры: чипов ${chips.length}, ожидалось >= 2 (Все + платформы)`);
+const tgChip = doc.querySelector('[data-act="queue-filter"][data-p="telegram"]');
+if (tgChip) {
+  tgChip.click();
+  await wait(150);
+  const n = doc.querySelectorAll(".q-row").length;
+  if (n >= 1) ok(`фильтр telegram: строк ${n}`);
+  else fail("фильтр telegram: строк нет");
+  const back = doc.querySelector('[data-act="queue-filter"][data-p="all"]');
+  if (back) { back.click(); await wait(150); }
+}
+const daySeps = doc.querySelectorAll(".day-sep").length;
+if (daySeps >= 1) ok(`разделители по дням: ${daySeps}`);
+else fail("нет разделителей по дням");
+const selBtn = doc.querySelector('[data-act="queue-select"]');
+if (selBtn) {
+  selBtn.click();
+  await wait(150);
+  const checks = doc.querySelectorAll('[data-act="queue-check"]');
+  if (checks.length) {
+    ok(`мультивыбор: чекбоксов ${checks.length}`);
+    checks[0].click();
+    await wait(150);
+    if (doc.querySelector(".bulk-bar")) ok("мультивыбор: панель действий появилась");
+    else fail("мультивыбор: нет панели действий");
+    if (doc.querySelector('[data-act="queue-bulk-delete"]')) ok("мультивыбор: кнопка удаления есть");
+    else fail("мультивыбор: нет кнопки удаления");
+    if (doc.querySelector('[data-act="queue-bulk-tags"]')) ok("мультивыбор: массовые хештеги есть");
+    else fail("мультивыбор: нет кнопки хештегов");
+  } else fail("мультивыбор: чекбоксы не появились");
+  const done = doc.querySelector('[data-act="queue-select"]');
+  if (done) { done.click(); await wait(150); }
+} else fail("нет кнопки «Выбрать»");
+
 // 3. Удаление: запрос ушёл, список обновился, оверлей погас
 const qBefore = calls.filter((c) => c === "GET /webapp/api/queue").length;
 doc.querySelector('[data-act="queue-remove"]').click();

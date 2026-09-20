@@ -887,7 +887,8 @@ class WebAppAPI:
         except Exception:
             return []
         out: list[str] = []
-        for base in (vp.parent, vp.parent.parent):
+        bases = [vp.parent, vp.parent.parent]
+        for i, base in enumerate(bases):
             if not base.is_dir():
                 continue
             try:
@@ -898,8 +899,26 @@ class WebAppAPI:
                         continue
                     if f.name.startswith("._"):
                         continue
-                    if base is vp.parent or "cover" in f.name.lower():
+                    if i == 0 or "cover" in f.name.lower() or "облож" in f.name.lower():
                         out.append(str(f.resolve()))
+            except OSError:
+                continue
+        # папки с обложками рядом (например, «обложки для ютюб»)
+        for base in bases[:1]:
+            parent = base.parent
+            if not parent.is_dir():
+                continue
+            try:
+                for d in sorted(parent.iterdir()):
+                    if not d.is_dir():
+                        continue
+                    low = d.name.lower()
+                    if "cover" not in low and "облож" not in low:
+                        continue
+                    for f in sorted(d.iterdir()):
+                        if (f.is_file() and not f.name.startswith("._")
+                                and f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")):
+                            out.append(str(f.resolve()))
             except OSError:
                 continue
         seen: list[str] = []

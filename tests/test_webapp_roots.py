@@ -467,3 +467,40 @@ def test_api_queue_restore(env, tmp_path):
     assert code == 200 and payload["restored"] == 1
     row = db.fetchone("SELECT status, postiz_post_id, last_error FROM entity_platform_status")
     assert row["status"] == "ready" and row["postiz_post_id"] is None and row["last_error"] is None
+
+
+def test_api_queue_cover_candidates(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    d = tmp_path / "series" / "shorts" / "short_001"
+    d.mkdir(parents=True)
+    video = d / "short_001.mp4"
+    video.write_bytes(b"v" * 100)
+    (d / "short_001_cover.jpg").write_bytes(b"jpg")
+    covdir = tmp_path / "series" / "обложки"
+    covdir.mkdir()
+    (covdir / "alt.jpg").write_bytes(b"jpg")
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, video_path, created_at) "
+        "VALUES ('shortsmaker', ?, ?, '2026-01-01T00:00:00+00:00')",
+        (str(d), str(video)),
+    )
+    sh = db.fetchone("SELECT id FROM shorts")
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('short', ?, 'youtube', 'scheduled', "
+        "'2026-09-22T17:30:00+00:00')",
+        (sh["id"],),
+    )
+    code, payload, _ = api.handle("GET", "/webapp/api/queue", headers, b"")
+    item = payload["items"][0]
+    assert item["covers"]
+    assert any(c.endswith("short_001_cover.jpg") for c in item["covers"])
+    # сохранение обложки через редактор
+    body = json.dumps({"entity_type": "short", "entity_id": sh["id"], "platform": "youtube",
+                       "title": "T", "description": "D", "hashtags": "#t",
+                       "cover": str(d / "short_001_cover.jpg")}).encode()
+    code, _, _ = api.handle("POST", "/webapp/api/queue/edit", headers, body)
+    assert code == 200
+    row = db.fetchone("SELECT cover_path FROM shorts")
+    assert row["cover_path"].endswith("short_001_cover.jpg")

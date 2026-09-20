@@ -378,8 +378,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .topbar { background: linear-gradient(180deg, rgba(10, 132, 255, 0.06), rgba(10, 132, 255, 0)); }
 
 /* Fullscreen Telegram: резервируем правый верхний угол под его кнопку закрытия */
-body.tg-fs .sidebar { padding-top: calc(52px + env(safe-area-inset-top)); }
-body.tg-fs .cover-overlay { padding-top: calc(52px + env(safe-area-inset-top)); }
+body.tg-fs .sidebar { padding-top: calc(56px + env(safe-area-inset-top)); }
+body.tg-fs .cover-overlay { padding-top: calc(56px + env(safe-area-inset-top)); }
 
 @media (prefers-reduced-motion: reduce) {
   .chip, .q-check, .icon-btn { transition: none; }

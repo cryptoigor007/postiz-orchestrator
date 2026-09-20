@@ -1825,11 +1825,15 @@
     // В fullscreen Telegram рисует СВОЮ кнопку закрытия в правом верхнем углу —
     // помечаем body классом tg-fs, чтобы зарезервировать этот угол в вёрстке.
     function applyFsClass() {
+      let fs = false;
       try {
-        const fs = !!(tg && (tg.isFullscreen === true
-          || (tg.isFullscreen === undefined && tg.requestFullscreen && window.__fsRequested)));
-        document.body.classList.toggle("tg-fs", fs);
+        if (tg) {
+          if (tg.isFullscreen === true) fs = true;
+          else if (tg.isFullscreen === false) fs = false;
+          else if (tg.requestFullscreen) fs = true; // оптимистично: мы его запросили
+        }
       } catch (_) {}
+      document.body.classList.toggle("tg-fs", fs);
     }
     window.__fsRequested = false;
     try {
@@ -1838,8 +1842,12 @@
         if (tg.requestFullscreen) {
           try { tg.requestFullscreen(); window.__fsRequested = true; } catch (_) {}
         }
-        if (tg.onEvent) { try { tg.onEvent("fullscreenChanged", applyFsClass); } catch (_) {} }
-        setTimeout(applyFsClass, 400);
+        if (tg.onEvent) {
+          try { tg.onEvent("fullscreenChanged", applyFsClass); } catch (_) {}
+          try { tg.onEvent("viewportChanged", () => setTimeout(applyFsClass, 300)); } catch (_) {}
+        }
+        setTimeout(applyFsClass, 300);
+        setTimeout(applyFsClass, 1200);
         const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
         const bg = dark ? "#000000" : "#f2f2f7";
         if (tg.setHeaderColor) { try { tg.setHeaderColor(bg); } catch (_) {} }

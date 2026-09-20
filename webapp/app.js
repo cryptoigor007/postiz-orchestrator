@@ -67,7 +67,7 @@
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
       backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
       queue_selected: "выбрано", queue_bulk_tags: "Хештеги…", queue_bulk_apply: "Применить",
       queue_bulk_clear: "Снять выделение",
       queue_bulk_del: "Удалить выбранные (%s)? Посты и записи в базе будут удалены, файлы — нет.",
@@ -214,7 +214,7 @@
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
       backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
-      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", queue_all: "All", queue_select: "Select", queue_done: "Done",
+      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", search: "Search", search_placeholder: "Find folder by name…", search_none: "Nothing found", searching: "Searching…", search_short: "Type at least 2 characters", queue_all: "All", queue_select: "Select", queue_done: "Done",
       queue_selected: "selected", queue_bulk_tags: "Hashtags…", queue_bulk_apply: "Apply",
       queue_bulk_clear: "Clear selection",
       queue_bulk_del: "Delete selected (%s)? Posts and DB records will be removed; files stay.",
@@ -773,6 +773,18 @@
       .map((x) => `<div class="row"><div class="title">${icon("folder", 15)} ${x.name}</div>
         <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button></div>`)
       .join("");
+    // поиск папки по имени (внутри текущего корня, до 5 уровней)
+    const sq = state.folderSearch || { q: "", items: null };
+    const searchResults = sq.items === null ? "" : (sq.items.length
+      ? `<div class="search-list">${sq.items.map((x) =>
+          `<div class="row"><div class="title" style="flex:1;min-width:0;word-break:break-all">${icon("folder", 15)} ${x.name}<div class="meta mono" style="font-size:11px">${x.path}</div></div>
+            <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button>
+            <button class="btn secondary" data-act="folder-add" data-p="${x.path}" data-kind="auto">${t("add_auto")}</button></div>`).join("")}</div>`
+      : `<div class="empty">${t("search_none")}</div>`);
+    const searchBlock = `<div class="q-toolbar" style="padding:8px 0 0">
+        <input id="folder-q" class="search-input" type="search" placeholder="${t("search_placeholder")}" value="${(sq.q || "").replace(/"/g, "&quot;")}"/>
+        <button class="btn secondary" data-act="folder-search">${t("search")}</button>
+      </div>${searchResults}`;
     content().innerHTML = `
       <div class="panel"><div class="panel-header">${t("folders_to_scan")}</div>
         <div class="row"><span class="meta">${t("folders_hint")}</span></div>
@@ -782,6 +794,7 @@
         <div class="panel-header">${t("browse")} · <span class="mono" style="font-size:12px">${b.path || ""}</span></div>
         ${rsel}
         <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
+        ${searchBlock}
         ${warnRow}
         <div class="form-row">
           <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
@@ -793,6 +806,21 @@
         ${dirs || `<div class="empty">${t("no_subfolders")}</div>`}
       </div>
       ${scanPanel}`;
+  }
+
+  async function runFolderSearch() {
+    const q = ((state.folderSearch || {}).q || "").trim();
+    if (q.length < 2) { toast(t("search_short")); return; }
+    const root = (state.browse || {}).root || "";
+    busy(t("searching"));
+    try {
+      const d = await api(`/browse/search?q=${encodeURIComponent(q)}${root ? `&root=${encodeURIComponent(root)}` : ""}`);
+      state.folderSearch = { q, items: d.items || [] };
+    } catch (e) {
+      toast(`${t("error_prefix")}: ${e.message}`);
+    }
+    unbusy();
+    renderFolders(state.data || {});
   }
 
   async function browseTo(path) {
@@ -1430,6 +1458,7 @@
       }
       if (act === "lang") return setLang(el.dataset.lang);
       if (act === "folder-open") return browseTo(el.dataset.p);
+      if (act === "folder-search") return runFolderSearch();
       if (act === "folder-up") return browseTo(el.dataset.p || "/");
       if (act === "folder-add") {
         const p = el.dataset.p;
@@ -1751,6 +1780,15 @@
     $("lang").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-lang]");
       if (b) setLang(b.dataset.lang);
+    });
+    content().addEventListener("input", (e) => {
+      if (e.target && e.target.id === "folder-q") {
+        state.folderSearch = state.folderSearch || { q: "", items: null };
+        state.folderSearch.q = e.target.value;
+      }
+    });
+    content().addEventListener("keydown", (e) => {
+      if (e.target && e.target.id === "folder-q" && e.key === "Enter") runFolderSearch();
     });
     content().addEventListener("click", (e) => {
       const btn = e.target.closest("[data-act]");

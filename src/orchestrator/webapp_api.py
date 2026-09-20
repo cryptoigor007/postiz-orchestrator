@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "65"
+WEBAPP_BUILD = "66"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -771,6 +771,48 @@ class WebAppAPI:
                 except OSError as e:
                     return 500, {"error": f"save failed: {e}"}, "application/json"
                 return 200, {"ok": True, "path": str(dst), "size": len(blob)}, "application/json"
+
+            if method == "GET" and route == "browse/search":
+                q = (query.get("q") or "").strip().lower()
+                if len(q) < 2:
+                    return 400, {"error": "query too short (min 2 chars)"}, "application/json"
+                roots = self._browse_roots()
+                sel = query.get("root")
+                if sel:
+                    rp = Path(sel).expanduser()
+                    try:
+                        rp = rp.resolve()
+                    except Exception:
+                        rp = None
+                    if rp in roots:
+                        roots = [rp]
+                try:
+                    limit = max(1, min(100, int(query.get("limit") or 50)))
+                except Exception:
+                    limit = 50
+                results: list[dict] = []
+                for root in roots:
+                    if not root.is_dir():
+                        continue
+                    base_depth = len(root.parts)
+                    for dirpath, dirnames, _files in os.walk(root):
+                        d = Path(dirpath)
+                        if len(d.parts) - base_depth > 5:
+                            dirnames[:] = []
+                            continue
+                        dirnames[:] = [x for x in dirnames if not x.startswith(".")]
+                        for name in dirnames:
+                            if q in name.lower():
+                                full = d / name
+                                results.append({"name": name, "path": str(full),
+                                                "root": str(root)})
+                                if len(results) >= limit:
+                                    break
+                        if len(results) >= limit:
+                            break
+                    if len(results) >= limit:
+                        break
+                return 200, {"q": q, "items": results[:limit]}, "application/json"
 
             if method == "POST" and route == "scan":
                 watcher = self.comps.get("watcher")

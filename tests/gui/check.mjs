@@ -66,6 +66,8 @@ const fixtures = {
   metrics: {},
   "manual/plan": { total: 0, by_status: {}, by_platform: {}, platforms: [], last_scan: null },
   "manual/uploads": { items: [] },
+  "browse/search": { q: "готов", items: [
+    { name: "готовые", path: "/mnt/video/ssd_backup/готовые", root: "/mnt/video" }] },
   "cover/frames": { ok: true, duration: 40.0,
     frames: [{ name: "frame_01.jpg", path: "/mnt/video/.covers/f1.jpg", at: 4.8 },
              { name: "frame_02.jpg", path: "/mnt/video/.covers/f2.jpg", at: 12.0 }] },
@@ -234,6 +236,20 @@ if (addBtn) {
   else fail("папки: кнопка «добавить» не отправила POST /roots");
 } else {
   fail("папки: нет кнопки «добавить папку»");
+}
+const qInput = doc.getElementById("folder-q");
+const qBtn = doc.querySelector('[data-act="folder-search"]');
+if (qInput && qBtn) {
+  qInput.value = "готов";
+  qInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  qBtn.click();
+  await wait(250);
+  const found = calls.some((c) => c.includes("/browse/search"));
+  const results = doc.querySelectorAll(".search-list .row").length;
+  if (found && results >= 1) ok(`поиск папок: работает (${results} результат)`);
+  else fail(`поиск папок: запрос=${found}, результатов=${results}`);
+} else {
+  fail("поиск папок: нет поля ввода");
 }
 
 // 5. Итог по JS-ошибкам

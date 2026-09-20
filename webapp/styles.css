@@ -181,14 +181,16 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .auth-gate p { color: var(--text-2); font-size: 14px; max-width: 320px; line-height: 1.4; }
 @media (max-width: 640px) {
   #app { flex-direction: column; }
-  .sidebar { width: 100%; padding: 8px; border-right: none; border-bottom: 1px solid var(--sep); }
-  .brand { padding: 6px 8px 8px; }
+  /* ВАЖНО: отступ под вырез/статус-бар iPhone сохраняется (раньше терялся и всё перекрывалось) */
+  .sidebar { width: 100%; padding: calc(10px + env(safe-area-inset-top)) 8px 8px;
+    border-right: none; border-bottom: 1px solid var(--sep); }
+  .brand { padding: 4px 8px 8px; }
   .nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 0 0 auto; width: 100%; }
-  .nav button { padding: 6px 8px; gap: 8px; font-size: 12px; min-height: 32px; min-width: 0; overflow: hidden; }
+  .nav button { padding: 7px 8px; gap: 8px; font-size: 12px; min-height: 36px; min-width: 0; overflow: hidden; }
   .nav button .ico { flex: 0 0 auto; }
   .sidebar-footer { display: none; }
   .content { padding: 6px 14px calc(24px + env(safe-area-inset-bottom)); }
-  .topbar { padding: calc(12px + env(safe-area-inset-top)) 14px 6px; }
+  .topbar { padding: 10px 14px 4px; } /* safe-area уже учтён выше в .sidebar */
   .topbar h2 { font-size: 20px; }
   .btn { min-height: 32px; padding: 6px 12px; }
   .row { padding: 10px 14px; }
@@ -377,3 +379,10 @@ html { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .chip, .q-check, .icon-btn { transition: none; }
 }
+
+/* Поиск папок */
+.search-input { flex: 1 1 200px; min-width: 0; padding: 9px 12px; border-radius: 12px;
+  border: 1px solid var(--sep); background: var(--card); color: var(--text);
+  font-size: 14px; -webkit-appearance: none; }
+.search-input::placeholder { color: var(--text-3, var(--text-2)); }
+.search-list .row { padding: 8px 0; }

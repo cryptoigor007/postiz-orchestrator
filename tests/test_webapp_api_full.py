@@ -195,3 +195,22 @@ def test_cover_frames_from_video(env, tmp_path, monkeypatch):
     assert len(payload["frames"]) == 3
     assert all(p.startswith(str(tmp_path / "covers")) for p in
                (f["path"] for f in payload["frames"]))
+
+
+def test_link_post_bypasses_hourly_limit(env, tmp_path):
+    """Пост-ссылка (priority=link) не блокируется hourly_create_per_hour."""
+    from orchestrator.publisher import Publisher
+    api, db, clock, cfg = env
+    cfg.limits.postiz_create_per_hour = 1
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) "
+        "VALUES ('v', '/lv', 't', ?)", (clock.now().isoformat(),))
+    lv = db.fetchone("SELECT id FROM long_videos")["id"]
+    db.log("long_video", lv, "telegram", "created", "x")
+    pub = Publisher(db, cfg, api.comps.get("postiz") or __import__(
+        "orchestrator.postiz", fromlist=["MockPostizClient"]).MockPostizClient(),
+        api.comps["safety"], clock, dry_run=False)
+    post = pub.publish("long_video", lv, "telegram", None,
+                       {"title": "", "description": "ссылка", "hashtags": "",
+                        "priority": "link"}, clock.now())
+    assert post is not None

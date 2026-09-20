@@ -427,7 +427,8 @@ class Scheduler:
                 if not ok:
                     logger.info("telegram link skip (%s/%s): %s", etype, eid, reason)
                     continue
-                content = {"title": "", "description": text, "hashtags": ""}
+                content = {"title": "", "description": text, "hashtags": "",
+                           "priority": "link"}
                 post = self._safe_publish(etype, eid, "telegram", None, content, when)
                 if post:
                     count += 1

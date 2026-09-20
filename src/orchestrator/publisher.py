@@ -104,6 +104,8 @@ class Publisher:
 
         # Postiz hourly create limit (config: limits.postiz_create_per_hour)
         hourly = getattr(self.cfg.limits, "postiz_create_per_hour", 0) or 0
+        if hourly and str((content or {}).get("priority") or "") == "link":
+            hourly = 0  # пост-ссылка после премьеры не должен ждать час
         if hourly:
             cutoff = (self.clock.now() - timedelta(hours=1)).isoformat()
             row = self.db.fetchone(

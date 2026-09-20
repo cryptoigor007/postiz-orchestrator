@@ -693,7 +693,7 @@ class WebAppAPI:
                 if covers is None:
                     return 500, {"error": "cannot create covers dir"}, "application/json"
                 stamp = time.strftime("%Y%m%d-%H%M%S")
-                dst = covers / f"{etype}_{eid}_{stamp}{ext}"
+                dst = covers / f"{etype}_{eid}_{stamp}_{os.urandom(2).hex()}{ext}"
                 try:
                     dst.write_bytes(blob)
                 except OSError as e:

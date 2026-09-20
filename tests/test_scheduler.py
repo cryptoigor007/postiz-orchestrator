@@ -292,15 +292,17 @@ def test_telegram_link_placeholder_then_refresh(env):
         "'2026-03-12T13:00:00+00:00')",
         (lv["id"],),
     )
-    # пре-план: Telegram-пост виден в очереди заранее (плейсхолдер)
+    # пре-план: строка видна в очереди, но Postiz-пост НЕ создаётся (нет ссылки)
     n = sched.schedule_telegram_links()
     assert n == 1
     row = db.fetchone(
-        "SELECT status, postiz_scheduled_for FROM entity_platform_status "
+        "SELECT status, postiz_scheduled_for, postiz_post_id FROM entity_platform_status "
         "WHERE entity_type='long_video' AND entity_id=? AND platform='telegram'",
         (lv["id"],),
     )
-    assert row["status"] == "scheduled"
+    assert row["status"] == "ready"
+    assert row["postiz_post_id"] in (None, "")
+    assert postiz.posts == {}  # ничего не публиковали
     # время = премьера + 15 минут
     from datetime import datetime as _dt
     t = _dt.fromisoformat(row["postiz_scheduled_for"])
@@ -315,5 +317,6 @@ def test_telegram_link_placeholder_then_refresh(env):
     )
     n2 = sched.refresh_telegram_links()
     assert n2 == 1
+    assert any("youtu.be/xyz" in str(p.content) for p in postiz.posts.values())
     # повторно не обновляем
     assert sched.refresh_telegram_links() == 0

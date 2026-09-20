@@ -62,6 +62,15 @@ class StatusSync:
                 )
                 updated += 1
                 continue
+            if post.status == "error" and row["status"] != "error":
+                self.db.execute(
+                    "UPDATE entity_platform_status SET status='error', "
+                    "last_error='postiz_error' WHERE entity_type=? AND entity_id=? "
+                    "AND platform=?",
+                    (row["entity_type"], row["entity_id"], row["platform"]),
+                )
+                updated += 1
+                continue
             if post.status == "published" and row["status"] != "published":
                 now = self.clock.now().isoformat()
                 self.db.execute(

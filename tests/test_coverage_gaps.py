@@ -98,9 +98,11 @@ def test_postiz_http_list_scheduled_parses_and_filters():
 
     c = _http_client(handler)
     rows = c.list_scheduled()
-    assert [r.id for r in rows] == ["a"]
+    # ERROR-посты тоже возвращаются: реконсиляция должна видеть их и помечать ошибку
+    assert [r.id for r in rows] == ["a", "b"]
     assert rows[0].platform == "telegram"
     assert rows[0].content == {"text": "keep"}
+    assert rows[1].status == "error"
     c.close()
 
 

@@ -282,7 +282,7 @@ class HttpPostizClient:
             sched = _first(data, "publishDate", "scheduledFor", "scheduled_for", "date")
             st = _first(data, "state", "status", default="scheduled")
             if st and str(st).lower() not in (
-                "scheduled", "queue", "pending", "draft", "published"
+                "scheduled", "queue", "pending", "draft", "published", "error"
             ):
                 continue
             content = _first(data, "content", "message", "description")

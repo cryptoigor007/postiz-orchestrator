@@ -385,9 +385,6 @@ class Scheduler:
             if exists:
                 continue
             url = r["release_url"] if r["status"] == "published" else None
-            text = self._link_text(etype, eid, url)
-            if not text:
-                continue
             try:
                 from datetime import datetime as _dt
                 yt_time = _dt.fromisoformat(str(r["when_at"]))
@@ -396,20 +393,32 @@ class Scheduler:
             when = yt_time + timedelta(minutes=delay)
             if when <= self.clock.now():
                 when = self.clock.now() + timedelta(minutes=1)
-            ok, reason = self.safety.can_schedule("telegram", when, limit)
-            if not ok:
-                logger.info("telegram link skip (%s/%s): %s", etype, eid, reason)
-                continue
-            content = {"title": "", "description": text, "hashtags": ""}
-            post = self._safe_publish(etype, eid, "telegram", None, content, when)
-            if post:
-                count += 1
-                if url:
+            if url:
+                text = self._link_text(etype, eid, url)
+                if not text:
+                    continue
+                ok, reason = self.safety.can_schedule("telegram", when, limit)
+                if not ok:
+                    logger.info("telegram link skip (%s/%s): %s", etype, eid, reason)
+                    continue
+                content = {"title": "", "description": text, "hashtags": ""}
+                post = self._safe_publish(etype, eid, "telegram", None, content, when)
+                if post:
+                    count += 1
                     self.db.execute(
                         "UPDATE entity_platform_status SET link_updated_at=? "
                         "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
                         (self.clock.now().isoformat(), etype, eid),
                     )
+            else:
+                # видео ещё не вышло: показываем в плане, но НИЧЕГО не публикуем
+                self.db.execute(
+                    "INSERT INTO entity_platform_status "
+                    "(entity_type, entity_id, platform, status, postiz_scheduled_for, last_error) "
+                    "VALUES (?, ?, 'telegram', 'ready', ?, 'waiting_for_youtube')",
+                    (etype, eid, when.isoformat()),
+                )
+                count += 1
         return count
 
     def refresh_telegram_links(self) -> int:
@@ -421,7 +430,7 @@ class Scheduler:
             """
             SELECT t.entity_type, t.entity_id, t.postiz_post_id, t.postiz_scheduled_for
             FROM entity_platform_status t
-            WHERE t.platform='telegram' AND t.status IN ('scheduled','updating')
+            WHERE t.platform='telegram' AND t.status IN ('scheduled','updating','ready')
               AND t.link_updated_at IS NULL
               AND EXISTS (
                 SELECT 1 FROM entity_platform_status y

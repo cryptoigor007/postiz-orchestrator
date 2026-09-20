@@ -30,8 +30,8 @@ def postiz_source(postiz: Any) -> Callable[[str], list[datetime]]:
     def fn(platform: str) -> list[datetime]:
         out: list[datetime] = []
         for p in postiz.list_scheduled(platform):
-            if (getattr(p, "status", "") or "").lower() in ("draft", "drafts"):
-                continue  # черновики слоты не занимают
+            if (getattr(p, "status", "") or "").lower() in ("draft", "drafts", "error"):
+                continue  # черновики и ошибки слоты не занимают
             dt = _parse(p.scheduled_for)
             if dt:
                 out.append(dt)

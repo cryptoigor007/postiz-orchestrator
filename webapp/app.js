@@ -832,9 +832,15 @@
              <img class="q-cover" loading="lazy" alt=""
                src="/webapp/api/cover/thumb?key=${encodeURIComponent(state.key || "")}&path=${encodeURIComponent(it.cover_path)}"/></button>`
         : `<button class="q-cover-btn q-cover-empty" data-act="queue-edit" data-key="${key}" title="${t("cover_pick")}"></button>`;
-      return `<div class="row">${cover}<div class="title q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
-       <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
-       <span class="meta q-plat">${pIcon(it.platform)}</span>
+      return `<div class="row q-row">${cover}
+       <div class="q-main">
+         <div class="q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+         <div class="q-meta mono">
+           <span class="q-date">${it.date || ""}</span>
+           <span class="q-clock">${it.time || ""}</span>
+           <span class="q-plat">${pIcon(it.platform)}</span>
+         </div>
+       </div>
        <div class="queue-col">
          <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove")}</button>
          ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}

@@ -54,22 +54,6 @@ class Scheduler:
         local = when.astimezone(get_tz(self.cfg.timezone))
         return local.strftime("%H:%M") in times
 
-    def _next_canonical(self, platform: str, after):
-        """Ближайшее разрешённое время расписания, не раньше `after`."""
-        times = sorted(sched_settings.all_times(self.db, self.cfg, platform))
-        if not times:
-            return after
-        from .slots import get_tz, local_to_utc, parse_time
-        tz = get_tz(self.cfg.timezone)
-        local = after.astimezone(tz)
-        for offset in range(0, 8):
-            d = (local + timedelta(days=offset)).date()
-            for ts in times:
-                cand = local_to_utc(d, parse_time(ts), self.cfg.timezone)
-                if cand >= after:
-                    return cand
-        return None
-
     def _safe_publish(self, *args, **kwargs):
         """Публикация с изоляцией: сбой одного поста не ломает весь цикл."""
         when = args[5] if len(args) > 5 else kwargs.get("scheduled_for")

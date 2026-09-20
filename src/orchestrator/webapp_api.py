@@ -360,7 +360,8 @@ class WebAppAPI:
                             sched_dt = _dt.fromisoformat(str(when))
                         except Exception:
                             sched_dt = None
-                    content = {"title": title, "description": desc, "hashtags": tags}
+                    content = {"title": title, "description": desc, "hashtags": tags,
+                               "cover": cover}
                     try:
                         post = pub.publish(etype, eid, plat, path, content, sched_dt)
                         if post:

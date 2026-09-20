@@ -270,10 +270,8 @@ def test_non_canonical_slot_rejected(env):
                                {"title": "x"}, weird) is None
     # 09:00 UTC = 12:00 МСК — это канонический слот (standalone)
     assert sched._is_canonical("telegram", datetime(2026, 3, 11, 9, 0, tzinfo=UTC)) is True
-    # ссылки в Telegram ставятся только в канонические слоты
-    nxt = sched._next_canonical("telegram", datetime(2026, 3, 11, 12, 7, tzinfo=UTC))
-    from orchestrator.slots import get_tz
-    assert nxt.astimezone(get_tz(cfg.timezone)).strftime("%H:%M") in ("16:00", "18:00", "20:30")
+    # у ссылок (без медиа) время свободное — проверяем, что медиа-пост с тем же временем отклоняется
+    assert sched._is_canonical("telegram", datetime(2026, 3, 11, 12, 7, tzinfo=UTC)) is False
 
 
 def test_telegram_link_placeholder_then_refresh(env):

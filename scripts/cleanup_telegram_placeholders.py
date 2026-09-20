@@ -15,13 +15,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from orchestrator.db import DB  # noqa: E402
-from orchestrator.postiz import create_postiz_client  # noqa: E402
+from orchestrator.db import Database  # noqa: E402
+from orchestrator.postiz_factory import create_postiz_client  # noqa: E402
 
 
 def main() -> int:
     db_path = os.environ.get("ORCH_DB", "/opt/orchestrator/data/data.sqlite")
-    db = DB(db_path)
+    db = Database(db_path)
     postiz = create_postiz_client(dry_run=False)
     rows = db.fetchall(
         """

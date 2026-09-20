@@ -61,6 +61,13 @@ class Watcher:
 
     # ---------- helpers ----------
 
+    def _read_first(self, base: Path, names: list[str], suffix: str) -> str:
+        for n in names:
+            txt = self._read_text(base / f"{n}{suffix}")
+            if txt:
+                return txt
+        return ""
+
     def _read_text(self, path: Path) -> str:
         try:
             return path.read_text(encoding="utf-8", errors="ignore").strip()
@@ -343,12 +350,16 @@ class Watcher:
             folder = str(short_dir.resolve())
             if self.db.fetchone("SELECT id FROM shorts WHERE folder_path = ?", (folder,)):
                 continue
-            name = short_dir.name
-            title_text = self._read_text(short_dir / f"{name}_title.txt") or self._clean_name(name)
-            desc_text = self._read_text(short_dir / f"{name}_description.txt")
-            tags_text = self._read_text(short_dir / f"{name}_hashtags.txt")
-            hook_text = self._read_text(short_dir / f"{name}_hook.txt")
-            upload_text = self._read_text(short_dir / f"{name}_upload.txt")
+            # имя файлов-компаньонов: по basename видео, затем по имени папки
+            # (папки вида short_001выст, где файлы названы short_001_*)
+            name = video.stem or short_dir.name
+            names = [name] if short_dir.name == name else [name, short_dir.name]
+            title_text = (self._read_first(short_dir, names, "_title.txt")
+                          or self._clean_name(name))
+            desc_text = self._read_first(short_dir, names, "_description.txt")
+            tags_text = self._read_first(short_dir, names, "_hashtags.txt")
+            hook_text = self._read_first(short_dir, names, "_hook.txt")
+            upload_text = self._read_first(short_dir, names, "_upload.txt")
             cover = next(short_dir.glob("cover*"), None) or next(
                 short_dir.glob("*_cover.*"), None
             )

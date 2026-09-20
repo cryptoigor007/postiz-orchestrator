@@ -220,12 +220,13 @@ class HttpPostizClient:
         )
 
     def delete_post(self, post_id: str) -> None:
-        r = self._client.delete(f"{self.path_posts}/{post_id}")
+        r = self._client.delete(f"{self.path_posts}/{post_id}", timeout=10.0)
         if r.status_code not in (200, 204, 404):
             r.raise_for_status()
 
     def set_status(self, post_id: str, status: str) -> None:
-        r = self._client.put(f"{self.path_posts}/{post_id}/status", json={"status": status})
+        r = self._client.put(f"{self.path_posts}/{post_id}/status", json={"status": status},
+                             timeout=15.0)
         if r.status_code not in (200, 204):
             r.raise_for_status()
 

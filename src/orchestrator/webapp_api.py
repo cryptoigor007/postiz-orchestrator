@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -16,10 +17,24 @@ from urllib.parse import parse_qsl, urlsplit
 from . import sched_settings
 from .watcher import WATCH_ROOTS_KEY
 
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _is_image_bytes(blob: bytes) -> bool:
+    if len(blob) < 12:
+        return False
+    if blob[:3] == b"\xff\xd8\xff":
+        return True
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return True
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return True
+    return False
+
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "55"
+WEBAPP_BUILD = "56"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -409,22 +424,33 @@ class WebAppAPI:
                     return 400, {"error": "entity_type/entity_id required"}, "application/json"
                 postiz = self.comps.get("postiz")
 
-                def _kill_posts(t: str, i: int) -> None:
-                    rows = self.db.fetchall(
-                        "SELECT postiz_post_id FROM entity_platform_status "
-                        "WHERE entity_type=? AND entity_id=?", (t, i))
-                    for r in rows:
-                        pid = r.get("postiz_post_id")
-                        if not pid or postiz is None:
-                            continue
+                def _kill_posts(*targets: tuple[str, int]) -> None:
+                    if postiz is None:
+                        return
+                    pids: list[str] = []
+                    for t, i in targets:
+                        for r in self.db.fetchall(
+                                "SELECT postiz_post_id FROM entity_platform_status "
+                                "WHERE entity_type=? AND entity_id=?", (t, i)):
+                            pid = r.get("postiz_post_id")
+                            if pid:
+                                pids.append(str(pid))
+                    if not pids:
+                        return
+                    from concurrent.futures import ThreadPoolExecutor
+
+                    def _one(pid: str) -> None:
                         try:
                             if hasattr(postiz, "delete_post"):
-                                postiz.delete_post(str(pid))
+                                postiz.delete_post(pid)
                             elif hasattr(postiz, "set_status"):
-                                postiz.set_status(str(pid), "draft")
+                                postiz.set_status(pid, "draft")
                         except Exception:
                             logger.warning("queue remove: удаление поста %s не удалось", pid,
                                            exc_info=True)
+
+                    with ThreadPoolExecutor(max_workers=8) as ex:
+                        list(ex.map(_one, pids))
 
                 guard = self.comps.get("guard")
                 if guard is not None and hasattr(guard, "invalidate"):
@@ -448,7 +474,7 @@ class WebAppAPI:
                         blocked.append(f"long_video#{eid}")
                     elif keep_shorts:
                         # удаляем только фильм; шортсы остаются (отвязываем)
-                        _kill_posts("long_video", eid)
+                        _kill_posts(("long_video", eid))
                         self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type='long_video' AND entity_id=?", (eid,))
@@ -459,15 +485,15 @@ class WebAppAPI:
                         self.db.log("long_video", eid, "", "queue_delete", "keep_shorts")
                         removed += 1
                     else:
+                        _kill_posts(*[("short", sid) for sid in shorts_ids])
                         for sid in shorts_ids:
-                            _kill_posts("short", sid)
                             self.db.execute(
                                 "DELETE FROM entity_platform_status "
                                 "WHERE entity_type='short' AND entity_id=?", (sid,))
                             self.db.execute("DELETE FROM shorts WHERE id=?", (sid,))
                             self.db.log("short", sid, "", "queue_delete", "hard")
                             removed += 1
-                        _kill_posts("long_video", eid)
+                        _kill_posts(("long_video", eid))
                         self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type='long_video' AND entity_id=?", (eid,))
@@ -481,7 +507,7 @@ class WebAppAPI:
                     if any((r["status"] or "") == "published" for r in rows):
                         blocked.append(f"short#{eid}")
                     else:
-                        _kill_posts("short", eid)
+                        _kill_posts(("short", eid))
                         self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type='short' AND entity_id=?", (eid,))
@@ -548,6 +574,123 @@ class WebAppAPI:
                     "dirs": dirs,
                     "selected": str(base) in self._roots(),
                 }, "application/json"
+            if method == "GET" and route in ("cover/list", "cover/thumb"):
+                roots = self._browse_roots()
+
+                def _allowed(p: Path) -> bool:
+                    try:
+                        rp = p.resolve()
+                    except Exception:
+                        return False
+                    return any(rp == r or r in rp.parents for r in roots)
+
+                target = query.get("path") or str(roots[0])
+                base = Path(target).expanduser()
+                base = base.resolve() if _allowed(base) and base.exists() else roots[0]
+                if not _allowed(base):
+                    return 403, {"error": "path not allowed"}, "application/json"
+                if route == "cover/thumb":
+                    if not base.is_file() or base.suffix.lower() not in IMG_EXTS:
+                        return 404, {"error": "not an image"}, "application/json"
+                    try:
+                        if base.stat().st_size > 25 * 1024 * 1024:
+                            return 413, {"error": "too large"}, "application/json"
+                        blob = base.read_bytes()
+                    except OSError:
+                        return 404, {"error": "read failed"}, "application/json"
+                    ctype = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                             ".png": "image/png", ".webp": "image/webp"}.get(
+                                 base.suffix.lower(), "application/octet-stream")
+                    return 200, blob, ctype
+                dirs: list[dict] = []
+                images: list[dict] = []
+                warning = ""
+                try:
+                    children = sorted(base.iterdir())
+                except PermissionError:
+                    return 403, {"error": "permission denied"}, "application/json"
+                except OSError:
+                    children = []
+                    warning = "папка недоступна"
+                for child in children:
+                    if child.name.startswith("."):
+                        continue
+                    try:
+                        if child.is_dir():
+                            dirs.append({"name": child.name, "path": str(child.resolve())})
+                        elif child.is_file() and child.suffix.lower() in IMG_EXTS:
+                            images.append({"name": child.name, "path": str(child.resolve()),
+                                           "size": child.stat().st_size})
+                    except OSError:
+                        continue
+                parent = str(base.parent) if base != base.parent and _allowed(base.parent) else None
+                return 200, {
+                    "path": str(base), "parent": parent,
+                    "roots": [str(r) for r in roots],
+                    "dirs": dirs, "images": images[:400], "warning": warning,
+                }, "application/json"
+
+            if method == "POST" and route in ("cover/upload", "cover/fetch"):
+                etype = str(data.get("entity_type") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                blob: bytes | None = None
+                ext = ".jpg"
+                if route == "cover/upload":
+                    raw = str(data.get("data") or "")
+                    m = re.match(r"^data:image/(png|jpe?g|webp);base64,(.+)$", raw, re.S)
+                    if m:
+                        ext = {"png": ".png", "jpg": ".jpg", "jpeg": ".jpg", "webp": ".webp"}[m.group(1)]
+                        payload = m.group(2)
+                    else:
+                        payload = raw
+                        e = Path(str(data.get("filename") or "")).suffix.lower()
+                        ext = e if e in IMG_EXTS else ".jpg"
+                    try:
+                        blob = base64.b64decode(payload, validate=False)
+                    except Exception:
+                        return 400, {"error": "bad base64"}, "application/json"
+                else:
+                    url = str(data.get("url") or "").strip()
+                    if not re.match(r"^https?://", url, re.I):
+                        return 400, {"error": "http(s) url required"}, "application/json"
+                    try:
+                        import httpx
+                        with httpx.Client(timeout=25.0, follow_redirects=True) as c:
+                            r = c.get(url, headers={"User-Agent": "orchestrator-cover/1.0"})
+                            r.raise_for_status()
+                            blob = r.content
+                            ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
+                            ext = {"image/png": ".png", "image/jpeg": ".jpg",
+                                   "image/webp": ".webp"}.get(
+                                       ctype, Path(urlsplit(url).path).suffix.lower())
+                            if ext not in IMG_EXTS:
+                                ext = ".jpg"
+                    except Exception as e:
+                        return 502, {"error": f"download failed: {e}"}, "application/json"
+                if blob is None or len(blob) < 100:
+                    return 400, {"error": "empty image"}, "application/json"
+                if len(blob) > 25 * 1024 * 1024:
+                    return 413, {"error": "image too large (>25MB)"}, "application/json"
+                if not _is_image_bytes(blob):
+                    return 400, {"error": "not an image"}, "application/json"
+                covers = Path("/mnt/video/.covers")
+                try:
+                    covers.mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    return 500, {"error": "cannot create covers dir"}, "application/json"
+                stamp = time.strftime("%Y%m%d-%H%M%S")
+                dst = covers / f"{etype}_{eid}_{stamp}{ext}"
+                try:
+                    dst.write_bytes(blob)
+                except OSError as e:
+                    return 500, {"error": f"save failed: {e}"}, "application/json"
+                return 200, {"ok": True, "path": str(dst), "size": len(blob)}, "application/json"
+
             if method == "POST" and route == "scan":
                 watcher = self.comps.get("watcher")
                 if not watcher:
@@ -768,6 +911,7 @@ class WebAppAPI:
 
                 jobs = self.comps.get("jobs")
                 job = jobs.start("schedule", "Планирование публикаций") if jobs is not None else None
+                before = self._sched_snapshot()
 
                 def _run():
                     try:
@@ -776,6 +920,7 @@ class WebAppAPI:
                         sc.schedule_long_videos(start_date=sd)
                         sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd)
                         sc.schedule_telegram_links()
+                        self._send_schedule_summary(before)
                         if job is not None:
                             job.finish("done", "Готово")
                     except Exception as e:
@@ -790,6 +935,7 @@ class WebAppAPI:
                                  "shorts_start_date": shr}, "application/json"
                 n = sc.schedule_long_videos(start_date=sd) if sc else 0
                 n2 = sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd) if sc else 0
+                self._send_schedule_summary(before)
                 return 200, {"ok": True, "long": n, "standalone": n2, "start_date": sd,
                              "shorts_start_date": shr}, "application/json"
             if method == "POST" and route == "pause_platform":
@@ -891,6 +1037,68 @@ class WebAppAPI:
 
     def _roots(self) -> list[str]:
         return [it["path"] for it in self._root_items()]
+
+    def _sched_snapshot(self) -> set:
+        rows = self.db.fetchall(
+            "SELECT entity_type, entity_id, platform FROM entity_platform_status "
+            "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''")
+        return {(r["entity_type"], r["entity_id"], r["platform"]) for r in rows}
+
+    def _schedule_summary(self, before: set) -> str:
+        after = self._sched_snapshot()
+        added = after - before
+        add_yt = [t for t in added if t[2] == "youtube"]
+        add_yt_films = [t for t in add_yt if t[0] == "long_video"]
+        add_yt_shorts = [t for t in add_yt if t[0] == "short"]
+        add_other = [t for t in added if t[2] != "youtube"]
+        lines = ["📋 Раскладка очереди — итог", ""]
+        if added:
+            lines.append(f"✅ Добавлено: {len(added)}")
+            if add_yt:
+                lines.append(f"• YouTube: {len(add_yt)} (фильмы: {len(add_yt_films)}, "
+                             f"шортсы: {len(add_yt_shorts)})")
+            if add_other:
+                by_p: dict[str, int] = {}
+                for t in add_other:
+                    by_p[t[2]] = by_p.get(t[2], 0) + 1
+                lines.append("• " + ", ".join(f"{k}: {v}" for k, v in sorted(by_p.items())))
+        else:
+            lines.append("✅ Добавлено: 0 (новых подходящих материалов нет)")
+        tg_row = self.db.fetchone(
+            "SELECT COUNT(*) AS c FROM entity_platform_status "
+            "WHERE platform='telegram' AND status='ready' AND last_error='waiting_for_youtube'")
+        if tg_row and tg_row["c"]:
+            lines.append(f"• Telegram-ссылки в плане: {tg_row['c']} (опубликуются после премьер)")
+
+        films = self.db.fetchall(
+            "SELECT lv.id, lv.title_text FROM long_videos lv WHERE NOT EXISTS ("
+            "SELECT 1 FROM entity_platform_status e WHERE e.entity_type='long_video' "
+            "AND e.entity_id=lv.id AND e.status IN ('scheduled','published','updating'))")
+        shorts = self.db.fetchall(
+            "SELECT s.id, s.title_text, TRIM(COALESCE(s.hashtags_text,'')) AS tags "
+            "FROM shorts s WHERE NOT EXISTS ("
+            "SELECT 1 FROM entity_platform_status e WHERE e.entity_type='short' "
+            "AND e.entity_id=s.id AND e.status IN ('scheduled','published','updating'))")
+        if films or shorts:
+            lines.append("")
+            lines.append(f"⏳ Не добавлено: {len(films) + len(shorts)}")
+            if films:
+                lines.append(f"• Фильмы: {len(films)} — нет свободных слотов в расписании")
+            if shorts:
+                lines.append(f"• Шортсы: {len(shorts)} — нет свободных слотов (ждут «Остаток»)")
+            no_tags = [x for x in shorts if not x["tags"]]
+            if no_tags:
+                names = ", ".join((x["title_text"] or f"#{x['id']}")[:22] for x in no_tags[:5])
+                lines.append(f"• Без хештегов: {len(no_tags)} — {names}")
+        return "\n".join(lines)
+
+    def _send_schedule_summary(self, before: set) -> None:
+        try:
+            tg = self.comps.get("tg")
+            if tg is not None:
+                tg.broadcast(self._schedule_summary(before))
+        except Exception:
+            logger.warning("schedule summary send failed", exc_info=True)
 
     def _cover_candidates(self, video_path: str) -> list[str]:
         """Картинки-обложки рядом с видео (в папке и на уровень выше)."""
@@ -1158,6 +1366,7 @@ class WebAppAPI:
                 "hashtags_text": r.get("hashtags_text") or "",
                 "cover_path": r.get("cover_path") or "",
                 "covers": self._cover_candidates(r.get("video_path") or ""),
+                "video_path": r.get("video_path") or "",
                 "has_tg": bool(r.get("has_tg")),
             })
         return {"items": items}

@@ -284,3 +284,25 @@ def test_backfill_description(tmp_path):
     assert w._backfill_descriptions() == 1
     row = db.fetchone("SELECT description_text FROM shorts")
     assert row["description_text"] == "Описание из файла"
+
+
+def test_short_folder_suffix_files_named_by_video(env):
+    """Папка short_002выст, а файлы-компаньоны названы short_002_* (как в реальных папках)."""
+    db, cfg, clock, root, series = env
+    d = series / "shorts" / "short_002выст"
+    d.mkdir(parents=True)
+    (d / "short_002.mp4").write_bytes(b"short" * 60)
+    (d / "short_002_title.txt").write_text("Настоящий заголовок", encoding="utf-8")
+    (d / "short_002_description.txt").write_text("Описание", encoding="utf-8")
+    (d / "short_002_hashtags.txt").write_text("#tag1 #tag2", encoding="utf-8")
+    (d / "short_002_hook.txt").write_text("Хук", encoding="utf-8")
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    row = db.fetchone(
+        "SELECT * FROM shorts WHERE folder_path LIKE '%short_002выст%'")
+    assert row is not None
+    assert row["title_text"] == "Настоящий заголовок"
+    assert row["description_text"] == "Описание"
+    assert row["hashtags_text"] == "#tag1 #tag2"
+    assert row["hook_text"] == "Хук"

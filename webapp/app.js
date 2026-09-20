@@ -8,6 +8,14 @@
       confirm_delete_short: "Удалить этот ролик и его посты (включая базу)?",
       warn_tg_link: "Внимание: в Telegram стоит пост со ссылкой на этот ролик — он тоже будет удалён, и ссылка не выйдет.",
       edit_cover: "Обложка", cover_none: "Без обложки",
+      cover_pick: "Выбрать обложку…", cover_picker_title: "Выбор обложки",
+      cover_tab_server: "Папки на сервере", cover_tab_device: "С устройства",
+      cover_tab_url: "По ссылке", cover_choose: "Выбрать", cover_close: "Закрыть",
+      cover_no_images: "Картинок нет", cover_up: "↑ Вверх", cover_loading: "Загрузка…",
+      cover_added: "Обложка выбрана", cover_upload: "Загрузить с устройства",
+      cover_fetch: "Скачать", cover_url_hint: "Вставьте ссылку на картинку (http/https)",
+      cover_dirs: "Папки", cover_images: "Картинки", cover_start_hint: "Начало: папка видео",
+      pick_file: "Файл не выбран",
       cancel: "Отменить", left: "осталось", sec_short: "с", min_short: "мин",
       job_scheduling: "Планирование публикаций", job_restore: "Возврат удалённого",
       job_cancelling: "Отменяем…", job_cancelled: "Отменено", job_done: "Готово",
@@ -134,6 +142,14 @@
       confirm_delete_short: "Delete this video and its posts (including the database)?",
       warn_tg_link: "Note: a Telegram post with a link to this video exists — it will be deleted too and the link will not be published.",
       edit_cover: "Cover", cover_none: "No cover",
+      cover_pick: "Choose cover…", cover_picker_title: "Choose cover",
+      cover_tab_server: "Server folders", cover_tab_device: "From device",
+      cover_tab_url: "From URL", cover_choose: "Choose", cover_close: "Close",
+      cover_no_images: "No images", cover_up: "↑ Up", cover_loading: "Loading…",
+      cover_added: "Cover selected", cover_upload: "Upload from device",
+      cover_fetch: "Download", cover_url_hint: "Paste an image URL (http/https)",
+      cover_dirs: "Folders", cover_images: "Images", cover_start_hint: "Starts at the video folder",
+      pick_file: "No file selected",
       cancel: "Cancel", left: "left", sec_short: "s", min_short: "min",
       job_scheduling: "Scheduling posts", job_restore: "Restoring removed",
       job_cancelling: "Cancelling…", job_cancelled: "Cancelled", job_done: "Done",
@@ -314,6 +330,160 @@
     const el = _overlay();
     el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${text || t("working")}</span></div></div>`;
     el.style.display = "flex";
+  }
+
+  function openCoverPicker(opts) {
+    const { select, startPath, entityType, entityId } = opts;
+    const old = document.getElementById("coverPicker");
+    if (old) old.remove();
+    const dir0 = (startPath || "").replace(/\/[^/]+\.[A-Za-z0-9]+$/, "") || "";
+    let tab = "server";
+    let curPath = dir0;
+    let listData = null;
+
+    const root = document.createElement("div");
+    root.id = "coverPicker";
+    root.className = "cover-overlay";
+    root.innerHTML = `
+      <div class="cover-panel">
+        <div class="cover-head">
+          <strong>${t("cover_picker_title")}</strong>
+          <button class="btn secondary" data-cp="close">${t("cover_close")}</button>
+        </div>
+        <div class="cover-tabs">
+          <button class="btn cp-tab" data-cp="tab" data-tab="server">${t("cover_tab_server")}</button>
+          <button class="btn cp-tab" data-cp="tab" data-tab="device">${t("cover_tab_device")}</button>
+          <button class="btn cp-tab" data-cp="tab" data-tab="url">${t("cover_tab_url")}</button>
+        </div>
+        <div class="cover-body" id="cpBody"></div>
+      </div>`;
+    document.body.appendChild(root);
+
+    function close() { root.remove(); }
+    function apply(path) {
+      if (!path) return;
+      let found = Array.from(select.options).find((o) => o.value === path);
+      if (!found) {
+        found = document.createElement("option");
+        found.value = path;
+        found.textContent = path.split("/").pop();
+        select.appendChild(found);
+      }
+      select.value = path;
+      toast(t("cover_added"));
+      close();
+    }
+    function renderTabs() {
+      root.querySelectorAll(".cp-tab").forEach((b) => {
+        b.classList.toggle("primary", b.dataset.tab === tab);
+      });
+    }
+    async function loadServer(path) {
+      const body = root.querySelector("#cpBody");
+      body.innerHTML = `<div class="empty">${t("cover_loading")}</div>`;
+      try {
+        const q = path ? `?path=${encodeURIComponent(path)}` : "";
+        const d = await api(`/cover/list${q}`);
+        listData = d;
+        curPath = d.path;
+        const key = encodeURIComponent(state.key || "");
+        const dirs = (d.dirs || []).map((x) =>
+          `<button class="btn secondary cp-dir" data-cp="dir" data-path="${x.path.replace(/"/g, "&quot;")}">📁 ${x.name}</button>`).join("");
+        const imgs = (d.images || []).map((x) =>
+          `<button class="cp-thumb" data-cp="pick" data-path="${x.path.replace(/"/g, "&quot;")}" title="${x.name.replace(/"/g, "&quot;")}">
+             <img loading="lazy" src="/webapp/api/cover/thumb?key=${key}&path=${encodeURIComponent(x.path)}" alt=""/>
+             <span>${x.name.length > 22 ? x.name.slice(0, 20) + "…" : x.name}</span>
+           </button>`).join("");
+        body.innerHTML = `
+          <div class="cp-path mono">${d.path}</div>
+          <div class="cp-row">
+            ${d.parent ? `<button class="btn secondary" data-cp="dir" data-path="${d.parent.replace(/"/g, "&quot;")}">${t("cover_up")}</button>` : ""}
+            ${d.warning ? `<span class="meta">${d.warning}</span>` : ""}
+          </div>
+          <div class="cp-sec">${t("cover_dirs")}</div>
+          <div class="cp-dirs">${dirs || `<span class="meta">${t("no_subfolders")}</span>`}</div>
+          <div class="cp-sec">${t("cover_images")}</div>
+          <div class="cp-grid">${imgs || `<span class="meta">${t("cover_no_images")}</span>`}</div>`;
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${t("error_prefix")}: ${e.message}</div>`;
+      }
+    }
+    function renderDevice() {
+      root.querySelector("#cpBody").innerHTML = `
+        <div class="cp-sec">${t("cover_upload")}</div>
+        <input type="file" id="cpFile" accept="image/*"/>
+        <div class="form-row"><span class="meta" id="cpFileInfo">${t("pick_file")}</span></div>
+        <button class="btn primary" data-cp="upload">${t("cover_upload")}</button>`;
+      const inp = root.querySelector("#cpFile");
+      inp.addEventListener("change", () => {
+        const info = root.querySelector("#cpFileInfo");
+        const f = inp.files && inp.files[0];
+        info.textContent = f ? `${f.name} · ${Math.round(f.size / 1024)} КБ` : t("pick_file");
+      });
+    }
+    function renderUrl() {
+      root.querySelector("#cpBody").innerHTML = `
+        <div class="cp-sec">${t("cover_tab_url")}</div>
+        <input type="url" id="cpUrl" placeholder="https://…" style="width:100%"/>
+        <div class="form-row"><span class="meta">${t("cover_url_hint")}</span></div>
+        <button class="btn primary" data-cp="fetch">${t("cover_fetch")}</button>`;
+    }
+    function renderBody() {
+      renderTabs();
+      if (tab === "server") loadServer(curPath);
+      else if (tab === "device") renderDevice();
+      else renderUrl();
+    }
+
+    root.addEventListener("click", async (e) => {
+      const el = e.target.closest("[data-cp]");
+      if (!el) return;
+      const act = el.dataset.cp;
+      if (act === "close") return close();
+      if (act === "tab") { tab = el.dataset.tab; return renderBody(); }
+      if (act === "dir") return loadServer(el.dataset.path);
+      if (act === "pick") return apply(el.dataset.path);
+      if (act === "upload") {
+        const inp = root.querySelector("#cpFile");
+        const f = inp && inp.files && inp.files[0];
+        if (!f) return toast(t("pick_file"));
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            busy(t("cover_loading"));
+            const r = await api("/cover/upload", {
+              method: "POST",
+              body: JSON.stringify({ entity_type: entityType, entity_id: Number(entityId),
+                                     filename: f.name, data: reader.result }),
+            });
+            unbusy();
+            apply(r.path);
+          } catch (err) {
+            unbusy();
+            toast(`${t("error_prefix")}: ${err.message}`);
+          }
+        };
+        reader.readAsDataURL(f);
+        return;
+      }
+      if (act === "fetch") {
+        const url = (root.querySelector("#cpUrl") || {}).value || "";
+        if (!url) return toast(t("cover_url_hint"));
+        try {
+          busy(t("cover_loading"));
+          const r = await api("/cover/fetch", {
+            method: "POST",
+            body: JSON.stringify({ entity_type: entityType, entity_id: Number(entityId), url }),
+          });
+          unbusy();
+          apply(r.path);
+        } catch (err) {
+          unbusy();
+          toast(`${t("error_prefix")}: ${err.message}`);
+        }
+      }
+    });
+    renderBody();
   }
 
   function busyJob(title) {
@@ -589,6 +759,9 @@
                    ${(it.covers || []).map((c) => `<option value="${c}" ${c === it.cover_path ? "selected" : ""}>${c.split("/").pop()}</option>`).join("")}
                  </select>
                </label>
+               <button class="btn secondary" data-act="cover-pick"
+                       data-et="${it.entity_type}" data-eid="${it.entity_id}"
+                       data-video="${(it.video_path || "").replace(/"/g, "&quot;")}">${t("cover_pick")}</button>
              </div>
              <div class="form-row">
                <label class="meta">${t("edit_date")} <input id="qe-date" type="date" value="${it.date || ""}"/></label>
@@ -1144,6 +1317,17 @@
       if (act === "queue-edit-cancel") {
         state.queueEdit = null;
         return render();
+      }
+      if (act === "cover-pick") {
+        const sel = document.getElementById("qe-cover");
+        if (!sel) return;
+        openCoverPicker({
+          select: sel,
+          startPath: el.dataset.video || "",
+          entityType: el.dataset.et || "",
+          entityId: el.dataset.eid || "",
+        });
+        return;
       }
       if (act === "queue-edit-save") {
         const val = (id) => {

@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "58"
+WEBAPP_BUILD = "59"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -424,6 +424,12 @@ class WebAppAPI:
                     eid = 0
                 if etype not in ("long_video", "short") or not eid:
                     return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                if not self.db.fetchone(
+                        "SELECT 1 FROM entity_platform_status WHERE entity_type=? AND entity_id=? "
+                        "LIMIT 1", (etype, eid)):
+                    logger.info("queue remove: %s#%s уже удалено", etype, eid)
+                    return 200, {"ok": True, "removed": 0, "blocked": [],
+                                 "note": "already"}, "application/json"
                 postiz = self.comps.get("postiz")
 
                 def _kill_posts(*targets: tuple[str, int]) -> None:
@@ -516,6 +522,8 @@ class WebAppAPI:
                         self.db.execute("DELETE FROM shorts WHERE id=?", (eid,))
                         self.db.log("short", eid, "", "queue_delete", "hard")
                         removed += 1
+                logger.info("queue remove: %s#%s removed=%s blocked=%s",
+                            etype, eid, removed, blocked)
                 return 200, {"ok": True, "removed": removed, "blocked": blocked}, \
                     "application/json"
             if method == "POST" and route == "scheduling_mode":

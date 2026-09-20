@@ -13,6 +13,9 @@
       cover_tab_url: "По ссылке", cover_choose: "Выбрать", cover_close: "Закрыть",
       cover_no_images: "Картинок нет", cover_up: "↑ Вверх", cover_loading: "Загрузка…",
       cover_added: "Обложка выбрана", cover_upload: "Загрузить с устройства",
+      request_timeout: "Сервер не ответил (таймаут). Проверь связь и повтори.",
+      cant_delete_published: "Нельзя удалить: уже опубликовано",
+      already_removed: "Уже удалено ранее", retrying: "Повторяю…",
       cover_fetch: "Скачать", cover_url_hint: "Вставьте ссылку на картинку (http/https)",
       cover_dirs: "Папки", cover_images: "Картинки", cover_start_hint: "Начало: папка видео",
       pick_file: "Файл не выбран",
@@ -147,6 +150,9 @@
       cover_tab_url: "From URL", cover_choose: "Choose", cover_close: "Close",
       cover_no_images: "No images", cover_up: "↑ Up", cover_loading: "Loading…",
       cover_added: "Cover selected", cover_upload: "Upload from device",
+      request_timeout: "Server did not respond (timeout). Check connection and retry.",
+      cant_delete_published: "Cannot delete: already published",
+      already_removed: "Already removed", retrying: "Retrying…",
       cover_fetch: "Download", cover_url_hint: "Paste an image URL (http/https)",
       cover_dirs: "Folders", cover_images: "Images", cover_start_hint: "Starts at the video folder",
       pick_file: "No file selected",
@@ -306,11 +312,23 @@
       ...(state.key ? { "X-Webapp-Key": state.key } : {}),
       ...(opts.headers || {}),
     };
-    return fetch(`/webapp/api${path}`, { ...opts, headers }).then(async (r) => {
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || r.statusText || "error");
-      return data;
-    });
+    const timeoutMs = opts.timeoutMs
+      || ((opts.method && opts.method !== "GET") ? 45000 : 25000);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const rest = { ...opts };
+    delete rest.timeoutMs;
+    return fetch(`/webapp/api${path}`, { ...rest, headers, signal: ctrl.signal })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText || "error");
+        return data;
+      })
+      .catch((e) => {
+        if (e && e.name === "AbortError") throw new Error(t("request_timeout"));
+        throw e;
+      })
+      .finally(() => clearTimeout(timer));
   }
 
   let _jobTimer = null;
@@ -1374,14 +1392,27 @@
           if (!ok) return;
         }
         busy(t("working"));
-        const r = await api("/queue/remove", {
-          method: "POST",
-          body: JSON.stringify({
-            entity_type: el.dataset.et,
-            entity_id: Number(el.dataset.eid),
-          }),
-        }).finally(() => unbusy());
-        toast(`${t("queue_removed")}: ${r.removed || 0}`);
+        const payload = JSON.stringify({
+          entity_type: el.dataset.et,
+          entity_id: Number(el.dataset.eid),
+        });
+        let r = null;
+        try {
+          r = await api("/queue/remove", { method: "POST", body: payload });
+        } catch (e1) {
+          toast(t("retrying"));
+          try {
+            r = await api("/queue/remove", { method: "POST", body: payload });
+          } catch (e2) {
+            unbusy();
+            toast(`${t("error_prefix")}: ${e2.message}`);
+            return load();
+          }
+        }
+        unbusy();
+        if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
+        else if (!r || !r.removed) toast(t("already_removed"));
+        else toast(`${t("queue_removed")}: ${r.removed}`);
         return load();
       }
       if (act === "toggle-mode") {

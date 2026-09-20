@@ -19,7 +19,7 @@ from .watcher import WATCH_ROOTS_KEY
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "53"
+WEBAPP_BUILD = "54"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -399,6 +399,7 @@ class WebAppAPI:
                 return 200, {"ok": True, "restored": (before or {}).get("c", 0)}, "application/json"
             if method == "POST" and route == "queue/remove":
                 etype = str(data.get("entity_type") or "").strip()
+                keep_shorts = bool(data.get("keep_shorts"))
                 try:
                     eid = int(data.get("entity_id") or 0)
                 except Exception:
@@ -444,6 +445,18 @@ class WebAppAPI:
                             published = True
                     if published:
                         blocked.append(f"long_video#{eid}")
+                    elif keep_shorts:
+                        # удаляем только фильм; шортсы остаются (отвязываем)
+                        _kill_posts("long_video", eid)
+                        self.db.execute(
+                            "DELETE FROM entity_platform_status "
+                            "WHERE entity_type='long_video' AND entity_id=?", (eid,))
+                        self.db.execute(
+                            "UPDATE shorts SET parent_video_id=NULL WHERE parent_video_id=?",
+                            (eid,))
+                        self.db.execute("DELETE FROM long_videos WHERE id=?", (eid,))
+                        self.db.log("long_video", eid, "", "queue_delete", "keep_shorts")
+                        removed += 1
                     else:
                         for sid in shorts_ids:
                             _kill_posts("short", sid)
@@ -979,13 +992,13 @@ class WebAppAPI:
             return (WEBAPP_DIR / "index.html").read_bytes()
         html = re.sub(
             r'<link rel="stylesheet" href="styles\.css\?v=\d+"\s*/?>',
-            f"<style>\n{css}\n</style>",
+            lambda m: f"<style>\n{css}\n</style>",
             html,
         )
         html = re.sub(
             r'<script src="app\.js\?v=\d+"></script>',
-            "<script>window.__WEBAPP_KEY__=" + json.dumps(key) + ";</script>\n"
-            f"<script>\n{js}\n</script>",
+            lambda m: ("<script>window.__WEBAPP_KEY__=" + json.dumps(key) + ";</script>\n"
+                       f"<script>\n{js}\n</script>"),
             html,
         )
         return html.encode("utf-8")

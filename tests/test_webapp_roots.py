@@ -523,3 +523,41 @@ def test_api_queue_has_tg_flag(env, tmp_path):
     )
     code, payload, _ = api.handle("GET", "/webapp/api/queue", headers, b"")
     assert all(i["has_tg"] is True for i in payload["items"])
+
+
+def test_compose_keeps_backslash_n(env):
+    api, db, clock, cfg, watcher = env
+    code, body, _ = api.handle("GET", "/webapp/b/54/", {}, b"")
+    if code != 200:
+        code, body, _ = api.handle("GET", f"/webapp/b/{__import__('orchestrator.webapp_api', fromlist=['WEBAPP_BUILD']).WEBAPP_BUILD}/", {}, b"")
+    assert code == 200
+    assert b'"\\n\\n"' in body  # escape-последовательности не превратились в реальные переводы строк
+
+
+def test_api_queue_remove_film_only_keeps_shorts(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, created_at) "
+        "VALUES ('videomaker', '/fo', 'FO', '2026-01-01T00:00:00+00:00')"
+    )
+    lv = db.fetchone("SELECT id FROM long_videos")
+    db.execute(
+        "INSERT INTO shorts (source, parent_video_id, folder_path, video_path, created_at) "
+        "VALUES ('videomaker', ?, '/fo/shorts/s1', '/fo/shorts/s1/a.mp4', "
+        "'2026-01-01T00:00:00+00:00')",
+        (lv["id"],),
+    )
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_post_id, postiz_scheduled_for) VALUES ('long_video', ?, 'youtube', "
+        "'scheduled', 'p1', '2026-10-20T13:00:00+00:00')",
+        (lv["id"],),
+    )
+    body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"],
+                       "keep_shorts": True}).encode()
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
+    assert code == 200 and payload["removed"] == 1
+    assert db.fetchone("SELECT * FROM long_videos") is None
+    sh = db.fetchone("SELECT parent_video_id FROM shorts")
+    assert sh is not None and sh["parent_video_id"] is None  # шортс остался, отвязан

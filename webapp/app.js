@@ -3,6 +3,8 @@
 
   const I18N = {
     ru: {
+      queue_remove_film_only: "Только фильм",
+      confirm_film_only: "Удалить только фильм? Все его шортсы останутся в базе. Telegram-пост со ссылкой на фильм тоже будет удалён.",
       confirm_delete_short: "Удалить этот ролик и его посты (включая базу)?",
       warn_tg_link: "Внимание: в Telegram стоит пост со ссылкой на этот ролик — он тоже будет удалён, и ссылка не выйдет.",
       edit_cover: "Обложка", cover_none: "Без обложки",
@@ -127,6 +129,8 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      queue_remove_film_only: "Film only",
+      confirm_film_only: "Delete only the film? All its shorts stay in the database. The Telegram post linking to the film will be deleted too.",
       confirm_delete_short: "Delete this video and its posts (including the database)?",
       warn_tg_link: "Note: a Telegram post with a link to this video exists — it will be deleted too and the link will not be published.",
       edit_cover: "Cover", cover_none: "No cover",
@@ -601,6 +605,7 @@
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
          <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove")}</button>
+         ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
          ${statusBtn(it.status)}
          <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
@@ -1111,6 +1116,25 @@
         state.scan = r;
         const s = r.stats || {};
         toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        return load();
+      }
+      if (act === "queue-remove-film-only") {
+        let ask = t("confirm_film_only");
+        if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
+        const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+        let ok = true;
+        if (tgConfirm) {
+          ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
+        } else if (typeof window.confirm === "function") {
+          ok = window.confirm(ask);
+        }
+        if (!ok) return;
+        busy(t("working"));
+        const r = await api("/queue/remove", {
+          method: "POST",
+          body: JSON.stringify({ entity_type: "long_video", entity_id: Number(el.dataset.eid), keep_shorts: true }),
+        }).finally(() => unbusy());
+        toast(`${t("queue_removed")}: ${r.removed || 0}`);
         return load();
       }
       if (act === "queue-edit") {

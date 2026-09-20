@@ -504,6 +504,11 @@
     renderBody();
   }
 
+  function unbusy() {
+    const el = document.getElementById("busy");
+    if (el) el.style.display = "none";
+  }
+
   function busyJob(title) {
     const el = _overlay();
     el.innerHTML = `<div class="busy-box">

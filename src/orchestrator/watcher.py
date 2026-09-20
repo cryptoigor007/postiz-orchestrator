@@ -17,6 +17,13 @@ JUNK_DIR_NAMES = {
     "$RECYCLE.BIN",
     "System Volume Information",
     "__pycache__",
+    # архивы/бэкапы/исходники — не публикуем:
+    "broll_downloads",
+    "BACKUP_PVE",
+    "ютюб",
+    "нотика",
+    "кальянная херь",
+    "записи игоря криптостратегия",
 }
 JUNK_SUBSTR = ("shorts_overflow",)
 META_MARKERS = ("_titles.txt", "_title.txt", "_hashtags.txt", "_hooks.txt")

@@ -306,3 +306,22 @@ def test_short_folder_suffix_files_named_by_video(env):
     assert row["description_text"] == "Описание"
     assert row["hashtags_text"] == "#tag1 #tag2"
     assert row["hook_text"] == "Хук"
+
+
+def test_watcher_skips_archive_dirs(env):
+    """Архивные папки (broll_downloads, ютюб и др.) не должны попадать в базу."""
+    db, cfg, clock, root, series = env
+    arch = root / "broll_downloads" / "ссд" / "тайный кризис человечества"
+    (arch / "vertical").mkdir(parents=True)
+    (arch / "wide").mkdir(parents=True)
+    (arch / "wide" / "final_16x9.mp4").write_bytes(b"fake" * 100)
+    (arch / "vertical" / "final_9x16.mp4").write_bytes(b"fake" * 100)
+    (arch / "info_metadata.txt").write_text("Архив")
+    yt = root / "ютюб" / "шортс" / "ш1 тест"
+    yt.mkdir(parents=True)
+    (yt / "short.mp4").write_bytes(b"short" * 60)
+    w = Watcher(db, cfg, clock, [str(root)])
+    for _ in range(4):
+        w.scan()
+    assert db.fetchone("SELECT COUNT(*) AS c FROM long_videos WHERE folder_path LIKE '%broll_downloads%'")["c"] == 0
+    assert db.fetchone("SELECT COUNT(*) AS c FROM shorts WHERE folder_path LIKE '%ютюб%'")["c"] == 0

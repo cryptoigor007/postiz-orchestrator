@@ -182,15 +182,15 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 @media (max-width: 640px) {
   #app { flex-direction: column; }
   /* ВАЖНО: отступ под вырез/статус-бар iPhone сохраняется (раньше терялся и всё перекрывалось) */
-  .sidebar { width: 100%; padding: calc(10px + env(safe-area-inset-top)) 8px 8px;
+  .sidebar { width: 100%; padding: calc(12px + env(safe-area-inset-top)) 8px 8px;
     border-right: none; border-bottom: 1px solid var(--sep); }
-  .brand { padding: 4px 8px 8px; }
+  .brand { display: none; } /* на телефоне не нужен: контент выше, ничего не перекрывается */
   .nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 0 0 auto; width: 100%; }
   .nav button { padding: 7px 8px; gap: 8px; font-size: 12px; min-height: 36px; min-width: 0; overflow: hidden; }
   .nav button .ico { flex: 0 0 auto; }
   .sidebar-footer { display: none; }
   .content { padding: 6px 14px calc(24px + env(safe-area-inset-bottom)); }
-  .topbar { padding: 10px 14px 4px; } /* safe-area уже учтён выше в .sidebar */
+  .topbar { padding: 10px 56px 4px 14px; } /* справа запас под кнопку закрытия Telegram (fullscreen) */
   .topbar h2 { font-size: 20px; }
   .btn { min-height: 32px; padding: 6px 12px; }
   .row { padding: 10px 14px; }
@@ -386,3 +386,26 @@ html { -webkit-tap-highlight-color: transparent; }
   font-size: 14px; -webkit-appearance: none; }
 .search-input::placeholder { color: var(--text-3, var(--text-2)); }
 .search-list .row { padding: 8px 0; }
+
+
+/* ===== iOS-полировка: модалки, шторка, безопасные зоны ===== */
+.toast { bottom: calc(28px + env(safe-area-inset-bottom)); }
+.busy-box { padding: 16px 22px calc(16px + env(safe-area-inset-bottom)); }
+.busy-overlay { padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom); }
+
+/* Модалка выбора обложки — как iOS-лист: сверху, с «ручкой» и явным крестиком */
+.cover-overlay { align-items: flex-start; justify-content: center;
+  padding: calc(8px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom)); }
+.cover-panel { width: min(700px, 100%); max-height: calc(var(--wa-h, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px);
+  border-radius: 18px; animation: sheetIn 200ms var(--ease-out); }
+@keyframes sheetIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cover-panel { animation: none; } }
+.cover-grab { width: 38px; height: 5px; border-radius: 999px; background: var(--sep);
+  margin: 8px auto 0; flex: 0 0 auto; }
+.cover-head { position: sticky; top: 0; background: var(--card); z-index: 2; padding: 8px 12px 10px; }
+.cover-head strong { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.cover-x { width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--bg); color: var(--text-2); display: inline-flex; align-items: center;
+  justify-content: center; transition: transform 140ms var(--ease-out), background 160ms ease-out; }
+.cover-x:active { transform: scale(0.94); background: var(--sep); }
+.cover-body { padding-top: 4px; }

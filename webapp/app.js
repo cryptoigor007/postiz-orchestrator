@@ -388,9 +388,10 @@
     root.className = "cover-overlay";
     root.innerHTML = `
       <div class="cover-panel">
+        <div class="cover-grab" aria-hidden="true"></div>
         <div class="cover-head">
           <strong>${t("cover_picker_title")}</strong>
-          <button class="btn secondary" data-cp="close">${t("cover_close")}</button>
+          <button class="cover-x" data-cp="close" aria-label="${t("cover_close")}" title="${t("cover_close")}">${icon("x", 20)}</button>
         </div>
         <div class="cover-tabs">
           <button class="btn cp-tab" data-cp="tab" data-tab="server">${t("cover_tab_server")}</button>
@@ -688,6 +689,7 @@
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M14.5 6.5l3 3"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/><path d="M10.5 11v5M13.5 11v5"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14M3 12h18"/></svg>',
   };
   function icon(name, size) {

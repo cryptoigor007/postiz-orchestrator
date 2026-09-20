@@ -1821,11 +1821,25 @@
     const langParam = new URLSearchParams(location.search).get("lang");
     if (langParam && I18N[langParam]) state.lang = langParam;
 
-    // Полный экран + цвет зоны статус-бара iPhone: часы/батарея должны быть видны
+    // Полный экран + цвет зоны статус-бара iPhone: часы/батарея должны быть видны.
+    // В fullscreen Telegram рисует СВОЮ кнопку закрытия в правом верхнем углу —
+    // помечаем body классом tg-fs, чтобы зарезервировать этот угол в вёрстке.
+    function applyFsClass() {
+      try {
+        const fs = !!(tg && (tg.isFullscreen === true
+          || (tg.isFullscreen === undefined && tg.requestFullscreen && window.__fsRequested)));
+        document.body.classList.toggle("tg-fs", fs);
+      } catch (_) {}
+    }
+    window.__fsRequested = false;
     try {
       if (tg) {
         if (tg.expand) tg.expand();
-        if (tg.requestFullscreen) { try { tg.requestFullscreen(); } catch (_) {} }
+        if (tg.requestFullscreen) {
+          try { tg.requestFullscreen(); window.__fsRequested = true; } catch (_) {}
+        }
+        if (tg.onEvent) { try { tg.onEvent("fullscreenChanged", applyFsClass); } catch (_) {} }
+        setTimeout(applyFsClass, 400);
         const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
         const bg = dark ? "#000000" : "#f2f2f7";
         if (tg.setHeaderColor) { try { tg.setHeaderColor(bg); } catch (_) {} }

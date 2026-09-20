@@ -193,7 +193,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .nav button .ico { flex: 0 0 auto; }
   .sidebar-footer { display: none; }
   .content { padding: 6px 14px calc(24px + env(safe-area-inset-bottom)); }
-  .topbar { padding: 10px 56px 4px 14px; } /* справа запас под кнопку закрытия Telegram (fullscreen) */
+  .topbar { padding: 10px 14px 4px; } /* угол резервируется классом tg-fs выше */
   .topbar h2 { font-size: 20px; }
   .btn { min-height: 32px; padding: 6px 12px; }
   .row { padding: 10px 14px; }
@@ -374,9 +374,12 @@ html { -webkit-tap-highlight-color: transparent; }
 
 .q-status .status-btn { min-height: 0; padding: 2px 8px; font-size: 11px; opacity: 0.92; }
 
-/* Мягкий градиент сверху (не бросается в глаза) */
-.topbar { background: linear-gradient(180deg, rgba(10, 132, 255, 0.07), rgba(10, 132, 255, 0)); }
-.panel-header { background: linear-gradient(180deg, rgba(10, 132, 255, 0.05), rgba(10, 132, 255, 0)); }
+/* Мягкий градиент только у верхней полосы (меньше визуального шума) */
+.topbar { background: linear-gradient(180deg, rgba(10, 132, 255, 0.06), rgba(10, 132, 255, 0)); }
+
+/* Fullscreen Telegram: резервируем правый верхний угол под его кнопку закрытия */
+body.tg-fs .sidebar { padding-top: calc(52px + env(safe-area-inset-top)); }
+body.tg-fs .cover-overlay { padding-top: calc(52px + env(safe-area-inset-top)); }
 
 @media (prefers-reduced-motion: reduce) {
   .chip, .q-check, .icon-btn { transition: none; }

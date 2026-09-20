@@ -345,3 +345,40 @@ def test_remove_youtube_asks_about_scheduled_telegram(env):
     row = db.fetchone("SELECT status FROM entity_platform_status "
                       "WHERE entity_type='short' AND entity_id=? AND platform='telegram'", (sid,))
     assert row["status"] == "scheduled"
+
+
+def test_remove_youtube_platform_deletes_postiz_and_reports_shorts(env):
+    """Удаление YouTube-строки: пост уходит из Postiz; по фильму сообщаем про шортсы серии."""
+    import json as _json
+
+    from orchestrator.postiz import MockPostizClient
+
+    api, db, clock, cfg = env
+    mock = MockPostizClient()
+    api.comps["postiz"] = mock
+    headers = {"X-Telegram-Init-Data": "dev"}
+    now = clock.now().isoformat()
+    db.execute("INSERT INTO long_videos (source, folder_path, title, created_at) "
+               "VALUES ('videomaker', '/film', 'F', ?)", (now,))
+    fid = db.fetchone("SELECT id FROM long_videos ORDER BY id DESC")["id"]
+    db.execute("INSERT INTO shorts (source, parent_video_id, folder_path, title_text, created_at) "
+               "VALUES ('videomaker', ?, '/film/shorts/s1', 'S1', ?)", (fid, now))
+    sid = db.fetchone("SELECT id FROM shorts ORDER BY id DESC")["id"]
+    # пост в Postiz + строка
+    post = mock.create_post("youtube", None, {"title": "F", "description": "d"}, None)
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, postiz_post_id) "
+               "VALUES ('long_video', ?, 'youtube', 'scheduled', ?)", (fid, post.id))
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('short', ?, 'youtube', 'scheduled')", (sid,))
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers,
+                                  _json.dumps({"entity_type": "long_video", "entity_id": fid,
+                                               "platform": "youtube"}).encode())
+    assert payload["removed"] == 1
+    assert post.id not in mock.posts, "пост должен быть удалён из Postiz"
+    assert payload["dependents"].get("shorts") == 1
+    # «Удалить везде» сносит фильм и шортсы
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers,
+                                  _json.dumps({"entity_type": "long_video", "entity_id": fid}).encode())
+    assert payload["removed"] >= 2
+    assert db.fetchone("SELECT id FROM long_videos WHERE id=?", (fid,)) is None
+    assert db.fetchone("SELECT id FROM shorts WHERE id=?", (sid,)) is None

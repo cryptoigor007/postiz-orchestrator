@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "73"
+WEBAPP_BUILD = "74"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -489,10 +489,21 @@ class WebAppAPI:
                                 cascade.append("telegram")
                             elif st in ("scheduled", "updating"):
                                 dependent.append("telegram")  # спросим пользователя
+                    dependents = {}
+                    if etype == "long_video" and platform == "youtube":
+                        cnt = self.db.fetchone(
+                            "SELECT COUNT(DISTINCT s.id) AS c FROM shorts s "
+                            "JOIN entity_platform_status e ON e.entity_type='short' "
+                            "  AND e.entity_id=s.id "
+                            "WHERE s.parent_video_id=? AND e.status IN "
+                            "  ('ready','scheduled','updating')", (eid,))
+                        if cnt and cnt["c"]:
+                            dependents["shorts"] = cnt["c"]
                     logger.info("queue remove: %s#%s %s -> removed=1 (только платформа, soft)"
                                 " cascade=%s dependent=%s", etype, eid, platform, cascade, dependent)
                     return 200, {"ok": True, "removed": 1, "blocked": [],
-                                 "cascade": cascade, "dependent": dependent}, "application/json"
+                                 "cascade": cascade, "dependent": dependent,
+                                 "dependents": dependents}, "application/json"
                 postiz = self.comps.get("postiz")
 
                 def _kill_posts(*targets: tuple) -> None:

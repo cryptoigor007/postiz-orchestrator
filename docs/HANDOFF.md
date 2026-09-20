@@ -9,6 +9,8 @@
 
 ## 0. Первые 5 минут (bootstrap новой сессии)
 
+> Работать строго по протоколу `AGENTS.md` (репро → правка → check.sh → gui_check.sh → deploy → проверка).
+
 ```bash
 cd /Users/dreamstore/Downloads/orchestrator
 git pull && ./scripts/check.sh                      # 151 тест, линт

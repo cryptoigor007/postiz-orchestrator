@@ -504,3 +504,22 @@ def test_api_queue_cover_candidates(env, tmp_path):
     assert code == 200
     row = db.fetchone("SELECT cover_path FROM shorts")
     assert row["cover_path"].endswith("short_001_cover.jpg")
+
+
+def test_api_queue_has_tg_flag(env, tmp_path):
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', 1, 'youtube', 'scheduled', "
+        "'2026-09-22T13:00:00+00:00')"
+    )
+    code, payload, _ = api.handle("GET", "/webapp/api/queue", headers, b"")
+    assert payload["items"][0]["has_tg"] is False
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_scheduled_for) VALUES ('long_video', 1, 'telegram', 'scheduled', "
+        "'2026-09-22T13:15:00+00:00')"
+    )
+    code, payload, _ = api.handle("GET", "/webapp/api/queue", headers, b"")
+    assert all(i["has_tg"] is True for i in payload["items"])

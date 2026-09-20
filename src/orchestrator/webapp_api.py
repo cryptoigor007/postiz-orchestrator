@@ -1111,7 +1111,11 @@ class WebAppAPI:
                    COALESCE(lv.description_text, sh.description_text) AS description_text,
                    COALESCE(lv.hashtags_text, sh.hashtags_text) AS hashtags_text,
                    COALESCE(lv.cover_path, sh.cover_path) AS cover_path,
-                   COALESCE(lv.vertical_path, lv.wide_path, sh.video_path) AS video_path
+                   COALESCE(lv.vertical_path, lv.wide_path, sh.video_path) AS video_path,
+                   EXISTS (SELECT 1 FROM entity_platform_status t
+                           WHERE t.entity_type = eps.entity_type
+                             AND t.entity_id = eps.entity_id
+                             AND t.platform = 'telegram') AS has_tg
             FROM entity_platform_status eps
             LEFT JOIN long_videos lv
                    ON eps.entity_type='long_video' AND lv.id = eps.entity_id
@@ -1140,6 +1144,7 @@ class WebAppAPI:
                 "hashtags_text": r.get("hashtags_text") or "",
                 "cover_path": r.get("cover_path") or "",
                 "covers": self._cover_candidates(r.get("video_path") or ""),
+                "has_tg": bool(r.get("has_tg")),
             })
         return {"items": items}
 

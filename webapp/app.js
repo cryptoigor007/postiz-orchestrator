@@ -3,6 +3,8 @@
 
   const I18N = {
     ru: {
+      confirm_delete_short: "Удалить этот ролик и его посты (включая базу)?",
+      warn_tg_link: "Внимание: в Telegram стоит пост со ссылкой на этот ролик — он тоже будет удалён, и ссылка не выйдет.",
       edit_cover: "Обложка", cover_none: "Без обложки",
       cancel: "Отменить", left: "осталось", sec_short: "с", min_short: "мин",
       job_scheduling: "Планирование публикаций", job_restore: "Возврат удалённого",
@@ -125,6 +127,8 @@
       help_st_paused: "Платформа на паузе.",
       },
     en: {
+      confirm_delete_short: "Delete this video and its posts (including the database)?",
+      warn_tg_link: "Note: a Telegram post with a link to this video exists — it will be deleted too and the link will not be published.",
       edit_cover: "Cover", cover_none: "No cover",
       cancel: "Cancel", left: "left", sec_short: "s", min_short: "min",
       job_scheduling: "Scheduling posts", job_restore: "Restoring removed",
@@ -596,7 +600,7 @@
        <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">
-         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}">${t("queue_remove")}</button>
+         <button class="btn secondary" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-film="${it.entity_type === "long_video" ? "1" : "0"}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove")}</button>
          ${statusBtn(it.status)}
          <button class="btn secondary" data-act="queue-edit" data-key="${key}">${t("queue_edit")}</button>
        </div>
@@ -1143,8 +1147,10 @@
         return load();
       }
       if (act === "queue-remove") {
-        if (el.dataset.film === "1") {
-          const ask = t("confirm_delete_film");
+        {
+          const isFilm = el.dataset.film === "1";
+          let ask = isFilm ? t("confirm_delete_film") : t("confirm_delete_short");
+          if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
           const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
           let ok = true;
           if (tgConfirm) {

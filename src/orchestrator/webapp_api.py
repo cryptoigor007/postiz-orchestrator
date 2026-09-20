@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "60"
+WEBAPP_BUILD = "61"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -646,6 +646,73 @@ class WebAppAPI:
                     "dirs": dirs, "images": images[:400], "warning": warning,
                 }, "application/json"
 
+            if method == "POST" and route == "cover/frames":
+                etype = str(data.get("entity_type") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid:
+                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
+                if etype == "short":
+                    row = self.db.fetchone(
+                        "SELECT video_path FROM shorts WHERE id=?", (eid,))
+                else:
+                    row = self.db.fetchone(
+                        "SELECT COALESCE(vertical_path, wide_path) AS video_path "
+                        "FROM long_videos WHERE id=?", (eid,))
+                video = (row or {}).get("video_path") if row else None
+                if not video or not Path(str(video)).is_file():
+                    return 400, {"error": "video file not found"}, "application/json"
+                import shutil as _shutil
+                import subprocess as _sp
+                if not _shutil.which("ffmpeg") or not _shutil.which("ffprobe"):
+                    return 500, {"error": "ffmpeg/ffprobe not installed"}, "application/json"
+                try:
+                    dur_out = _sp.run(
+                        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                         "-of", "default=nw=1:nk=1", str(video)],
+                        capture_output=True, text=True, timeout=60)
+                    duration = float((dur_out.stdout or "0").strip() or 0)
+                except Exception:
+                    duration = 0.0
+                if duration <= 1:
+                    return 400, {"error": "cannot read video duration"}, "application/json"
+                try:
+                    count = max(2, min(12, int(data.get("count") or 6)))
+                except Exception:
+                    count = 6
+                covers = self._covers_dir()
+                if covers is None:
+                    return 500, {"error": "cannot create covers dir"}, "application/json"
+                stamp = time.strftime("%Y%m%d-%H%M%S")
+                outdir = covers / f"{etype}_{eid}_frames_{stamp}"
+                try:
+                    outdir.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    return 500, {"error": f"cannot create frames dir: {e}"}, "application/json"
+                frames: list[dict] = []
+                # кадры по всей длине, кроме самых краёв (там часто чёрное/титры)
+                for i in range(count):
+                    frac = 0.12 + (0.80 - 0.12) * (i / max(1, count - 1))
+                    ts = max(0.5, duration * frac)
+                    dst = outdir / f"frame_{i + 1:02d}.jpg"
+                    try:
+                        _sp.run(
+                            ["ffmpeg", "-v", "error", "-ss", f"{ts:.2f}", "-i", str(video),
+                             "-frames:v", "1", "-q:v", "3",
+                             "-vf", "scale='min(1920,iw)':-2", "-y", str(dst)],
+                            capture_output=True, timeout=120)
+                    except Exception:
+                        continue
+                    if dst.is_file() and dst.stat().st_size > 200:
+                        frames.append({"name": dst.name, "path": str(dst),
+                                       "at": round(ts, 1)})
+                if not frames:
+                    return 500, {"error": "no frames extracted"}, "application/json"
+                return 200, {"ok": True, "dir": str(outdir), "frames": frames,
+                             "duration": round(duration, 1)}, "application/json"
+
             if method == "POST" and route in ("cover/upload", "cover/fetch"):
                 etype = str(data.get("entity_type") or "").strip()
                 try:
@@ -694,16 +761,7 @@ class WebAppAPI:
                     return 413, {"error": "image too large (>25MB)"}, "application/json"
                 if not _is_image_bytes(blob):
                     return 400, {"error": "not an image"}, "application/json"
-                covers = None
-                for cand in (Path("/mnt/video/.covers"),
-                             Path("/mnt/video/ssd_backup/.covers")):
-                    try:
-                        cand.mkdir(parents=True, exist_ok=True)
-                        if os.access(cand, os.W_OK):
-                            covers = cand
-                            break
-                    except OSError:
-                        continue
+                covers = self._covers_dir()
                 if covers is None:
                     return 500, {"error": "cannot create covers dir"}, "application/json"
                 stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -1122,6 +1180,20 @@ class WebAppAPI:
                 tg.broadcast(self._schedule_summary(before))
         except Exception:
             logger.warning("schedule summary send failed", exc_info=True)
+
+    def _covers_dir(self) -> Path | None:
+        """Папка для файлов обложек (по умолчанию /mnt/video/.covers)."""
+        env_root = os.getenv("ORCH_COVERS_DIR", "").strip()
+        cands = [Path(env_root)] if env_root else []
+        cands += [Path("/mnt/video/.covers"), Path("/mnt/video/ssd_backup/.covers")]
+        for cand in cands:
+            try:
+                cand.mkdir(parents=True, exist_ok=True)
+                if os.access(cand, os.W_OK):
+                    return cand
+            except OSError:
+                continue
+        return None
 
     def _cover_candidates(self, video_path: str) -> list[str]:
         """Картинки-обложки рядом с видео (в папке и на уровень выше)."""

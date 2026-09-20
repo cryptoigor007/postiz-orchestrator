@@ -163,3 +163,35 @@ def test_cover_list_and_thumb_under_roots(env, tmp_path, monkeypatch):
     code, blob, ctype = api.handle(
         "GET", f"/webapp/api/cover/thumb?path={img}", headers, b"")
     assert code == 200 and ctype == "image/png" and blob.startswith(b"\x89PNG")
+
+
+def test_cover_frames_from_video(env, tmp_path, monkeypatch):
+    """Кадры из видео: ffmpeg вырезает кадры, API отдаёт список."""
+    import json as _json
+    import shutil
+    import subprocess
+
+    if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+        import pytest
+        pytest.skip("ffmpeg not installed")
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    video = tmp_path / "clip.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=10",
+         "-pix_fmt", "yuv420p", "-y", str(video)],
+        check=True, capture_output=True)
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, video_path, title_text, created_at) "
+        "VALUES ('videomaker', ?, ?, 't', ?)",
+        (str(tmp_path), str(video), clock.now().isoformat()))
+    sid = db.fetchone("SELECT id FROM shorts ORDER BY id DESC")["id"]
+    monkeypatch.setenv("WEBAPP_BROWSE_ROOT", str(tmp_path))
+    monkeypatch.setenv("ORCH_COVERS_DIR", str(tmp_path / "covers"))
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/cover/frames", headers,
+        _json.dumps({"entity_type": "short", "entity_id": sid, "count": 3}).encode())
+    assert code == 200, payload
+    assert len(payload["frames"]) == 3
+    assert all(p.startswith(str(tmp_path / "covers")) for p in
+               (f["path"] for f in payload["frames"]))

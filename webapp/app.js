@@ -11,6 +11,8 @@
       cover_pick: "Выбрать обложку…", cover_picker_title: "Выбор обложки",
       cover_tab_server: "Папки на сервере", cover_tab_device: "С устройства",
       cover_tab_url: "По ссылке", cover_choose: "Выбрать", cover_close: "Закрыть",
+      cover_tab_frames: "Из видео", cover_frames_hint: "Кадры из видео — выбери понравившийся",
+      cover_frames_regen: "Сгенерировать заново", cover_frames_btn: "Сделать кадры из видео",
       cover_no_images: "Картинок нет", cover_up: "↑ Вверх", cover_loading: "Загрузка…",
       cover_added: "Обложка выбрана", cover_upload: "Загрузить с устройства",
       request_timeout: "Сервер не ответил (таймаут). Проверь связь и повтори.",
@@ -148,6 +150,8 @@
       cover_pick: "Choose cover…", cover_picker_title: "Choose cover",
       cover_tab_server: "Server folders", cover_tab_device: "From device",
       cover_tab_url: "From URL", cover_choose: "Choose", cover_close: "Close",
+      cover_tab_frames: "From video", cover_frames_hint: "Video frames — pick the one you like",
+      cover_frames_regen: "Regenerate", cover_frames_btn: "Extract frames from video",
       cover_no_images: "No images", cover_up: "↑ Up", cover_loading: "Loading…",
       cover_added: "Cover selected", cover_upload: "Upload from device",
       request_timeout: "Server did not respond (timeout). Check connection and retry.",
@@ -372,6 +376,7 @@
           <button class="btn cp-tab" data-cp="tab" data-tab="server">${t("cover_tab_server")}</button>
           <button class="btn cp-tab" data-cp="tab" data-tab="device">${t("cover_tab_device")}</button>
           <button class="btn cp-tab" data-cp="tab" data-tab="url">${t("cover_tab_url")}</button>
+          <button class="btn cp-tab" data-cp="tab" data-tab="frames">${t("cover_tab_frames")}</button>
         </div>
         <div class="cover-body" id="cpBody"></div>
       </div>`;
@@ -446,10 +451,35 @@
         <div class="form-row"><span class="meta">${t("cover_url_hint")}</span></div>
         <button class="btn primary" data-cp="fetch">${t("cover_fetch")}</button>`;
     }
+    async function renderFrames() {
+      const body = root.querySelector("#cpBody");
+      body.innerHTML = `<div class="empty">${t("cover_loading")}</div>`;
+      try {
+        const d = await api("/cover/frames", {
+          method: "POST",
+          body: JSON.stringify({ entity_type: entityType,
+                                 entity_id: Number(entityId), count: 6 }),
+        });
+        const key = encodeURIComponent(state.key || "");
+        const imgs = (d.frames || []).map((x) => `
+          <button class="cp-thumb" data-cp="pick"
+                  data-path="${x.path.replace(/"/g, "&quot;")}" title="${x.name} · ${x.at} с">
+            <img loading="lazy" src="/webapp/api/cover/thumb?key=${key}&path=${encodeURIComponent(x.path)}" alt=""/>
+            <span>${x.at} с</span>
+          </button>`).join("");
+        body.innerHTML = `
+          <div class="cp-sec">${t("cover_frames_hint")}${d.duration ? " (" + d.duration + " с)" : ""}</div>
+          <div class="cp-grid">${imgs || `<span class="meta">${t("cover_no_images")}</span>`}</div>
+          <div class="form-row"><button class="btn secondary" data-cp="frames">${t("cover_frames_regen")}</button></div>`;
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${t("error_prefix")}: ${e.message}</div>`;
+      }
+    }
     function renderBody() {
       renderTabs();
       if (tab === "server") loadServer(curPath);
       else if (tab === "device") renderDevice();
+      else if (tab === "frames") renderFrames();
       else renderUrl();
     }
 
@@ -459,6 +489,7 @@
       const act = el.dataset.cp;
       if (act === "close") return close();
       if (act === "tab") { tab = el.dataset.tab; return renderBody(); }
+      if (act === "frames") return renderFrames();
       if (act === "dir") return loadServer(el.dataset.path);
       if (act === "pick") return apply(el.dataset.path);
       if (act === "upload") {

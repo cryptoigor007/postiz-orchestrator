@@ -66,6 +66,9 @@ const fixtures = {
   metrics: {},
   "manual/plan": { total: 0, by_status: {}, by_platform: {}, platforms: [], last_scan: null },
   "manual/uploads": { items: [] },
+  "cover/frames": { ok: true, duration: 40.0,
+    frames: [{ name: "frame_01.jpg", path: "/mnt/video/.covers/f1.jpg", at: 4.8 },
+             { name: "frame_02.jpg", path: "/mnt/video/.covers/f2.jpg", at: 12.0 }] },
   "cover/list": { path: "/mnt/video", parent: null, roots: ["/mnt/video"],
     dirs: [{ name: "sub", path: "/mnt/video/sub" }],
     images: [{ name: "c.jpg", path: "/mnt/video/c.jpg", size: 10 }], warning: "" },
@@ -152,8 +155,16 @@ if (pickBtn) {
   if (picker && picker.querySelectorAll(".cp-thumb").length >= 1) ok("выбор обложки: окно и картинки есть");
   else fail("выбор обложки не открылся/нет картинок");
   const tabs = picker ? picker.querySelectorAll(".cp-tab").length : 0;
-  if (tabs === 3) ok("выбор обложки: 3 источника (сервер/устройство/ссылка)");
-  else fail(`выбор обложки: вкладок ${tabs}, ожидалось 3`);
+  if (tabs >= 4) ok("выбор обложки: 4 источника (сервер/устройство/ссылка/кадры)");
+  else fail(`выбор обложки: вкладок ${tabs}, ожидалось 4`);
+  const framesTab = picker && picker.querySelector('[data-tab="frames"]');
+  if (framesTab) {
+    framesTab.click();
+    await wait(200);
+    const thumbs = picker.querySelectorAll(".cp-thumb").length;
+    if (thumbs >= 1) ok("выбор обложки: кадры из видео показываются");
+    else fail("вкладка «Из видео» не показала кадры");
+  } else fail("нет вкладки «Из видео»");
   if (picker && picker.querySelector('[data-cp="close"]')) picker.querySelector('[data-cp="close"]').click();
   await wait(50);
   if (!doc.getElementById("coverPicker")) ok("выбор обложки: окно закрывается");

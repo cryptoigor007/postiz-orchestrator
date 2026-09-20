@@ -119,7 +119,7 @@ def main() -> int:
             problems.append(f"опасный юнит активен: {unit} (сетевой шторм)")
     try:
         rg = subprocess.run(
-            ["pgrep", "-f", "pve-wifi-route-watchdog|route-guard.sh|network-failover"],
+            ["pgrep", "-f", r"/usr/local/sbin/(pve-wifi-route-watchdog|route-guard|network-failover)"],
             capture_output=True, text=True, timeout=10)
         if rg.returncode == 0:
             problems.append("опасный сетевой скрипт запущен вручную (война маршрутов)")

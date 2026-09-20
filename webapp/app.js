@@ -386,6 +386,9 @@
     const root = document.createElement("div");
     root.id = "coverPicker";
     root.className = "cover-overlay";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
+    root.setAttribute("aria-label", t("cover_picker_title"));
     root.innerHTML = `
       <div class="cover-panel">
         <div class="cover-grab" aria-hidden="true"></div>
@@ -553,7 +556,12 @@
         }
       }
     });
+    document.addEventListener("keydown", function _esc(ev) {
+      if (ev.key === "Escape") { close(); document.removeEventListener("keydown", _esc); }
+    });
     renderBody();
+    const x = root.querySelector('[data-cp="close"]');
+    if (x) x.focus();
   }
 
   function unbusy() {

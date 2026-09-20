@@ -773,7 +773,11 @@
              </div>
            </div>`
         : "";
-      return `<div class="row"><div class="title q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+      const cover = it.cover_path
+        ? `<img class="q-cover" loading="lazy" alt=""
+             src="/webapp/api/cover/thumb?key=${encodeURIComponent(state.key || "")}&path=${encodeURIComponent(it.cover_path)}"/>`
+        : `<span class="q-cover q-cover-none" title="${t("cover_none")}"></span>`;
+      return `<div class="row">${cover}<div class="title q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
        <span class="mono meta q-time"><span class="q-date">${it.date || ""}</span><span class="q-clock">${it.time || ""}</span></span>
        <span class="meta q-plat">${pIcon(it.platform)}</span>
        <div class="queue-col">

@@ -34,7 +34,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "56"
+WEBAPP_BUILD = "57"
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:

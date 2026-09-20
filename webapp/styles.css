@@ -300,3 +300,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .cover-body input[type="file"] { width: 100%; }
 .cover-body input[type="url"] { box-sizing: border-box; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--sep); background: var(--bg); color: var(--text); }
+
+/* Миниатюра обложки в списке очереди */
+.q-cover { width: 36px; height: 48px; object-fit: cover; border-radius: 6px;
+  background: var(--sep); flex: 0 0 auto; margin-right: 8px; }
+span.q-cover-none { display: inline-block; border: 1px dashed var(--sep); opacity: .5; }

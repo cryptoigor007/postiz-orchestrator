@@ -225,3 +225,40 @@ def test_direct_youtube_delete_does_not_lie():
     eng = YouTubeEngine(token_provider=lambda: "t", http=BadHttp())
     with _pytest.raises(RuntimeError):
         eng.delete("vid123")
+
+
+def test_rate_limit_bucket_uses_validated_uid(tmp_path, monkeypatch):
+    """R2/R5: bucket по uid из HMAC-валидированного initData (разные подписи = один bucket)."""
+    import hashlib
+    import hmac
+    import json
+    import time
+    from urllib.parse import urlencode
+
+    from orchestrator.webapp_api import WebAppAPI
+
+    e = make(tmp_path)
+    api = WebAppAPI(e)
+    token = "123:TEST"
+    api.token = token
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("WEBAPP_RATE_LIMIT", "2")
+    monkeypatch.delenv("WEBAPP_ACCESS_KEY", raising=False)
+    uid = (e["cfg"].telegram.allowed_chat_ids or [42])[0]
+
+    def signed(ts: int) -> str:
+        user = json.dumps({"id": uid, "first_name": "U"}, separators=(",", ":"))
+        fields = {"auth_date": str(ts), "user": user}
+        check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+        secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+        fields["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+        return urlencode(fields)
+
+    now = int(time.time())
+    h1, h2 = signed(now), signed(now - 5)
+    assert api._auth({"X-Telegram-Init-Data": h1}) is not None
+    assert api._rate_limited({}, api._auth({"X-Telegram-Init-Data": h1})) is False
+    assert api._rate_limited({}, api._auth({"X-Telegram-Init-Data": h2})) is False  # тот же uid
+    assert api._rate_limited({}, api._auth({"X-Telegram-Init-Data": h1})) is True   # лимит 2/мин
+    # невалидный init → uid нет → отдельный anon-bucket
+    assert api._rate_limited({}, api._auth({"X-Telegram-Init-Data": "bogus=1"})) is False

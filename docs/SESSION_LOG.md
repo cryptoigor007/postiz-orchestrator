@@ -646,3 +646,16 @@
 - Residual (честно): 2 тестовых ролика остались на YouTube (Postiz delete не удаляет с платформы);
   esc() — ручной пасс без линтера; CSP unsafe-inline TODO; 429-путь и метрики проверены юнит-тестами,
   не live; v13 откатывается только вперёд.
+
+## 2026-09-21 — 8.2.2: residual polish (XSS-хвосты, rate-limit uid, docs)
+- R1: 11 остаточных XSS-мест в app.js закрыты полным esc() (d.parent, data-p папок/browse/roots,
+  it.title календаря, data-video, поля поиска, bulk-теги, x.at, pIcon title, day.count); частичные
+  .replace(/"/g) убраны; финальный grep «сырые path/title/url в HTML» — пусто (66 esc). GUI-проверка
+  против боевого сервера — PASS.
+- R2: rate-limit identity — uid только из HMAC-валидированного initData (тот же auth, что у _auth);
+  regex по сырому заголовку удалён; приоритет key → uid → XFF → local. +1 тест (разные подписи
+  одного юзера = один bucket; сырой initData bucket не создаёт).
+- R3/R4: CHANGELOG — ровно один заголовок + секция 8.2.2; README/HANDOFF → 8.2.2/b816/305.
+- R5: CSP TODO переформулирован (nonce/hash в 8.3); helper YT-удаления не делал (ops-инструкция достаточна).
+- Деплой 8.2.2/b816: сервис active, меню-кнопка 816, панель 200, боевые 39/39/4 без изменений, 0 ERROR.
+- Тесты 304 → 305; ruff 0; check.sh PASS.

@@ -47,8 +47,8 @@ def start_http_server(
             else:
                 self.send_header("Cache-Control", "no-store")
             if "html" in (ctype or ""):
-                # TODO(P2.4): 'unsafe-inline' нужен текущему инлайн-скрипту панели;
-                # после выноса в отдельный файл — убрать. Все данные в UI проходят esc().
+                # TODO(8.3): 'unsafe-inline' нужен инлайн-bootstrap панели; план — nonce/hash
+                # при выносе скрипта в отдельный файл. Пока XSS-поверхность закрыта esc() в UI.
                 self.send_header(
                     "Content-Security-Policy",
                     "default-src 'self'; script-src 'self' 'unsafe-inline'; "

@@ -468,7 +468,7 @@
         body.innerHTML = `
           <div class="cp-path mono">${esc(d.path)}</div>
           <div class="cp-row">
-            ${d.parent ? `<button class="btn secondary" data-cp="dir" data-path="${d.parent.replace(/"/g, "&quot;")}">${t("cover_up")}</button>` : ""}
+            ${d.parent ? `<button class="btn secondary" data-cp="dir" data-path="${esc(d.parent)}">${t("cover_up")}</button>` : ""}
             ${d.warning ? `<span class="meta">${esc(d.warning)}</span>` : ""}
           </div>
           <div class="cp-sec">${t("cover_dirs")}</div>
@@ -513,7 +513,7 @@
           <button class="cp-thumb" data-cp="pick"
                   data-path="${esc(x.path)}" title="${esc(x.name)} · ${esc(x.at)} с">
             <img loading="lazy" src="/webapp/api/cover/thumb?key=${key}&path=${encodeURIComponent(x.path)}" alt=""/>
-            <span>${x.at} с</span>
+            <span>${esc(x.at)} с</span>
           </button>`).join("");
         body.innerHTML = `
           <div class="cp-sec">${t("cover_frames_hint")}${d.duration ? " (" + d.duration + " с)" : ""}</div>
@@ -746,7 +746,7 @@
   function pIcon(name) {
     const key = String(name || "").toLowerCase();
     const svg = PLATFORM_ICONS[key] || '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z"/></svg>';
-    return `<span class="pico" title="${name || ""}">${svg}</span>`;
+    return `<span class="pico" title="${esc(name || "")}">${svg}</span>`;
   }
 
   function renderStatus(d) {
@@ -785,7 +785,7 @@
       ? `<div class="form-row">${(b.roots || []).map((r) => {
           const m = metaByPath[r] || { available: true };
           const warn = m.available ? "" : ` ${icon("warn", 14)}`;
-          return `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}"${m.available ? "" : " disabled"}>${r}${warn}</button>`;
+          return `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${esc(r)}"${m.available ? "" : " disabled"}>${esc(r)}${warn}</button>`;
         }).join("")}</div>`
       : "";
     const warnRow = b.warning ? `<div class="row"><span class="meta warn-text">${icon("warn", 14)} ${esc(b.warning)}</span></div>` : "";
@@ -819,11 +819,11 @@
     const searchResults = sq.items === null ? "" : (sq.items.length
       ? `<div class="search-list">${sq.items.map((x) =>
           `<div class="row"><div class="title" style="flex:1;min-width:0;word-break:break-all">${icon("folder", 15)} ${esc(x.name)}<div class="meta mono" style="font-size:11px">${esc(x.path)}</div></div>
-            <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button>
+            <button class="btn secondary" data-act="folder-open" data-p="${esc(x.path)}">${t("open")}</button>
             <button class="btn secondary" data-act="folder-add" data-p="${esc(x.path)}" data-kind="auto">${t("add_auto")}</button></div>`).join("")}</div>`
       : `<div class="empty">${t("search_none")}</div>`);
     const searchBlock = `<div class="q-toolbar" style="padding:8px 0 0">
-        <input id="folder-q" class="search-input" type="search" placeholder="${t("search_placeholder")}" value="${(sq.q || "").replace(/"/g, "&quot;")}"/>
+        <input id="folder-q" class="search-input" type="search" placeholder="${t("search_placeholder")}" value="${esc(sq.q || "")}"/>
         <button class="btn secondary" data-act="folder-search">${t("search")}</button>
       </div>${searchResults}`;
     content().innerHTML = `
@@ -838,7 +838,7 @@
         ${searchBlock}
         ${warnRow}
         <div class="form-row">
-          <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
+          <button class="btn secondary" data-act="folder-up" data-p="${esc(b.parent || "")}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
           <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="series">${t("add_series")}</button>
           <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="shorts">${t("add_shorts")}</button>
           <button class="btn secondary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="auto">${t("add_auto")}</button>
@@ -883,10 +883,10 @@
         const title = it.title || it.platform || "";
         const link = it.url ? ` <a href="${esc(it.url)}" target="_blank" rel="noopener">↗</a>` : "";
         return `<div class="row"><span class="mono">${it.time || ""}</span>
-          <div class="title">${title}${link}</div>
+          <div class="title">${esc(title)}${link}</div>
           <span class="meta q-plat">${pIcon(it.platform)}</span>${pill(it.status)}</div>`;
       }).join("");
-      return `<div class="panel"><div class="panel-header">${day.date} <span class="meta">${day.count || 0}</span></div>${rows}</div>`;
+      return `<div class="panel"><div class="panel-header">${day.date} <span class="meta">${esc(day.count || 0)}</span></div>${rows}</div>`;
     }).join("");
   }
 
@@ -1004,7 +1004,7 @@
 
     const bulkTags = !tgl ? "" : `<div class="bulk-tags">
         <label class="meta">${t("queue_bulk_tagp").replace("%s", selKeys.length)}
-          <input id="qb-tags" type="text" value="${(state.queueBulkTags || "").replace(/"/g, "&quot;")}"/></label>
+          <input id="qb-tags" type="text" value="${esc(state.queueBulkTags || "")}"/></label>
         <div class="form-row">
           <button class="btn primary" data-act="queue-bulk-tags-apply">${t("queue_bulk_apply")}</button>
           <button class="btn secondary" data-act="queue-bulk-tags-cancel">${t("cancel")}</button>
@@ -1046,7 +1046,7 @@
                </label>
                <button class="btn secondary" data-act="cover-pick"
                        data-et="${it.entity_type}" data-eid="${it.entity_id}"
-                       data-video="${(it.video_path || "").replace(/"/g, "&quot;")}">${t("cover_pick")}</button>
+                       data-video="${esc(it.video_path || "")}">${t("cover_pick")}</button>
              </div>
              <div class="form-row">
                <label class="meta">${t("edit_date")} <input id="qe-date" type="date" value="${it.date || ""}"/></label>

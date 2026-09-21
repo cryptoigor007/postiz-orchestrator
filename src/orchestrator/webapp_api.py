@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "815"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "816"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -326,7 +326,8 @@ class WebAppAPI:
         auth = self._auth(headers, query)
         if not auth:
             return 401, {"error": "unauthorized"}, "application/json"
-        if self._rate_limited(headers):
+        # R2: bucket считается по уже валидированному auth (uid после HMAC), не по сырому заголовку
+        if self._rate_limited(headers, auth):
             return 429, {"error": "too many requests"}, "application/json"
 
         route = qpath[len("/webapp/api/") :].strip("/")
@@ -1505,7 +1506,7 @@ class WebAppAPI:
                 cancelled.add(pid)
         return scheduled - cancelled
 
-    def _rate_limited(self, headers: dict[str, str]) -> bool:
+    def _rate_limited(self, headers: dict[str, str], auth: dict[str, Any] | None = None) -> bool:
         try:
             limit = int(os.getenv("WEBAPP_RATE_LIMIT", "120"))
         except ValueError:
@@ -1516,18 +1517,18 @@ class WebAppAPI:
         # S16: use only the first hop (client) — ignore spoofed chain tail
         client_ip = xff.split(",")[0].strip() if xff else ""
         # P1.8: НЕ использовать полный Init-Data (меняется каждый запрос → лимит не работал).
-        # Идентификатор: access-key → user id из initData → первый XFF → anon.
-        _init = headers.get("X-Telegram-Init-Data") or headers.get("x-telegram-init-data") or ""
+        # R2: user id берём ТОЛЬКО из валидированного initData (HMAC), не regex по сырому заголовку.
+        # Приоритет: access-key → валидированный uid → первый XFF → local.
         _uid = ""
-        if _init:
-            import re as _re
-            m = _re.search(r'"id"\s*:\s*(\d+)', _init)
-            _uid = f"tg:{m.group(1)}" if m else ""
+        if auth and not auth.get("access_key"):
+            _u = (auth.get("user") or {}).get("id")
+            if _u:
+                _uid = f"tg:{_u}"
         ident = (
             headers.get("X-Webapp-Key") or headers.get("x-webapp-key")
             or _uid
             or client_ip
-            or client_ip or "local"
+            or "local"
         )
         now = time.monotonic()
         dq = self._rl.setdefault(ident, deque())

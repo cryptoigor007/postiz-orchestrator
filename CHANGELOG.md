@@ -1,5 +1,18 @@
 # Changelog
 
+## 8.2.2 — Residual polish
+
+### Fixed
+- XSS-хвосты в UI (11 мест): `d.parent` в cover-навигации, `data-p` папок/browse/roots,
+  `it.title` в календаре, `data-video`, поля поиска и bulk-теги — всё через `esc()`
+  (всего в app.js 66 вызовов esc; частичных `.replace(/"/g)` больше нет)
+- Rate-limit bucket: user id берётся только из **HMAC-валидированного** initData
+  (раньше — regex по сырому заголовку, подделываемо); при невалидном — key/XFF/anon
+- CSP: зафиксирован TODO с планом nonce/hash в 8.3 (inline bootstrap панели)
+
+### Tests
+- +1 (uid-bucket после валидации; сырой initData bucket не создаёт)
+- version 8.2.2 / WEBAPP_BUILD=816
 ## 8.2.1 — Residual closure (P0/P1/P2)
 
 ### Security

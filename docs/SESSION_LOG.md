@@ -772,3 +772,15 @@
 - Фикс: containment в `_file()` (resolve + путь обязан лежать внутри `WEBAPP_DIR`, ведущие `/` срезаются).
   Регресс-тест на абсолютный путь, `..` и легитимный `styles.css`.
 - 324 теста, check.sh PASS, деплой b825, проверка на проде: `/etc/host.conf` → 404, `styles.css` → 200.
+
+## 2026-09-21 — 8.4.6: P1 backend-пакет по итогам аудита
+- **P1-1** `publisher._release_reserve()`: резерв `publishing` снимается на всех early-return
+  (safety-block/пауза/guard/read-only/hourly). Репро: `pause_platform` → publish → статус навсегда
+  `publishing`, `_already_exists` возвращал `__publishing__`; теперь `ready` и публикация проходит.
+- **P1-2** `--read-only` выставляет `ORCH_READ_ONLY=1` (раньше флаг только логировался).
+- **P1-7** long-слоты: `if slot <= now: continue` — `start_date` из прошлого больше не даёт постов «в прошлом».
+- **P1-8** `create_postiz_client(dry_run=False)` без токена — `RuntimeError` (не тихий Mock).
+- **P1-4** `StatusSync`: include `error`+pid, сброс `missing_in_postiz:N` на успешном `get_post`,
+  восстановление `error`→`scheduled`.
+- +4 теста (328): `test_safety_block_releases_publishing_reserve`,
+  `test_start_date_in_past_no_past_slots`, `tests/test_status_sync_recovery.py` (2), fix фабрики.

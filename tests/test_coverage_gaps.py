@@ -109,8 +109,11 @@ def test_postiz_http_list_scheduled_parses_and_filters():
 def test_postiz_factory_real_and_mock(monkeypatch):
     monkeypatch.setenv("POSTIZ_API_TOKEN", "x")
     assert isinstance(create_postiz_client(dry_run=False), HttpPostizClient)
+    assert isinstance(create_postiz_client(dry_run=True), MockPostizClient)
     monkeypatch.delenv("POSTIZ_API_TOKEN")
-    assert isinstance(create_postiz_client(dry_run=False), MockPostizClient)
+    # P1-8: без токена вне dry-run — fail-fast, а не тихая подмена моком
+    with pytest.raises(RuntimeError):
+        create_postiz_client(dry_run=False)
 
 
 # ---------- main ----------

@@ -63,6 +63,32 @@ def test_safety_blocks(setup):
     assert p is None
 
 
+def test_safety_block_releases_publishing_reserve(setup):
+    """P1-1: safety-block не должен оставлять status='publishing' навсегда."""
+    db, cfg, clock, postiz, safety, pub = setup
+    safety.pause_platform("youtube", "test")
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, created_at) "
+        "VALUES ('v', '/rel', 't', '/rel/w.mp4', ?)",
+        (clock.now().isoformat(),),
+    )
+    vid = db.fetchone("SELECT id FROM long_videos WHERE folder_path='/rel'")["id"]
+    sched = datetime(2026, 3, 11, 16, 0, tzinfo=UTC)
+    assert pub.publish("long_video", vid, "youtube", "/rel/w.mp4", {"title": "x"}, sched) is None
+    row = db.fetchone(
+        "SELECT status, postiz_post_id FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND entity_id=? AND platform='youtube'",
+        (vid,),
+    )
+    assert row is not None
+    assert row["status"] != "publishing", row["status"]
+    assert row["postiz_post_id"] is None
+    # после снятия паузы публикация не «залипла» и проходит
+    safety.resume_platform("youtube")
+    p = pub.publish("long_video", vid, "youtube", "/rel/w.mp4", {"title": "x"}, sched)
+    assert p is not None
+
+
 def test_dry_run(setup):
     db, cfg, clock, postiz, safety, _ = setup
     pub = Publisher(db, cfg, postiz, safety, clock, dry_run=True)

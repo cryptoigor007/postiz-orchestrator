@@ -152,7 +152,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.read_only:
-        logger.info("Read-only mode")
+        # P1-2: раньше флаг только логировался, а защита читает env/атрибут cfg.
+        # Без этого `--read-only --daemon` продолжал публиковать «вживую».
+        os.environ["ORCH_READ_ONLY"] = "1"
+        logger.info("Read-only mode (ORCH_READ_ONLY=1)")
 
     comps = build(args)
     cfg = comps["cfg"]

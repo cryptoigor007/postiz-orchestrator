@@ -1,5 +1,24 @@
 # Changelog
 
+## 8.4.6 — P1 backend-пакет: publishing-дедлок, read-only, mock, слоты «в прошлом», sync
+
+### Fixed
+- **P1-1** `Publisher`: резерв `publishing` снимается на всех early-return (safety-block, пауза
+  платформы, конфликт `ScheduleGuard`, read-only, hourly-limit). Раньше `_already_exists` вечно
+  возвращал `__publishing__` — пара (сущность, платформа) больше не публиковалась никогда.
+- **P1-2** флаг `--read-only` теперь реально выставляет `ORCH_READ_ONLY=1` (раньше только писал лог,
+  и `orchestrator --read-only --daemon` продолжал публиковать «вживую»).
+- **P1-7** long-слоты: `start_date` из прошлого больше не создаёт посты с датой в прошлом
+  (Postiz публикует такие немедленно); фильтр `slot <= now` как у standalone.
+- **P1-8** `create_postiz_client(dry_run=False)` при пустом `POSTIZ_API_TOKEN` — fail-fast вместо
+  тихой подмены моком (панель показывала «запланировано» без реальной публикации).
+- **P1-4** `StatusSync`: успешный `get_post` сбрасывает счётчик `missing_in_postiz:N`; строки
+  `error` с живым `postiz_post_id` снова попадают в синхронизацию и восстанавливаются.
+
+### Tests
+- +4 (328): релиз резерва при safety-block, отсутствие слотов в прошлом, восстановление sync,
+  fail-fast фабрики Postiz. version 8.4.6 (build 825).
+
 ## 8.4.5 — P0: чтение произвольных файлов через /webapp/b/<build>/
 
 ### Security

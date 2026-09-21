@@ -100,6 +100,21 @@ class Publisher:
             )
             return cur.rowcount > 0
 
+    def _release_reserve(self, entity_type: str, entity_id: int, platform: str) -> None:
+        """P1-1: снять резерв 'publishing', если пост так и не создан.
+
+        До этого фикса любой early-return после `_reserve_publish` (safety-block, пауза
+        платформы, конфликт расписания, read-only, hourly-limit) оставлял статус
+        'publishing' навсегда: `_already_exists` вечно возвращал '__publishing__',
+        и пара (сущность, платформа) больше не публиковалась никогда.
+        """
+        self.db.execute(
+            "UPDATE entity_platform_status SET status='ready', last_error=NULL "
+            "WHERE entity_type=? AND entity_id=? AND platform=? "
+            "AND status='publishing' AND postiz_post_id IS NULL",
+            (entity_type, entity_id, platform),
+        )
+
     def publish(
         self,
         entity_type: str,
@@ -142,6 +157,7 @@ class Publisher:
         plat_cfg = self.cfg.platforms.get(platform)
         if not plat_cfg or not plat_cfg.enabled:
             logger.warning("Platform %s disabled", platform)
+            self._release_reserve(entity_type, entity_id, platform)
             return None
 
         if scheduled_for:
@@ -153,6 +169,7 @@ class Publisher:
             if not ok:
                 self.db.log(entity_type, entity_id, platform, "safety_block", reason)
                 logger.info("Safety block %s/%s %s: %s", entity_type, entity_id, platform, reason)
+                self._release_reserve(entity_type, entity_id, platform)
                 return None
 
         if self.guard is not None and scheduled_for is not None:
@@ -161,6 +178,7 @@ class Publisher:
                 self.db.log(entity_type, entity_id, platform, "safety_block", reason)
                 logger.info("Schedule conflict %s/%s %s: %s",
                             entity_type, entity_id, platform, reason)
+                self._release_reserve(entity_type, entity_id, platform)
                 return None
 
         if self.dry_run or getattr(self.cfg, "read_only", False) or bool(
@@ -169,6 +187,7 @@ class Publisher:
             logger.info("[READ-ONLY/DRY-RUN] skip publish %s/%s to %s at %s",
                         entity_type, entity_id, platform, scheduled_for)
             self.db.log(entity_type, entity_id, platform, "dry_run", str(scheduled_for))
+            self._release_reserve(entity_type, entity_id, platform)
             return None
 
         # Postiz hourly create limit (config: limits.postiz_create_per_hour)
@@ -189,6 +208,7 @@ class Publisher:
             if row and row["c"] >= hourly:
                 self.db.log(entity_type, entity_id, platform, "safety_block", "hourly_create_limit")
                 logger.info("Hourly create limit reached (%s)", hourly)
+                self._release_reserve(entity_type, entity_id, platform)
                 return None
 
         # 3. Upload (для постов-ссылок медиа нет)

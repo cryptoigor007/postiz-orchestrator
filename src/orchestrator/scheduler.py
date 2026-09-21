@@ -176,6 +176,10 @@ class Scheduler:
                 if not path:
                     continue
                 for slot in future_slots:
+                    # P1-7: слоты «в прошлом» (start_date из панели) Postiz публикует
+                    # немедленно — для standalone такая защита уже была, для фильмов нет.
+                    if slot <= now:
+                        continue
                     ok, _ = self.safety.can_schedule(platform, self._slot_for_safety(slot), limit)
                     if ok:
                         content = {

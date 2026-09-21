@@ -26,9 +26,9 @@ class StatusSync:
             SELECT entity_type, entity_id, platform, postiz_post_id, status,
                    postiz_scheduled_for, release_url, last_error
             FROM entity_platform_status
-            WHERE postiz_post_id IS NOT NULL
+            WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''
               AND (
-                status IN ('scheduled', 'updating')
+                status IN ('scheduled', 'updating', 'error')
                 OR (status='published' AND (release_url IS NULL OR release_url=''))
               )
         """
@@ -106,7 +106,8 @@ class StatusSync:
                 self.db.execute(
                     """
                     UPDATE entity_platform_status
-                    SET status='published', published_at=?, release_url=COALESCE(?, release_url)
+                    SET status='published', published_at=?, release_url=COALESCE(?, release_url),
+                        last_error=NULL
                     WHERE entity_type=? AND entity_id=? AND platform=?
                     """,
                     (now, post.release_url, row["entity_type"], row["entity_id"], row["platform"]),
@@ -121,6 +122,28 @@ class StatusSync:
                     (post.release_url, row["entity_type"], row["entity_id"], row["platform"]),
                 )
                 updated += 1
+            else:
+                # P1-4: пост найден — снимаем ложную ошибку «пропал в Postiz» и возвращаем
+                # строку из error в рабочее состояние. Раньше счётчик не сбрасывался (порог
+                # суммировал промахи за всю историю), а status='error' был терминальным.
+                prev_err = row.get("last_error") or ""
+                if prev_err.startswith("missing_in_postiz:") or (
+                    row["status"] == "error" and prev_err == "reconciliation_missing"
+                ):
+                    new_status = row["status"]
+                    if new_status == "error":
+                        new_status = st if st in ("scheduled", "updating") else "scheduled"
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status=?, last_error=NULL "
+                        "WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (new_status, row["entity_type"], row["entity_id"], row["platform"]),
+                    )
+                    updated += 1
+                    logger.info(
+                        "Recovered %s/%s/%s from %s -> %s",
+                        row["entity_type"], row["entity_id"], row["platform"],
+                        prev_err, new_status,
+                    )
         return updated
 
     @staticmethod

@@ -51,6 +51,25 @@ def test_schedule_long(env):
     assert rows[0]["postiz_post_id"] is not None
 
 
+def test_start_date_in_past_no_past_slots(env):
+    """P1-7: start_date из прошлого не должен создавать посты «в прошлом»."""
+    db, cfg, clock, postiz, safety, pub, sched = env
+    now = clock.now().isoformat()
+    db.execute(
+        "INSERT INTO long_videos (source, folder_path, title, wide_path, created_at) "
+        "VALUES ('videomaker', '/past', 'P', '/past/w.mp4', ?)",
+        (now,),
+    )
+    sched.schedule_long_videos(start_date="2026-03-01")
+    rows = db.fetchall(
+        "SELECT postiz_scheduled_for FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND postiz_scheduled_for IS NOT NULL"
+    )
+    assert rows, "ожидался хотя бы один пост на будущий слот"
+    for r in rows:
+        assert datetime.fromisoformat(r["postiz_scheduled_for"]) > clock.now()
+
+
 def test_thematic_after_publish(env):
     db, cfg, clock, postiz, safety, pub, sched = env
     now = clock.now().isoformat()

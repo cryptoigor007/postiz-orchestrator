@@ -27,6 +27,21 @@ def is_safe_retry(e: Exception) -> bool:
     return False
 
 
+def _retry_after_seconds(r) -> float | None:
+    """Retry-After из ответа (сек), clamp 1..60; None если нет/невалиден."""
+    try:
+        raw = (r.headers.get("retry-after") or "").strip()
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        val = float(raw)
+    except ValueError:
+        return None
+    return max(1.0, min(60.0, val))
+
+
 def _request_with_retry(client: httpx.Client, method: str, url: str, retries: int = 3, **kwargs):
     is_post = method.upper() == "POST"
     last = None
@@ -35,7 +50,11 @@ def _request_with_retry(client: httpx.Client, method: str, url: str, retries: in
             r = client.request(method, url, **kwargs)
             if r.status_code == 429:
                 # лимит: пост/ресурс НЕ создан — повторять безопасно
-                raise httpx.HTTPStatusError("rate limited", request=r.request, response=r)
+                sleep_for = _retry_after_seconds(r)
+                last = httpx.HTTPStatusError("rate limited", request=r.request, response=r)
+                import time
+                time.sleep(sleep_for if sleep_for is not None else 1.5 * (i + 1))
+                continue
             if r.status_code >= 500 and not is_post:
                 raise httpx.HTTPStatusError("server error", request=r.request, response=r)
             return r  # для POST 5xx отдаём вызывающему (повтор мог бы создать дубликат)
@@ -45,7 +64,9 @@ def _request_with_retry(client: httpx.Client, method: str, url: str, retries: in
                 raise  # повтор на таймауте/ошибке сервера рискован для POST
             import time
             time.sleep(1.5 * (i + 1))
-    raise last
+    if last is not None:
+        raise last
+    raise RuntimeError("retry loop exhausted")
 
 
 def _first(data: dict, *keys: str, default=None):
@@ -248,19 +269,21 @@ class HttpPostizClient:
         )
 
     def delete_post(self, post_id: str) -> None:
-        r = self._client.delete(f"{self.path_posts}/{post_id}", timeout=10.0)
+        # DELETE идемпотентен → retry-helper (429/5xx/таймауты безопасны)
+        r = _request_with_retry(self._client, "DELETE", f"{self.path_posts}/{post_id}",
+                                timeout=10.0)
         if r.status_code not in (200, 204, 404):
             r.raise_for_status()
 
     def set_status(self, post_id: str, status: str) -> None:
-        r = self._client.put(f"{self.path_posts}/{post_id}/status", json={"status": status},
-                             timeout=15.0)
+        r = _request_with_retry(self._client, "PUT", f"{self.path_posts}/{post_id}/status",
+                                json={"status": status}, timeout=15.0)
         if r.status_code not in (200, 204):
             r.raise_for_status()
 
     def set_release_id(self, post_id: str, release_id: str) -> None:
-        r = self._client.put(
-            f"{self.path_posts}/{post_id}/release-id",
+        r = _request_with_retry(
+            self._client, "PUT", f"{self.path_posts}/{post_id}/release-id",
             json={"releaseId": release_id, "release_id": release_id},
         )
         if r.status_code not in (200, 204):

@@ -25,7 +25,7 @@ class Runner:
         self._cycle_fail_streak = 0
         self._miss_error_threshold = 3  # R8: N consecutive misses → error
         db_path = Path(comps["db"].path)
-        self.metrics = Metrics(db_path.parent / "metrics.json")
+        self.metrics = comps.get("metrics") or Metrics(db_path.parent / "metrics.json")
         webapi = WebAppAPI(comps)
         self._http = start_http_server(
             health_port,
@@ -41,7 +41,7 @@ class Runner:
         signal.signal(signal.SIGINT, self.stop)
         signal.signal(signal.SIGTERM, self.stop)
 
-        last_watch = last_sync = last_recon = last_backup = 0.0
+        last_watch = last_sync = last_recon = last_backup = last_test_cleanup = 0.0
         w_int = self.cfg.watcher_interval_sec
         s_int = self.cfg.status_sync_interval_sec
         r_int = self.cfg.reconciliation_interval_hours * 3600
@@ -73,6 +73,9 @@ class Runner:
                 if m_int and now - last_manual >= m_int:
                     self._cycle_manual()
                     last_manual = now
+                if now - last_test_cleanup >= 3600:  # P1.3: раз в час
+                    self._cycle_test_cleanup()
+                    last_test_cleanup = now
             except Exception as e:
                 self.metrics.incr("errors")
                 self.metrics.set("last_error", str(e))
@@ -161,6 +164,17 @@ class Runner:
                     logger.info("Backlog distributed after missed window on %s", platform)
             except Exception:
                 logger.exception("backlog check failed for %s", platform)
+
+    def _cycle_test_cleanup(self) -> None:
+        from .test_publish import cleanup_expired_test_posts
+
+        try:
+            n = cleanup_expired_test_posts(self.comps)
+        except Exception:
+            logger.warning("test cleanup failed", exc_info=True)
+            return
+        if n:
+            self.metrics.incr("test_cancelled", n)
 
     def _cycle_sync(self) -> None:
         n = self.comps["status_sync"].sync()

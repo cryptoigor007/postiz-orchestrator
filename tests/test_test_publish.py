@@ -138,6 +138,127 @@ def test_link_mode_without_url_rejected(env):
     assert e.value.code == 400 and "YouTube" in str(e.value)
 
 
+def test_test_integration_allowlist_fail_closed(env):
+    comps, db, cfg, clock, postiz, sid = env
+    # пустой allowlist → запрет (fail-closed)
+    cfg.test_publish.test_integration_ids = []
+    with pytest.raises(TestPublishError) as e:
+        schedule_test_post(comps, platform="youtube", entity_type="short", entity_id=sid)
+    assert e.value.code == 403
+    # чужой integration_id → запрет
+    cfg.test_publish.test_integration_ids = ["some-other-id"]
+    with pytest.raises(TestPublishError) as e:
+        schedule_test_post(comps, platform="youtube", entity_type="short", entity_id=sid)
+    assert e.value.code == 403 and "allowlist" in str(e.value)
+    # свой id → ok
+    cfg.test_publish.test_integration_ids = [cfg.platforms["youtube"].integration_id]
+    assert schedule_test_post(comps, platform="youtube", entity_type="short",
+                              entity_id=sid)["ok"] is True
+    # allow_prod_channel=true → allowlist не enforced
+    cfg.test_publish.allow_prod_channel = True
+    cfg.test_publish.test_integration_ids = []
+    assert schedule_test_post(comps, platform="youtube", entity_type="short",
+                              entity_id=sid)["ok"] is True
+
+
+def test_cancel_exact_no_prefix_collision(env):
+    comps, db, cfg, clock, postiz, sid = env
+    db.log("short", sid, "youtube", "test_scheduled", "abc123 @ 2026-01-01T00:00:00+00:00")
+    with pytest.raises(TestPublishError) as e:
+        cancel_test_post(comps, "abc")  # префикс чужого id — не наша цель
+    assert e.value.code == 404
+    assert cancel_test_post(comps, "abc123")["ok"] is True  # точное совпадение
+
+
+def test_initdata_stale_rejected(monkeypatch):
+    import hashlib as _h
+    import hmac as _hm
+    import json as _json
+    import time as _time
+    from urllib.parse import urlencode as _ue
+
+    from orchestrator.webapp_api import validate_init_data
+
+    token = "123:TEST"
+    monkeypatch.setenv("ORCH_WEBAPP_INIT_MAX_AGE_SEC", "3600")
+    monkeypatch.setenv("WEBAPP_DEV", "0")
+
+    def make(ts: int) -> str:
+        user = _json.dumps({"id": 7, "first_name": "T"}, separators=(",", ":"))
+        fields = {"auth_date": str(ts), "user": user}
+        check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+        secret = _hm.new(b"WebAppData", token.encode(), _h.sha256).digest()
+        fields["hash"] = _hm.new(secret, check.encode(), _h.sha256).hexdigest()
+        return _ue(fields)
+
+    assert validate_init_data(make(int(_time.time())), token) is not None       # свежий
+    assert validate_init_data(make(int(_time.time()) - 7200), token) is None     # старше 1ч
+    assert validate_init_data("auth_date=1&user=x", token) is None               # без hash
+
+
+def test_ignore_limits_but_respect_pause(env):
+    """P1.2: daily_limit не мешает тесту; пауза платформы — блокирует."""
+    comps, db, cfg, clock, postiz, sid = env
+    for _i in range(cfg.platforms["youtube"].daily_limit + 3):
+        db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, "
+                   "status, published_at) VALUES ('short', ?, 'youtube', 'published', ?)",
+                   (900 + _i, clock.now().isoformat()))
+    # лимит исчерпан — тест всё равно создаётся
+    assert schedule_test_post(comps, platform="youtube", entity_type="short",
+                              entity_id=sid)["ok"] is True
+    # пауза платформы → 409 (через реальный API; строка состояния могла отсутствовать)
+    comps["safety"].pause_platform("youtube", "test")
+    with pytest.raises(TestPublishError) as e:
+        schedule_test_post(comps, platform="youtube", entity_type="short", entity_id=sid)
+    assert e.value.code == 409 and "paused" in str(e.value)
+
+
+def test_isolation_no_schedulers_or_tail(env, monkeypatch):
+    """P2.1: тест-пост не вызывает раскладку/тематику/хвост (skip_* + изоляция по коду)."""
+    comps, db, cfg, clock, postiz, sid = env
+    called = []
+
+    class BoomScheduler:
+        def schedule_long_videos(self, *a, **kw):
+            called.append("long")
+            raise AssertionError("test must not schedule long videos")
+
+        def schedule_thematic_shorts(self, *a, **kw):
+            called.append("thematic")
+            raise AssertionError("test must not schedule thematic")
+
+    class BoomTail:
+        def on_new_long_video(self, *a, **kw):
+            called.append("tail")
+            raise AssertionError("test must not touch tail")
+
+    comps["scheduler"] = BoomScheduler()
+    comps["tail"] = BoomTail()
+    res = schedule_test_post(comps, platform="youtube", entity_type="short", entity_id=sid)
+    assert res["ok"] is True and called == []
+    assert cfg.test_publish.skip_tail_side_effects is True
+    assert cfg.test_publish.skip_thematic_cascade is True
+    assert cfg.test_publish.zero_jitter is True
+
+
+def test_metrics_incremented(env):
+    """P2.7: test_scheduled/test_cancelled инкрементятся, если metrics в comps."""
+    comps, db, cfg, clock, postiz, sid = env
+
+    class M:
+        def __init__(self):
+            self.d = {}
+
+        def incr(self, k, n=1):
+            self.d[k] = self.d.get(k, 0) + n
+
+    comps["metrics"] = M()
+    res = schedule_test_post(comps, platform="youtube", entity_type="short", entity_id=sid)
+    assert comps["metrics"].d.get("test_scheduled") == 1
+    cancel_test_post(comps, res["postiz_post_id"])
+    assert comps["metrics"].d.get("test_cancelled") == 1
+
+
 def test_entity_not_found(env):
     comps, db, cfg, clock, postiz, sid = env
     with pytest.raises(TestPublishError) as e:

@@ -137,7 +137,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_confirmed
     WHERE match_status = 'confirmed';
 """
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 
@@ -198,6 +198,27 @@ class Database:
                     "CREATE UNIQUE INDEX IF NOT EXISTS idx_eps_postiz_id_unique "
                     "ON entity_platform_status(postiz_post_id) "
                     "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''"
+                )
+            except Exception:
+                pass
+        if current < 13:
+            # P0.9: отдельные поля для backlog-вопроса (раньше делились с soft-end)
+            for stmt in (
+                "ALTER TABLE platform_queue_state ADD COLUMN pending_backlog_question INTEGER DEFAULT 0",
+                "ALTER TABLE platform_queue_state ADD COLUMN pending_backlog_at TEXT",
+            ):
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    pass
+            # эвристика миграции: до v13 pending ставил только backlog → переносим, series_end чистим
+            try:
+                conn.execute(
+                    "UPDATE platform_queue_state SET "
+                    "pending_backlog_question=COALESCE(pending_series_end_question,0), "
+                    "pending_backlog_at=pending_series_end_at, "
+                    "pending_series_end_question=0, pending_series_end_at=NULL "
+                    "WHERE COALESCE(pending_series_end_question,0)=1"
                 )
             except Exception:
                 pass

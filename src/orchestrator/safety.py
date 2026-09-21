@@ -40,16 +40,26 @@ class SafetyChecker:
 
     def pause_platform(self, platform: str, reason: str) -> None:
         now = self.clock.now().isoformat()
+        # P1.4: UPSERT — строка могла отсутствовать (свежая платформа/чистая БД)
         self.db.execute(
-            "UPDATE platform_safety_state SET is_paused=1, paused_at=?, pause_reason=?, updated_at=? "
-            "WHERE platform=?",
-            (now, reason, now, platform),
+            "INSERT INTO platform_safety_state "
+            "(platform, is_paused, paused_at, pause_reason, updated_at) "
+            "VALUES (?, 1, ?, ?, ?) "
+            "ON CONFLICT(platform) DO UPDATE SET is_paused=1, paused_at=excluded.paused_at, "
+            "pause_reason=excluded.pause_reason, updated_at=excluded.updated_at",
+            (platform, now, reason, now),
         )
         self.db.log("system", None, platform, "pause", reason)
 
     def resume_platform(self, platform: str) -> None:
         now_dt = self.clock.now()
         now = now_dt.isoformat()
+        # P1.4: гарантируем наличие строки (иначе resume на свежей БД — no-op)
+        self.db.execute(
+            "INSERT INTO platform_safety_state (platform, is_paused, updated_at) "
+            "VALUES (?, 0, ?) ON CONFLICT(platform) DO NOTHING",
+            (platform, now),
+        )
         # if paused long enough — restart warmup
         row = self.db.fetchone(
             "SELECT paused_at FROM platform_safety_state WHERE platform=?",

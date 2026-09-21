@@ -86,7 +86,28 @@ class TelegramTransport:
             if reply_markup and i == len(chunks) - 1:
                 payload["reply_markup"] = reply_markup
             try:
-                httpx.post(f"{self._base}/sendMessage", json=payload, timeout=30)
+                r = httpx.post(f"{self._base}/sendMessage", json=payload, timeout=30)
+                ok = False
+                try:
+                    ok = bool(r.json().get("ok"))
+                except Exception:
+                    ok = False
+                if r.status_code == 429 and i == len(chunks) - 1:
+                    # P1.10: короткая пауза по Retry-After (clamp 1..60) и один повтор
+                    try:
+                        wait = float(r.json().get("parameters", {}).get("retry_after") or 3)
+                    except Exception:
+                        wait = 3
+                    import time as _t
+                    _t.sleep(max(1.0, min(60.0, wait)))
+                    r2 = httpx.post(f"{self._base}/sendMessage", json=payload, timeout=30)
+                    try:
+                        ok = bool(r2.json().get("ok"))
+                    except Exception:
+                        ok = False
+                if not ok:
+                    logger.warning("sendMessage not ok: status=%s body=%s",
+                                   r.status_code, r.text[:200])
             except Exception:
                 logger.exception("sendMessage failed")
 

@@ -104,3 +104,38 @@ def test_stage_config_loads():
     cfg = load_config(Path(__file__).resolve().parents[1] / "config.stage.yaml")
     assert cfg.platforms["telegram"].enabled is True
     assert cfg.platforms["youtube"].enabled is False
+
+
+def test_content_length_cap_rejects_big_body(monkeypatch):
+    """P0.7: Content-Length > капа → 413 без чтения тела."""
+    import socket as _sk
+
+    from orchestrator.http_server import start_http_server
+
+    monkeypatch.setenv("ORCH_MAX_BODY_BYTES", "1024")
+    _s = _sk.socket()
+    _s.bind(("127.0.0.1", 0))
+    free_port = _s.getsockname()[1]
+    _s.close()
+    srv = start_http_server(free_port, lambda: {"ok": True},
+                            lambda m, p, h, b: (200, {"ok": True}, "application/json"))
+    assert srv is not None
+    port = srv.server_address[1]
+    try:
+        import http.client as _hc
+
+        # маленькое тело — ок
+        c = _hc.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.request("POST", "/webapp/api/x", body=b"{}", headers={"Content-Length": "2"})
+        assert c.getresponse().status in (200, 404)
+        c.close()
+        # большое — 413 до чтения
+        c = _hc.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.putrequest("POST", "/webapp/api/x")
+        c.putheader("Content-Length", "999999")
+        c.endheaders()
+        r = c.getresponse()
+        assert r.status == 413
+        c.close()
+    finally:
+        srv.shutdown()

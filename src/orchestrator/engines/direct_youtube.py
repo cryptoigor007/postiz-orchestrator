@@ -117,6 +117,7 @@ class YouTubeEngine:
         return bool(res.get("items"))
 
     def delete(self, external_id: str) -> bool:
+        """P1.9: True возвращается ТОЛЬКО при успешном DELETE; ошибка HTTP — исключение."""
         self._req("DELETE", "/videos", {"id": external_id})
         return True
 

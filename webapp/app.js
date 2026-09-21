@@ -394,7 +394,7 @@
 
   function busy(text) {
     const el = _overlay();
-    el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${text || t("working")}</span></div></div>`;
+    el.innerHTML = `<div class="busy-box"><div class="busy-row">${icon("spinner", 20)}<span>${esc(text || t("working"))}</span></div></div>`;
     el.style.display = "flex";
   }
 
@@ -459,17 +459,17 @@
         curPath = d.path;
         const key = encodeURIComponent(state.key || "");
         const dirs = (d.dirs || []).map((x) =>
-          `<button class="btn secondary cp-dir" data-cp="dir" data-path="${x.path.replace(/"/g, "&quot;")}">📁 ${x.name}</button>`).join("");
+          `<button class="btn secondary cp-dir" data-cp="dir" data-path="${esc(x.path)}">📁 ${esc(x.name)}</button>`).join("");
         const imgs = (d.images || []).map((x) =>
-          `<button class="cp-thumb" data-cp="pick" data-path="${x.path.replace(/"/g, "&quot;")}" title="${x.name.replace(/"/g, "&quot;")}">
+          `<button class="cp-thumb" data-cp="pick" data-path="${esc(x.path)}" title="${esc(x.name)}">
              <img loading="lazy" src="/webapp/api/cover/thumb?key=${key}&path=${encodeURIComponent(x.path)}" alt=""/>
-             <span>${x.name.length > 22 ? x.name.slice(0, 20) + "…" : x.name}</span>
+             <span>${esc(x.name.length > 22 ? x.name.slice(0, 20) + "…" : x.name)}</span>
            </button>`).join("");
         body.innerHTML = `
-          <div class="cp-path mono">${d.path}</div>
+          <div class="cp-path mono">${esc(d.path)}</div>
           <div class="cp-row">
             ${d.parent ? `<button class="btn secondary" data-cp="dir" data-path="${d.parent.replace(/"/g, "&quot;")}">${t("cover_up")}</button>` : ""}
-            ${d.warning ? `<span class="meta">${d.warning}</span>` : ""}
+            ${d.warning ? `<span class="meta">${esc(d.warning)}</span>` : ""}
           </div>
           <div class="cp-sec">${t("cover_dirs")}</div>
           <div class="cp-dirs">${dirs || `<span class="meta">${t("no_subfolders")}</span>`}</div>
@@ -511,7 +511,7 @@
         const key = encodeURIComponent(state.key || "");
         const imgs = (d.frames || []).map((x) => `
           <button class="cp-thumb" data-cp="pick"
-                  data-path="${x.path.replace(/"/g, "&quot;")}" title="${x.name} · ${x.at} с">
+                  data-path="${esc(x.path)}" title="${esc(x.name)} · ${esc(x.at)} с">
             <img loading="lazy" src="/webapp/api/cover/thumb?key=${key}&path=${encodeURIComponent(x.path)}" alt=""/>
             <span>${x.at} с</span>
           </button>`).join("");
@@ -596,7 +596,7 @@
   function busyJob(title) {
     const el = _overlay();
     el.innerHTML = `<div class="busy-box">
-      <div class="busy-row">${icon("spinner", 20)}<span id="job-title">${title || t("working")}</span></div>
+      <div class="busy-row">${icon("spinner", 20)}<span id="job-title">${esc(title || t("working"))}</span></div>
       <div class="pbar" id="job-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="pbar-fill" id="job-fill" style="width:0%"></div></div>
       <div class="busy-row busy-meta" aria-live="polite"><span id="job-count"></span><span id="job-eta"></span></div>
       <div class="form-row"><button class="btn danger" data-act="job-cancel">${t("cancel")}</button></div>
@@ -773,10 +773,10 @@
   function renderFolders(d) {
     const items = d.items || (d.roots || []).map((x) => ({ path: x, kind: "auto" }));
     const roots = items
-      .map((it) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${it.path}</div>
+      .map((it) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${esc(it.path)}</div>
         <span class="meta">${t("kind_label")}: ${t("kind_" + (it.kind || "auto"))}</span>
-        <button class="btn secondary" data-act="folder-kind" data-p="${it.path}" title="${t("kind_label")}">${icon("swap", 14)}</button>
-        <button class="btn danger" data-act="folder-remove" data-p="${it.path}">${t("remove")}</button></div>`)
+        <button class="btn secondary" data-act="folder-kind" data-p="${esc(it.path)}" title="${t("kind_label")}">${icon("swap", 14)}</button>
+        <button class="btn danger" data-act="folder-remove" data-p="${esc(it.path)}">${t("remove")}</button></div>`)
       .join("");
     const b = state.browse || { path: "", parent: null, dirs: [], root: "", roots: [] };
     const metaByPath = {};
@@ -788,7 +788,7 @@
           return `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${r}"${m.available ? "" : " disabled"}>${r}${warn}</button>`;
         }).join("")}</div>`
       : "";
-    const warnRow = b.warning ? `<div class="row"><span class="meta warn-text">${icon("warn", 14)} ${b.warning}</span></div>` : "";
+    const warnRow = b.warning ? `<div class="row"><span class="meta warn-text">${icon("warn", 14)} ${esc(b.warning)}</span></div>` : "";
     const sc = state.scan;
     const st = sc ? (sc.stats || {}) : null;
     const tot = sc ? (sc.totals || {}) : {};
@@ -811,16 +811,16 @@
       </div></div>` : "";
 
     const dirs = (b.dirs || [])
-      .map((x) => `<div class="row"><div class="title">${icon("folder", 15)} ${x.name}</div>
-        <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button></div>`)
+      .map((x) => `<div class="row"><div class="title">${icon("folder", 15)} ${esc(x.name)}</div>
+        <button class="btn secondary" data-act="folder-open" data-p="${esc(x.path)}">${t("open")}</button></div>`)
       .join("");
     // поиск папки по имени (внутри текущего корня, до 5 уровней)
     const sq = state.folderSearch || { q: "", items: null };
     const searchResults = sq.items === null ? "" : (sq.items.length
       ? `<div class="search-list">${sq.items.map((x) =>
-          `<div class="row"><div class="title" style="flex:1;min-width:0;word-break:break-all">${icon("folder", 15)} ${x.name}<div class="meta mono" style="font-size:11px">${x.path}</div></div>
+          `<div class="row"><div class="title" style="flex:1;min-width:0;word-break:break-all">${icon("folder", 15)} ${esc(x.name)}<div class="meta mono" style="font-size:11px">${esc(x.path)}</div></div>
             <button class="btn secondary" data-act="folder-open" data-p="${x.path}">${t("open")}</button>
-            <button class="btn secondary" data-act="folder-add" data-p="${x.path}" data-kind="auto">${t("add_auto")}</button></div>`).join("")}</div>`
+            <button class="btn secondary" data-act="folder-add" data-p="${esc(x.path)}" data-kind="auto">${t("add_auto")}</button></div>`).join("")}</div>`
       : `<div class="empty">${t("search_none")}</div>`);
     const searchBlock = `<div class="q-toolbar" style="padding:8px 0 0">
         <input id="folder-q" class="search-input" type="search" placeholder="${t("search_placeholder")}" value="${(sq.q || "").replace(/"/g, "&quot;")}"/>
@@ -832,16 +832,16 @@
         ${roots || `<div class="empty">${t("folders_none")}</div>`}
       </div>
       <div class="panel">
-        <div class="panel-header">${t("browse")} · <span class="mono" style="font-size:12px">${b.path || ""}</span></div>
+        <div class="panel-header">${t("browse")} · <span class="mono" style="font-size:12px">${esc(b.path || "")}</span></div>
         ${rsel}
-        <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${b.path || ""}</div></div>
+        <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${esc(b.path || "")}</div></div>
         ${searchBlock}
         ${warnRow}
         <div class="form-row">
           <button class="btn secondary" data-act="folder-up" data-p="${b.parent || ""}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
-          <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}" data-kind="series">${t("add_series")}</button>
-          <button class="btn primary" data-act="folder-add" data-p="${b.path || ""}" data-kind="shorts">${t("add_shorts")}</button>
-          <button class="btn secondary" data-act="folder-add" data-p="${b.path || ""}" data-kind="auto">${t("add_auto")}</button>
+          <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="series">${t("add_series")}</button>
+          <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="shorts">${t("add_shorts")}</button>
+          <button class="btn secondary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="auto">${t("add_auto")}</button>
           <button class="btn success" data-act="folder-scan">${t("scan")}</button>
         </div>
         ${dirs || `<div class="empty">${t("no_subfolders")}</div>`}
@@ -881,7 +881,7 @@
     content().innerHTML = legend + days.map((day) => {
       const rows = (day.items || []).map((it) => {
         const title = it.title || it.platform || "";
-        const link = it.url ? ` <a href="${it.url}" target="_blank" rel="noopener">↗</a>` : "";
+        const link = it.url ? ` <a href="${esc(it.url)}" target="_blank" rel="noopener">↗</a>` : "";
         return `<div class="row"><span class="mono">${it.time || ""}</span>
           <div class="title">${title}${link}</div>
           <span class="meta q-plat">${pIcon(it.platform)}</span>${pill(it.status)}</div>`;
@@ -1032,11 +1032,11 @@
       const form = (edit && edit.key === key)
         ? `<div class="panel q-edit-panel">
              <div class="form-row"><label class="meta">${t("edit_title")}
-               <input id="qe-title" type="text" value="${(it.title_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
+               <input id="qe-title" type="text" value="${esc(it.title_text || "")}" style="width:100%"/></label></div>
              <div class="form-row"><label class="meta">${t("edit_desc")}
-               <textarea id="qe-desc" rows="4" style="width:100%">${(it.description_text || "").replace(/</g, "&lt;")}</textarea></label></div>
+               <textarea id="qe-desc" rows="4" style="width:100%">${esc(it.description_text || "")}</textarea></label></div>
              <div class="form-row"><label class="meta">${t("edit_tags")}
-               <input id="qe-tags" type="text" value="${(it.hashtags_text || "").replace(/"/g, "&quot;")}" style="width:100%"/></label></div>
+               <input id="qe-tags" type="text" value="${esc(it.hashtags_text || "")}" style="width:100%"/></label></div>
              <div class="form-row">
                <label class="meta">${t("edit_cover")}
                  <select id="qe-cover">
@@ -1074,7 +1074,7 @@
       return `<div class="row q-row${checked ? " picked" : ""}">
         <div class="q-line">${check}${cover}
           <div class="q-main">
-            <div class="q-title" title="${(it.title || "").replace(/"/g, "&quot;")}">${it.title || (it.entity_type + "#" + it.entity_id)}</div>
+            <div class="q-title" title="${esc(it.title || "")}">${esc(it.title || (it.entity_type + "#" + it.entity_id))}</div>
             <div class="q-meta mono">
               <span class="q-date">${it.date || ""}</span>
               <span class="q-clock">${it.time || ""}</span>
@@ -1106,8 +1106,8 @@
       <div class="row"><div class="title q-plat">${pIcon(p.name)}</div>
         ${p.enabled ? pill("ok") : pill("off")}${p.paused ? pill("paused") : ""}
         <span class="meta">${t("limit")} ${p.daily_limit}</span>
-        <button class="btn secondary" data-act="resume-one" data-p="${p.name}">${t("resume")}</button>
-        <button class="btn danger" data-act="pause-one" data-p="${p.name}">${t("pa_pause")}</button>
+        <button class="btn secondary" data-act="resume-one" data-p="${esc(p.name)}">${t("resume")}</button>
+        <button class="btn danger" data-act="pause-one" data-p="${esc(p.name)}">${t("pa_pause")}</button>
       </div>`).join("");
     content().innerHTML = `
       <div class="panel">
@@ -1146,14 +1146,14 @@
   function failedHtml(d) {
     const rows = ((d && d.items) || []).map((it) =>
       `<div class="row"><div class="title">${it.entity_type}#${it.entity_id} · ${it.platform}</div>
-       <span class="meta">${it.last_error || ""}</span>${pill(it.status)}</div>`).join("");
+       <span class="meta">${esc(it.last_error || "")}</span>${pill(it.status)}</div>`).join("");
     return `<div class="panel"><div class="panel-header">${t("errors_header")}</div>${
       rows || `<div class="empty">${t("no_errors")}</div>`}</div>`;
   }
 
   function renderActions(d) {
     const opts = ((d && d.platforms) || [])
-      .map((p) => `<option>${p.name}</option>`).join("")
+      .map((p) => `<option>${esc(p.name)}</option>`).join("")
       || `<option>youtube</option>`;
     content().innerHTML = `
       <div class="panel"><div class="panel-header">${t("quick_actions")}</div>
@@ -1264,7 +1264,7 @@
       metric(t("m_cycle_errors"), d.errors ?? 0),
     ].join("");
     const errRow = d.last_error
-      ? `<div class="row"><span class="pill err">${t("m_err_pill")}</span><span class="title">${d.last_error}</span></div>`
+      ? `<div class="row"><span class="pill err">${t("m_err_pill")}</span><span class="title">${esc(d.last_error)}</span></div>`
       : `<div class="row"><span class="pill ok">ОК</span><span class="title">${t("m_no_err")}</span></div>`;
     content().innerHTML = `
       <div class="grid">${cards}</div>
@@ -1313,7 +1313,7 @@
       if (it.match_status === "suggested" && (it.candidates || []).length) {
         const cands = it.candidates.map((c, i) =>
           `<button class="btn ${i === 0 ? "primary" : "secondary"}" data-act="manual-confirm"
-             data-id="${it.id}" data-et="${c.entity_type}" data-eid="${c.entity_id}">${c.title} · ${Math.round((c.score || 0) * 100)}%</button>`
+             data-id="${it.id}" data-et="${c.entity_type}" data-eid="${c.entity_id}">${esc(c.title)} · ${Math.round((c.score || 0) * 100)}%</button>`
         ).join(" ");
         actions = `<div class="form-row">${cands}
           <button class="btn danger" data-act="manual-reject" data-id="${it.id}">${t("mu_reject")}</button>
@@ -1329,9 +1329,9 @@
         ? `<button class="btn secondary" data-act="manual-claim-mark" data-id="${it.id}">${t("mu_claim_mark")}</button>`
         : "";
       return `<div class="panel">
-        <div class="panel-header">${it.title || it.platform_video_id} ${pill(it.origin === "postiz" ? "postiz" : "manual")} ${pill(it.match_status)}</div>
+        <div class="panel-header">${esc(it.title || it.platform_video_id)} ${pill(it.origin === "postiz" ? "postiz" : "manual")} ${pill(it.match_status)}</div>
         <div class="row"><div class="title">${it.platform} · ${it.published_at || ""}</div>
-          ${it.url ? `<a href="${it.url}" target="_blank" rel="noopener">↗</a>` : ""}${claimMark}</div>
+          ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">↗</a>` : ""}${claimMark}</div>
         ${claim}${actions}
       </div>`;
     }).join("");
@@ -1381,8 +1381,8 @@
     const groups = d.groups || [];
     const plats = d.platforms || [];
     const groupRows = groups.map((g) =>
-      `<div class="row"><div class="title">${icon("users", 15)} ${g.name}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
-        <button class="btn danger" data-act="group-remove" data-p="${g.name}">${t("group_remove")}</button></div>`).join("");
+      `<div class="row"><div class="title">${icon("users", 15)} ${esc(g.name)}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
+        <button class="btn danger" data-act="group-remove" data-p="${esc(g.name)}">${t("group_remove")}</button></div>`).join("");
     const groupForm = `<div class="form-row"><input id="group-name" placeholder="${t("group_name")}" />
       <span class="meta">${plats.map((p) => `<label class="chk" style="margin-right:6px"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
       <button class="btn secondary" data-act="group-add">${t("group_add")}</button></div>`;
@@ -1395,7 +1395,7 @@
     const eff = d.effective || {};
     const plats = d.platforms || [];
     const platformsHtml = plats.map((p) => schedBlock(p, `<span class="q-plat">${pIcon(p)}</span>`, eff[p] || {}, settings[p] || {}, true)).join("");
-    const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `${icon("users", 15)} ${g.name}`, null, settings[`group:${g.name}`] || {}, false)).join("");
+    const groupsHtmlBlocks = groups.map((g) => schedBlock(`group:${g.name}`, `${icon("users", 15)} ${esc(g.name)}`, null, settings[`group:${g.name}`] || {}, false)).join("");
     return platformsHtml + groupsHtmlBlocks;
   }
   function renderSettings(d) {

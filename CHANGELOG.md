@@ -1,5 +1,38 @@
 # Changelog
 
+## 8.2.1 — Residual closure (P0/P1/P2)
+
+### Security
+- SSRF cover/fetch: pin по проверенному IP (anti-rebinding TOCTOU), redirect-хопы ≤3 с ревалидацией,
+  stream cap 25 MiB, отклонение localhost/*.localhost/*.local, decimal/hex/octal/dotted-quad IP-литералов и userinfo
+- initData: проверка свежести auth_date (ORCH_WEBAPP_INIT_MAX_AGE_SEC, default 86400)
+- UI XSS: 37 вставок данных API/ФС обёрнуты в esc() (paths, names, titles, warnings, errors, urls, атрибуты)
+- Content-Length cap (ORCH_MAX_BODY_BYTES, default 50 MiB) — 413 до чтения тела
+- test_publish: test_integration_ids allowlist (fail-closed) + prod-guard
+- rate-limit identity: ключ/user-id/первый XFF (раньше — весь Init-Data, менялся каждый запрос)
+
+### Fixed
+- N1: ask_backlog/remind_backlog/backlog_distributed/broadcast_markup были вложены в setup_commands
+  и вызывались через несуществующий self → вопрос о остатке серии молча не отправлялся; вынесены на класс
+- P0.11: ask_series_end теперь регистрирует pending-диалог; ответ "да" чистит pending и включает хвост
+- P0.9: soft-end и backlog больше не делят одни поля (schema v13: pending_backlog_*; миграция переносит старые pending)
+- P0.10: backlog-слоты считаются из effective-настроек (override/группы/исключения), а не из сырого конфига
+- P0.4: cancel_test_post — точное совпадение post id (префикс больше не матчит чужой пост)
+- P0.8: активные тест-посты исключены из cleanup_orphans и reconciliation
+- P1.1: DELETE/PUT через retry-helper; 429 учитывает Retry-After (clamp 1..60)
+- P1.2: тест-пост не расходует daily_limit/min_interval, но уважает паузу платформы
+- P1.3/P1.11: авто-снятие тест-постов старше cleanup_after_hours (24ч) в цикле runner
+- P1.4: pause_platform/resume_platform — UPSERT (нет строки → создаётся)
+- P1.5: cloudflared_url_sync — безопасный JSON, проверка ответа Telegram, рестарт только при смене env
+- P1.9: direct_youtube.delete не возвращает True при ошибке транспорта
+- P1.10: send_message проверяет ответ Bot API и делает backoff на 429
+- P2: watcher LRU-trim кэша размеров; TODO по CSP; ScheduleGuard TTL из ORCH_GUARD_TTL_SEC;
+  MCP-инструменты orch_test_schedule/status/cancel; метрики test_scheduled/cancelled/rejected
+- Конфиг: backup.method=sqlite_backup (код всегда использовал Connection.backup)
+
+### Tests
+- +45 тестов (255 → 300): SSRF-pin (22), миграции (4), P0.9–P0.12, P1.x, изоляция тест-контура, SQLi, read-only
+- version 8.2.1 / WEBAPP_BUILD=815
 ## 8.2.0 — Test publish (отдельный контур) + регресс-закрепление H1–H3
 
 ### Added
@@ -15,7 +48,6 @@
 - `broker` доступен компонентам через `comps` (симлинк-медиа для тестового поста)
 - version 8.2.0 / WEBAPP_BUILD=814
 
-
 ## 8.1.2 — Final parity polish
 
 ### Fixed
@@ -24,8 +56,6 @@
 - `gui_check.sh` no longer uses `/webapp/k/` path key by default
 - Baseline `Content-Security-Policy` on HTML responses
 - version 8.1.2 / WEBAPP_BUILD=812
-
-# Changelog
 
 ## 8.1.1 — Stage polish (§10 checklist)
 
@@ -36,8 +66,6 @@
 - **10.4**: `/webapp/k/<key>/` only when `ORCH_LEGACY_PATH_KEY=1`
 - **docs**: `.env.example` security hints; `STAGE_ACCEPTANCE.md` for ops checklist
 
-# Changelog
-
 ## 8.1.0 — Deep residual closure
 
 ### Fixed
@@ -47,8 +75,6 @@
 - **L14**: `posts_today` resets on timezone calendar day change in `record_post`
 - **publisher**: deduped create-retry block; reserve always released to `error` on fail
 - **version**: 8.1.0 / WEBAPP_BUILD=81
-
-# Changelog
 
 ## 8.0.0 — Full residual closure (P2/Q)
 

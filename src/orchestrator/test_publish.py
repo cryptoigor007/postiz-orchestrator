@@ -14,6 +14,16 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _metric(comps: dict[str, Any], key: str, n: int = 1) -> None:
+    """P2.7: безопасный инкремент метрики (metrics может отсутствовать в comps)."""
+    metrics = comps.get("metrics")
+    if metrics is not None and hasattr(metrics, "incr"):
+        try:
+            metrics.incr(key, n)
+        except Exception:
+            pass
+
+
 class TestPublishError(Exception):
     """Ошибка тестового поста (валидация/лимиты) — с кодом ответа для API."""
 
@@ -86,8 +96,14 @@ def schedule_test_post(
         raise TestPublishError(f"platform {platform} not in test allowlist", 403)
 
     iid = getattr(pcfg, "integration_id", "") or ""
-    if not tcfg.allow_prod_channel and iid and iid in (tcfg.prod_integration_ids or []):
-        raise TestPublishError("prod channel is not allowed for test posts", 403)
+    if not tcfg.allow_prod_channel:
+        if iid and iid in (tcfg.prod_integration_ids or []):
+            raise TestPublishError("prod channel is not allowed for test posts", 403)
+        # fail-closed: тест разрешён только для id из allowlist (пустой список = запрет)
+        if not tcfg.test_integration_ids:
+            raise TestPublishError("test_integration_ids not configured (fail-closed)", 403)
+        if iid not in (tcfg.test_integration_ids or []):
+            raise TestPublishError(f"integration {iid or '<empty>'} not in test allowlist", 403)
 
     now = clock.now()
     if scheduled_for:
@@ -147,9 +163,18 @@ def schedule_test_post(
 
     safety = comps.get("safety")
     if safety is not None:
-        ok, reason = safety.can_schedule(platform, when, pcfg.daily_limit)
-        if not ok:
-            raise TestPublishError(f"safety: {reason}", 409)
+        # P1.2: тест не расходует боевые лимиты (daily_limit/min_interval),
+        # но пауза платформы уважается всегда
+        if getattr(tcfg, "ignore_limits", True):
+            try:
+                if safety.is_platform_paused(platform):
+                    raise TestPublishError("safety: platform_paused", 409)
+            except AttributeError:
+                pass
+        else:
+            ok, reason = safety.can_schedule(platform, when, pcfg.daily_limit)
+            if not ok:
+                raise TestPublishError(f"safety: {reason}", 409)
 
     if dry_run:
         db.log(entity_type, entity_id, platform, "test_dry_run",
@@ -169,11 +194,55 @@ def schedule_test_post(
                               scheduled_for=when)
     db.log(entity_type, entity_id, platform, "test_scheduled",
            f"{post.id} @ {when.isoformat()}")
+    _metric(comps, "test_scheduled")
     logger.info("test post scheduled: %s/%s %s -> %s @ %s",
                 entity_type, entity_id, platform, post.id, when.isoformat())
     return {"ok": True, "dry_run": False, "platform": platform,
             "entity_type": entity_type, "entity_id": entity_id,
             "postiz_post_id": post.id, "scheduled_for": when.isoformat()}
+
+
+def cleanup_expired_test_posts(comps: dict[str, Any]) -> int:
+    """P1.3: снять из Postiz тест-посты старше cleanup_after_hours (не трогая боевые)."""
+    db = comps["db"]
+    tcfg = comps["cfg"].test_publish
+    ttl = int(getattr(tcfg, "cleanup_after_hours", 0) or 0)
+    if ttl <= 0:
+        return 0
+    postiz = comps.get("postiz")
+    if postiz is None:
+        return 0
+    from datetime import UTC as _UTC
+
+    active: dict[str, str] = {}
+    for r in db.fetchall("SELECT details, created_at FROM publish_log "
+                         "WHERE action='test_scheduled'"):
+        pid = (r["details"] or "").strip().split(" ", 1)[0]
+        if pid:
+            active[pid] = r["created_at"] or ""
+    for r in db.fetchall("SELECT details FROM publish_log WHERE action='test_cancelled'"):
+        active.pop((r["details"] or "").strip(), None)
+    now = comps["clock"].now()
+    n = 0
+    for pid, created in active.items():
+        try:
+            ts = datetime.fromisoformat(created)
+        except Exception:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=_UTC)
+        if (now - ts).total_seconds() < ttl * 3600:
+            continue
+        try:
+            postiz.delete_post(pid)
+        except Exception:
+            logger.warning("test auto-cleanup: delete %s failed", pid, exc_info=True)
+            continue
+        db.log("system", None, "", "test_auto_cancelled", pid)
+        n += 1
+    if n:
+        logger.info("Test auto-cleanup: removed %s expired test post(s)", n)
+    return n
 
 
 def test_recent(db, limit: int = 10) -> list[dict]:
@@ -187,9 +256,13 @@ def test_recent(db, limit: int = 10) -> list[dict]:
 def cancel_test_post(comps: dict[str, Any], postiz_post_id: str) -> dict[str, Any]:
     """Удалить пробный пост из Postiz (только если он помечен как тестовый)."""
     db = comps["db"]
-    marked = db.fetchone(
-        "SELECT 1 FROM publish_log WHERE action='test_scheduled' AND details LIKE ?",
-        (f"{postiz_post_id}%",))
+    # Точное сравнение post id (первый токен details): префикс не должен матчить чужой пост
+    marked = False
+    for r in db.fetchall("SELECT details FROM publish_log WHERE action='test_scheduled'"):
+        pid = (r["details"] or "").strip().split(" ", 1)[0]
+        if pid and pid == postiz_post_id:
+            marked = True
+            break
     if not marked:
         raise TestPublishError("post is not a test post", 404)
     postiz = comps.get("postiz")
@@ -197,4 +270,5 @@ def cancel_test_post(comps: dict[str, Any], postiz_post_id: str) -> dict[str, An
         raise TestPublishError("postiz unavailable", 500)
     postiz.delete_post(postiz_post_id)
     db.log("system", None, "", "test_cancelled", postiz_post_id)
+    _metric(comps, "test_cancelled")
     return {"ok": True, "deleted": postiz_post_id}

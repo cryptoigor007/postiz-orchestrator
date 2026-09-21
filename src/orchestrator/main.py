@@ -52,7 +52,12 @@ def build(args: argparse.Namespace) -> dict:
     clock = SystemClock()
     postiz = create_postiz_client(dry_run=args.dry_run)
     safety = SafetyChecker(db, cfg, clock)
-    guard = ScheduleGuard(cfg, clock, sources=[("postiz", postiz_source(postiz))])
+    try:
+        _guard_ttl = int(os.getenv("ORCH_GUARD_TTL_SEC", "") or 120)
+    except ValueError:
+        _guard_ttl = 120
+    guard = ScheduleGuard(cfg, clock, ttl_sec=_guard_ttl,
+                          sources=[("postiz", postiz_source(postiz))])
     comps_guard = guard
     broker = None
     if os.getenv("TOKEN_BROKER_URL"):
@@ -148,6 +153,11 @@ def main(argv: list[str] | None = None) -> int:
     comps = build(args)
     cfg = comps["cfg"]
 
+
+    from .metrics import Metrics as _Metrics
+
+    metrics = comps.get("metrics") or _Metrics(Path(args.db).resolve().parent / "metrics.json")
+    comps["metrics"] = metrics
 
     if args.daemon:
         from .runner import Runner

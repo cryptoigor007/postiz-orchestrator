@@ -27,8 +27,9 @@ from orchestrator.webapp_api import WebAppAPI, validate_init_data
 
 def _make_init_data(bot_token: str, user_id: int = 42) -> str:
     user = json.dumps({"id": user_id, "first_name": "Test"}, separators=(",", ":"))
+    import time as _time
     fields = {
-        "auth_date": "1700000000",
+        "auth_date": str(int(_time.time())),
         "query_id": "AAH",
         "user": user,
     }
@@ -382,6 +383,35 @@ def test_remove_youtube_platform_deletes_postiz_and_reports_shorts(env):
     assert payload["removed"] >= 2
     assert db.fetchone("SELECT id FROM long_videos WHERE id=?", (fid,)) is None
     assert db.fetchone("SELECT id FROM shorts WHERE id=?", (sid,)) is None
+
+
+def test_cleanup_orphans_keeps_active_test_posts(env):
+    """P0.8: тест-пост из publish_log не считается сиротой и не удаляется."""
+    api, db, clock, cfg = env
+    postiz = MockPostizClient()
+    post = postiz.create_post(platform="youtube", media=None,
+                              content={"description": "x", "integration_id": "i"},
+                              scheduled_for=None)
+    db.log("short", 1, "youtube", "test_scheduled", f"{post.id} @ 2026-01-01T00:00:00+00:00")
+    api.comps["postiz"] = postiz
+    code, payload, _ = api.handle("POST", "/webapp/api/queue/cleanup_orphans",
+                                  {"X-Telegram-Init-Data": "dev"}, b"{}")
+    assert code == 200 and payload["deleted"] == 0
+    assert post.id in postiz.posts  # тест-пост жив
+
+
+def test_recon_ignores_active_test_posts(env):
+    """P0.8: reconciliation не считает тест-пост сиротой."""
+    api, db, clock, cfg = env
+    postiz = MockPostizClient()
+    post = postiz.create_post(platform="youtube", media=None,
+                              content={"description": "x", "integration_id": "i"},
+                              scheduled_for=None)
+    db.log("short", 1, "youtube", "test_scheduled", f"{post.id} @ 2026-01-01T00:00:00+00:00")
+    from orchestrator.status_sync import Reconciliation
+
+    res = Reconciliation(db, postiz, clock).run()
+    assert res.get("orphans", 0) == 0
 
 
 def test_cleanup_orphans_removes_unknown_queue_posts(env):

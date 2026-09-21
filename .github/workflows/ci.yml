@@ -16,5 +16,7 @@ jobs:
           python -m pip install -q -r requirements.txt ruff
       - name: Lint
         run: ruff check src scripts tests
+      - name: Migrations smoke
+        run: PYTHONPATH=src python -m pytest tests/test_migrations.py -q
       - name: Tests
         run: PYTHONPATH=src python -m pytest tests/ -q

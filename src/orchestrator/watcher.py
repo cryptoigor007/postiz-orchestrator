@@ -157,6 +157,14 @@ class Watcher:
         except OSError:
             return False
 
+    def _trim_size_cache(self, max_items: int = 10000) -> None:
+        """P2.5: мягкое вытеснение (FIFO eviction) вместо полной очистки словаря."""
+        if len(self._size_cache) <= max_items:
+            return
+        drop = len(self._size_cache) - int(max_items * 0.8)
+        for k in list(self._size_cache)[:drop]:
+            self._size_cache.pop(k, None)
+
     def _is_stable(self, path: Path) -> bool:
         """R2: require size stable across two stats to reduce race with writers."""
         try:
@@ -168,12 +176,10 @@ class Watcher:
         if prev and prev[0] == size:
             cycles = prev[1] + 1
             self._size_cache[key] = (size, cycles)
-            if len(self._size_cache) > 10000:
-                self._size_cache.clear()
+            self._trim_size_cache()
             return cycles >= self.cfg.file_stability_cycles
         self._size_cache[key] = (size, 1)
-        if len(self._size_cache) > 10000:
-            self._size_cache.clear()
+        self._trim_size_cache()
         return False
 
     # ---------- scan ----------

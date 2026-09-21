@@ -94,9 +94,12 @@ class TestPublishCfg(BaseModel):
     require_explicit_platforms: bool = True                 # true: только из allowlist
     allow_prod_channel: bool = False                        # разрешить боевой канал
     prod_integration_ids: list[str] = Field(default_factory=list)  # id боевых каналов
+    test_integration_ids: list[str] = Field(default_factory=list)  # allowlist id для тестов
     skip_tail_side_effects: bool = True
     skip_thematic_cascade: bool = True
     zero_jitter: bool = True
+    ignore_limits: bool = True   # P1.2: тест не жрёт daily_limit/min_interval, но пауза учитывается
+    cleanup_after_hours: int = 24  # P1.3: авто-снятие тест-постов старше N часов
 
 
 class AppConfig(BaseModel):

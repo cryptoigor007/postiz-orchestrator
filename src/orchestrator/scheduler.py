@@ -142,10 +142,12 @@ class Scheduler:
                 continue  # сначала выкладываем остаток предыдущей серии
             # L21: pending series-end question blocks new long until resolved/expired
             pq = self.db.fetchone(
-                "SELECT pending_series_end_question FROM platform_queue_state WHERE platform=?",
+                "SELECT pending_series_end_question, "
+                "COALESCE(pending_backlog_question,0) AS pending_backlog_question "
+                "FROM platform_queue_state WHERE platform=?",
                 (platform,),
             )
-            if pq and pq["pending_series_end_question"]:
+            if pq and (pq["pending_series_end_question"] or pq["pending_backlog_question"]):
                 continue
             eff = sched_settings.effective(self.db, self.cfg, platform, "long")
             future_slots = next_long_video_dates(

@@ -17,7 +17,12 @@ def move_excess_shorts(
     clock: Clock,
     parent_video_id: int,
 ) -> int:
-    """Move shorts beyond max_shorts_per_long_video into shorts_overflow/ and mark skipped."""
+    """Move shorts beyond max_shorts_per_long_video into shorts_overflow/ and mark skipped.
+
+    P2.9: переполнение помечается 'skipped' на ВСЕХ платформах конфига (не только на
+    включённых) — это консервативно и предотвращает публикацию лишних шортсов, если
+    платформу включат позже; файлы при overflow_move_files=false НЕ переносятся.
+    """
     max_n = cfg.limits.max_shorts_per_long_video
     shorts = db.fetchall(
         "SELECT id, folder_path FROM shorts WHERE parent_video_id=? ORDER BY order_index, id",

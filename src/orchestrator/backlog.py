@@ -53,28 +53,31 @@ class BacklogManager:
 
     def _state(self, platform: str) -> dict | None:
         return self.db.fetchone(
-            "SELECT pending_series_end_question, pending_series_end_at, series_tail_mode,"
+            "SELECT pending_backlog_question, pending_backlog_at, series_tail_mode,"
             " last_series_end_question_at FROM platform_queue_state WHERE platform=?",
             (platform,),
         )
 
     def awaiting(self, platform: str) -> bool:
         st = self._state(platform)
-        return bool(st and st["pending_series_end_question"])
+        return bool(st and st["pending_backlog_question"])
 
     # ---------- timing ----------
 
-    def next_long_slot(self, now: datetime | None = None) -> datetime | None:
-        sched = self.cfg.schedules.get("long_video", {})
-        days = sched.get("days", ["tue", "fri"])
-        t = sched.get("time", "16:00")
-        slots = next_long_video_dates(days, t, now or self.clock.now(),
-                                      count=1, tz_name=self.cfg.timezone)
+    def next_long_slot(self, platform: str, now: datetime | None = None) -> datetime | None:
+        """P0.10: слот из effective-настроек платформы (override/группы/исключения)."""
+        from . import sched_settings
+        eff = sched_settings.effective(self.db, self.cfg, platform, "long")
+        days = eff.get("days") or ["tue", "fri"]
+        t = eff.get("time") or "16:00"
+        slots = next_long_video_dates(days, t, now or self.clock.now(), count=1,
+                                      exception_days=eff.get("exception_days", []),
+                                      tz_name=self.cfg.timezone)
         return slots[0] if slots else None
 
     def needs_question(self, platform: str, now: datetime | None = None) -> datetime | None:
         now = now or self.clock.now()
-        slot = self.next_long_slot(now)
+        slot = self.next_long_slot(platform, now)
         if not slot:
             return None
         ask_at = slot - timedelta(minutes=self.cfg.tail.ask_minutes_before)
@@ -83,16 +86,16 @@ class BacklogManager:
         if self.has_backlog(platform) == 0:
             return None
         st = self._state(platform)
-        if st and st["pending_series_end_question"] and \
-                st["pending_series_end_at"] == slot.isoformat():
+        if st and st["pending_backlog_question"] and \
+                st["pending_backlog_at"] == slot.isoformat():
             return None
         return slot
 
     def ask(self, platform: str, slot: datetime) -> None:
         now = self.clock.now().isoformat()
         self.db.execute(
-            "UPDATE platform_queue_state SET pending_series_end_question=1, "
-            "pending_series_end_at=?, last_series_end_question_at=?, updated_at=? WHERE platform=?",
+            "UPDATE platform_queue_state SET pending_backlog_question=1, "
+            "pending_backlog_at=?, last_series_end_question_at=?, updated_at=? WHERE platform=?",
             (slot.isoformat(), now, now, platform),
         )
         if self.notifier is not None:
@@ -105,8 +108,8 @@ class BacklogManager:
         now = self.clock.now().isoformat()
         if answer == "distribute":
             self.db.execute(
-                "UPDATE platform_queue_state SET pending_series_end_question=0, "
-                "pending_series_end_at=NULL, series_tail_mode=1, updated_at=? WHERE platform=?",
+                "UPDATE platform_queue_state SET pending_backlog_question=0, "
+                "pending_backlog_at=NULL, series_tail_mode=1, updated_at=? WHERE platform=?",
                 (now, platform),
             )
             n = 0
@@ -126,27 +129,29 @@ class BacklogManager:
             return n
         # wait | skip
         self.db.execute(
-            "UPDATE platform_queue_state SET pending_series_end_question=0, "
-            "pending_series_end_at=NULL, series_tail_mode=0, last_series_end_question_at=?, "
+            "UPDATE platform_queue_state SET pending_backlog_question=0, "
+            "pending_backlog_at=NULL, series_tail_mode=0, last_series_end_question_at=?, "
             "updated_at=? WHERE platform=?",
             (now, now, platform),
         )
         self.db.log("system", None, platform, f"backlog_{answer}", "")
         return 0
 
-    def last_long_slot(self, now: datetime | None = None) -> datetime | None:
-        """Последний по времени слот серии (<= now)."""
+    def last_long_slot(self, platform: str, now: datetime | None = None) -> datetime | None:
+        """Последний по времени слот серии (<= now) из effective-настроек платформы."""
+        from . import sched_settings
         from .slots import DAY_MAP, get_tz, local_to_utc, parse_time
         now = now or self.clock.now()
-        sched = self.cfg.schedules.get("long_video", {})
-        days = {DAY_MAP[d.lower()[:3]] for d in sched.get("days", ["tue", "fri"])
+        eff = sched_settings.effective(self.db, self.cfg, platform, "long")
+        days = {DAY_MAP[d.lower()[:3]] for d in (eff.get("days") or ["tue", "fri"])
                 if d.lower()[:3] in DAY_MAP}
-        t = sched.get("time", "16:00")
+        exceptions = set(eff.get("exception_days") or [])
+        t = eff.get("time") or "16:00"
         tz = get_tz(self.cfg.timezone)
         local_today = now.astimezone(tz).date()
         for i in range(0, 15):
             d = local_today - timedelta(days=i)
-            if d.weekday() in days:
+            if d.weekday() in days and d.isoformat() not in exceptions:
                 dt = local_to_utc(d, parse_time(t), self.cfg.timezone)
                 if dt <= now:
                     return dt
@@ -157,7 +162,7 @@ class BacklogManager:
         now = now or self.clock.now()
         if self.awaiting(platform):
             return 0
-        slot = self.last_long_slot(now)
+        slot = self.last_long_slot(platform, now)
         if not slot:
             return 0
         if self.db.get_setting(f"backlog_slot_done_{platform}") == slot.isoformat():
@@ -176,9 +181,9 @@ class BacklogManager:
     def should_remind(self, platform: str, now: datetime | None = None) -> datetime | None:
         now = now or self.clock.now()
         st = self._state(platform)
-        if not (st and st["pending_series_end_question"] and st["pending_series_end_at"]):
+        if not (st and st["pending_backlog_question"] and st["pending_backlog_at"]):
             return None
-        raw = st["pending_series_end_at"]
+        raw = st["pending_backlog_at"]
         try:
             slot = datetime.fromisoformat(raw)
         except Exception:
@@ -202,10 +207,10 @@ class BacklogManager:
     def auto_default(self, platform: str, now: datetime | None = None) -> int:
         now = now or self.clock.now()
         st = self._state(platform)
-        if not (st and st["pending_series_end_question"] and st["pending_series_end_at"]):
+        if not (st and st["pending_backlog_question"] and st["pending_backlog_at"]):
             return 0
         try:
-            slot = datetime.fromisoformat(st["pending_series_end_at"])
+            slot = datetime.fromisoformat(st["pending_backlog_at"])
         except Exception:
             return 0
         if slot.tzinfo is None:

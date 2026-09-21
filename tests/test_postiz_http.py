@@ -231,3 +231,59 @@ def test_post_500_is_not_retried(monkeypatch):
     c = Stub()
     r = _request_with_retry(c, "POST", "https://x/posts")
     assert r.status_code == 500 and c.calls == 1
+
+
+def test_delete_retries_on_429_with_retry_after(monkeypatch):
+    """P1.1: DELETE идемпотентен → 429 с Retry-After повторяется."""
+    import httpx
+
+    from orchestrator.postiz_http import HttpPostizClient
+
+    calls = {"n": 0, "slept": []}
+
+    class StubTransport(httpx.BaseTransport):
+        def handle_request(self, request):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(429, headers={"Retry-After": "2"},
+                                      request=request)
+            return httpx.Response(204, request=request)
+
+    monkeypatch.setattr("time.sleep", lambda s: calls["slept"].append(s))
+    c = HttpPostizClient(base_url="https://x", token="t", transport=StubTransport())
+    c.delete_post("p1")
+    assert calls["n"] == 2 and calls["slept"] == [2.0]
+
+
+def test_set_status_retries_on_500(monkeypatch):
+    """P1.1: PUT идемпотентен → 5xx повторяется."""
+    import httpx
+
+    from orchestrator.postiz_http import HttpPostizClient
+
+    calls = {"n": 0}
+
+    class StubTransport(httpx.BaseTransport):
+        def handle_request(self, request):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(500, request=request)
+            return httpx.Response(200, json={"ok": True}, request=request)
+
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    c = HttpPostizClient(base_url="https://x", token="t", transport=StubTransport())
+    c.set_status("p1", "draft")
+    assert calls["n"] == 2
+
+
+def test_retry_after_clamped():
+    from orchestrator.postiz_http import _retry_after_seconds
+
+    class R:
+        def __init__(self, v):
+            self.headers = {"retry-after": v}
+
+    assert _retry_after_seconds(R("0")) == 1.0
+    assert _retry_after_seconds(R("999")) == 60.0
+    assert _retry_after_seconds(R("")) is None
+    assert _retry_after_seconds(R("bogus")) is None

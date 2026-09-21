@@ -47,6 +47,8 @@ def start_http_server(
             else:
                 self.send_header("Cache-Control", "no-store")
             if "html" in (ctype or ""):
+                # TODO(P2.4): 'unsafe-inline' нужен текущему инлайн-скрипту панели;
+                # после выноса в отдельный файл — убрать. Все данные в UI проходят esc().
                 self.send_header(
                     "Content-Security-Policy",
                     "default-src 'self'; script-src 'self' 'unsafe-inline'; "
@@ -97,7 +99,15 @@ def start_http_server(
         def do_POST(self):  # noqa: N802
             parsed = urlparse(self.path)
             path = parsed.path
+            # P0.7: жёсткий кап до чтения тела (защита RAM/DoS); лимит согласован с webapp
+            try:
+                max_body = int(os.getenv("ORCH_MAX_BODY_BYTES", str(50 * 1024 * 1024)))
+            except ValueError:
+                max_body = 50 * 1024 * 1024
             length = int(self.headers.get("Content-Length") or 0)
+            if length > max_body:
+                self._send(413, {"error": "payload too large"}, "application/json")
+                return
             body = self.rfile.read(length) if length else b""
             if webapp_handler and path.startswith("/webapp"):
                 code, payload, ctype = webapp_handler("POST", self.path, self._headers_dict(), body)

@@ -174,6 +174,18 @@ class Reconciliation:
                 "SELECT postiz_post_id FROM entity_platform_status "
                 "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''"):
             known_ids.add(r["postiz_post_id"])
+        # P0.8: активные тест-посты — не сироты (отдельный контур test_publish)
+        _sched: set[str] = set()
+        for r in self.db.fetchall(
+                "SELECT details FROM publish_log WHERE action='test_scheduled'"):
+            pid = (r["details"] or "").strip().split(" ", 1)[0]
+            if pid:
+                _sched.add(pid)
+        for r in self.db.fetchall(
+                "SELECT details FROM publish_log WHERE action='test_cancelled'"):
+            pid = (r["details"] or "").strip()
+            _sched.discard(pid)
+        known_ids |= _sched
         orphans = 0
         for p in postiz_posts:
             if p.id not in known_ids:

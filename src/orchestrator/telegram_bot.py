@@ -72,6 +72,19 @@ class TelegramNotifier:
         return handler(chat_id, arg)
 
     def ask_series_end(self, platform: str) -> None:
+        """P0.11: спросить про soft-end и зарегистрировать диалог (иначе ответ не резолвится)."""
+        from datetime import timedelta
+
+        ttl_days = int(getattr(self.cfg.tail, "series_end_question_ttl_days", 3) or 3)
+        expires = (self.clock.now() + timedelta(days=ttl_days)).timestamp()
+        targets = list(self.cfg.telegram.allowed_chat_ids or [])
+        if not targets and self._owner_chat_id:
+            targets = [self._owner_chat_id]
+        for cid in targets:
+            if cid:
+                self._pending_dialogs[cid] = {
+                    "type": "series_end", "platform": platform, "expires": expires,
+                }
         self.broadcast(
             f"Series soft-end on {platform}. Enter tail mode? Reply: yes / no"
         )
@@ -135,7 +148,9 @@ class TelegramNotifier:
         platform = dlg["platform"]
         if text.lower() in ("yes", "да", "y"):
             self.db.execute(
-                "UPDATE platform_queue_state SET series_tail_mode=1, updated_at=? WHERE platform=?",
+                "UPDATE platform_queue_state SET series_tail_mode=1, "
+                "pending_series_end_question=0, pending_series_end_at=NULL, updated_at=? "
+                "WHERE platform=?",
                 (self.clock.now().isoformat(), platform),
             )
             return f"Tail mode ON for {platform}"
@@ -145,6 +160,36 @@ class TelegramNotifier:
             (self.clock.now().isoformat(), platform),
         )
         return f"Tail mode OFF for {platform}"
+
+
+    def broadcast_markup(self, text: str, reply_markup: dict) -> None:
+        """P0.12/N1: рассылка с inline-кнопками всем allowed чатам (метод класса)."""
+        targets = list(self.cfg.telegram.allowed_chat_ids or [])
+        if not targets and self._owner_chat_id:
+            targets = [self._owner_chat_id]
+        for cid in targets:
+            if cid:
+                self.send(cid, text, reply_markup)
+
+    def _backlog_markup(self, platform: str) -> dict:
+        return {"inline_keyboard": [[
+            {"text": "Распределить остаток", "callback_data": f"backlog_distribute {platform}"},
+            {"text": "Ждать ещё", "callback_data": f"backlog_wait {platform}"},
+            {"text": "Не публиковать", "callback_data": f"backlog_skip {platform}"},
+        ]]}
+
+    def ask_backlog(self, platform: str, count: int) -> None:
+        text = (f"Серия закончилась? Не опубликовано шортсов: {count} ({platform}).\n"
+                f"Если не ответить до слота — распределю остаток автоматически.")
+        self.broadcast_markup(text, self._backlog_markup(platform))
+
+    def remind_backlog(self, platform: str, count: int) -> None:
+        text = (f"⚠️ ВАЖНО: серия закончилась, остаток {count} шортсов ({platform}) "
+                f"не распределён. Отвечай!")
+        self.broadcast_markup(text, self._backlog_markup(platform))
+
+    def backlog_distributed(self, platform: str, n: int) -> None:
+        self.broadcast(f"Остаток распределён ({platform}): {n} шортсов поставлено в план.")
 
 
 def setup_commands(bot: TelegramNotifier, components: dict) -> None:
@@ -371,27 +416,6 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         )
 
 
-    def ask_backlog(self, platform: str, count: int) -> None:
-        text = (f"Серия закончилась? Не опубликовано шортсов: {count} ({platform}).\n"
-                f"Если не ответить до слота — распределю остаток автоматически.")
-        markup = {"inline_keyboard": [[
-            {"text": "Распределить остаток", "callback_data": f"backlog_distribute {platform}"},
-            {"text": "Ждать ещё", "callback_data": f"backlog_wait {platform}"},
-            {"text": "Не публиковать", "callback_data": f"backlog_skip {platform}"},
-        ]]}
-        self.broadcast_markup(text, markup)
-
-    def remind_backlog(self, platform: str, count: int) -> None:
-        text = f"⚠️ ВАЖНО: серия закончилась, остаток {count} шортсов ({platform}) не распределён. Отвечай!"
-        markup = {"inline_keyboard": [[
-            {"text": "Распределить остаток", "callback_data": f"backlog_distribute {platform}"},
-            {"text": "Ждать ещё", "callback_data": f"backlog_wait {platform}"},
-            {"text": "Не публиковать", "callback_data": f"backlog_skip {platform}"},
-        ]]}
-        self.broadcast_markup(text, markup)
-
-    def backlog_distributed(self, platform: str, n: int) -> None:
-        self.broadcast(f"Остаток распределён ({platform}): {n} шортсов поставлено в план.")
 
     def broadcast_markup(self, text: str, reply_markup: dict) -> None:
         targets = self.cfg.telegram.allowed_chat_ids or (

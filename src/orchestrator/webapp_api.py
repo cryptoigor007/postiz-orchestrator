@@ -20,25 +20,159 @@ from .metrics import sanitize_metrics
 from .watcher import WATCH_ROOTS_KEY
 
 
-def _host_is_public(host: str) -> bool:
-    """True, если все адреса хоста — публичные (защита cover/fetch от SSRF)."""
+def _addr_is_public(addr: str) -> bool:
+    """Публичный ли IP (private/loopback/link-local/reserved/multicast/unspecified/CGNAT)."""
     import ipaddress
-    import socket
     try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
         return False
-    if not infos:
+    if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+            or ip.is_multicast or ip.is_unspecified):
         return False
-    for _fam, _t, _p, _c, sa in infos:
-        try:
-            ip = ipaddress.ip_address(sa[0])
-        except ValueError:
-            return False
-        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
-                or ip.is_multicast or ip.is_unspecified):
-            return False
+    if ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10"):
+        return False  # CGNAT
+    if ip.version == 6 and ip in ipaddress.ip_network("fec0::/10"):
+        return False  # site-local (deprecated, но блокируем)
     return True
+
+
+def _hostname_ok(host: str) -> bool:
+    """Отклоняем localhost/числовые литералы/userinfo — до DNS."""
+    import re as _re
+    h = (host or "").strip().lower().rstrip(".")
+    if not h:
+        return False
+    if h == "localhost" or h.endswith(".localhost") or h.endswith(".local"):
+        return False
+    if ":" in h:  # raw IPv6 literal — не принимаем, требуем hostname
+        return False
+    if _re.fullmatch(r"0[xX][0-9a-fA-F]+", h):  # 0x7f000001
+        return False
+    if _re.fullmatch(r"\d+", h):  # decimal IP (2130706433)
+        return False
+    if _re.fullmatch(r"0[0-7]*(\.[0-7]+){3}", h):  # octal IP
+        return False
+    if _re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", h):  # dotted-quad IP literal (в т.ч. 127.0.0.1)
+        return False
+    return True
+
+
+def _resolve_and_pin(host: str) -> list[str]:
+    """Все A/AAAA хоста обязаны быть публичными; возвращаем список IP для pin-connect."""
+    import socket
+    infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    ips: list[str] = []
+    for _fam, _t, _p, _c, sa in infos or []:
+        addr = sa[0]
+        if not _addr_is_public(str(addr)):
+            raise ValueError(f"address not public: {addr}")
+        if str(addr) not in ips:
+            ips.append(str(addr))
+    if not ips:
+        raise ValueError("no addresses")
+    return ips
+
+
+def _fetch_image_pinned(url: str, max_bytes: int = 25 * 1024 * 1024,
+                        max_hops: int = 3) -> tuple[bytes, str, str]:
+    """GET картинки с pin по IP (anti DNS-rebinding), ручной redirect, stream cap.
+
+    Возвращает (blob, content_type, final_url). Бросает ValueError с понятной причиной.
+    """
+    import socket
+    import ssl
+    from urllib.parse import urljoin, urlsplit
+
+    for _hop in range(max_hops + 1):
+        u = urlsplit(url)
+        if u.scheme not in ("http", "https"):
+            raise ValueError("scheme not allowed")
+        if u.username or u.password:
+            raise ValueError("userinfo not allowed")
+        host = u.hostname or ""
+        if not _hostname_ok(host):
+            raise ValueError("host not allowed")
+        port = u.port or (443 if u.scheme == "https" else 80)
+        ips = _resolve_and_pin(host)  # проверка ВСЕХ адресов + pin
+
+        sock = None
+        last_err: Exception | None = None
+        for ip in ips:  # коннектимся только к проверенному IP (без повторного resolve)
+            try:
+                sock = socket.create_connection((ip, port), timeout=10)
+                break
+            except OSError as e:  # noqa: PERF203
+                last_err = e
+                sock = None
+        if sock is None:
+            raise ValueError(f"connect failed: {last_err}")
+
+        try:
+            if u.scheme == "https":
+                sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+            path = u.path or "/"
+            if u.query:
+                path += "?" + u.query
+            req = (f"GET {path} HTTP/1.1\r\nHost: {host}\r\n"
+                   "User-Agent: orchestrator-cover/1.0\r\nAccept: image/*\r\n"
+                   "Connection: close\r\n\r\n")
+            sock.sendall(req.encode())
+            head_buf = b""
+            while b"\r\n\r\n" not in head_buf:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                head_buf += chunk
+                if len(head_buf) > 65536:
+                    raise ValueError("headers too large")
+            head, _sep, body = head_buf.partition(b"\r\n\r\n")
+            lines = head.split(b"\r\n")
+            if not lines or len(lines[0].split()) < 2:
+                raise ValueError("bad response")
+            status = int(lines[0].split()[1])
+            hdrs: dict[str, str] = {}
+            for ln in lines[1:]:
+                k, _c, v = ln.partition(b":")
+                hdrs[k.strip().lower().decode("latin-1")] = v.strip().decode("latin-1")
+            if status in (301, 302, 303, 307, 308):
+                loc = hdrs.get("location") or ""
+                if not loc:
+                    raise ValueError("redirect without location")
+                url = urljoin(url, loc)  # следующий хоп проверится заново
+                continue
+            if status != 200:
+                raise ValueError(f"http {status}")
+            ctype = (hdrs.get("content-type") or "").split(";")[0].strip().lower()
+            clen = hdrs.get("content-length") or ""
+            if clen.isdigit() and int(clen) > max_bytes:
+                raise ValueError("image too large")
+            buf = bytearray(body)
+            if len(buf) > max_bytes:
+                raise ValueError("image too large")
+            while True:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                if len(buf) > max_bytes:  # stream cap: обрыв, не копим RAM
+                    raise ValueError("image too large")
+            return bytes(buf), ctype, url
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+    raise ValueError("too many redirects")
+
+
+def _host_is_public(host: str) -> bool:
+    """True, если все адреса хоста — публичные (совместимость; см. _resolve_and_pin)."""
+    try:
+        _resolve_and_pin(host)
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -59,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "814"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "815"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -78,6 +212,19 @@ def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
         calc = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(calc, received_hash):
             return None
+        # P0.5: freshness auth_date (по умолчанию 24ч) — защита от replay старого initData
+        try:
+            max_age = int(os.getenv("ORCH_WEBAPP_INIT_MAX_AGE_SEC", "86400"))
+        except ValueError:
+            max_age = 86400
+        if max_age > 0:
+            raw_date = str(parsed.get("auth_date") or "").strip()
+            if not raw_date.isdigit():
+                return None  # Telegram всегда присылает auth_date; отсутствие — отклоняем
+            age = time.time() - int(raw_date)
+            if age > max_age or age < -300:  # допускаем небольшой clock-skew вперёд
+                logger.warning("initData stale: age=%.0fs > %ss", age, max_age)
+                return None
         if "user" in parsed:
             parsed["user"] = json.loads(parsed["user"])
         return parsed
@@ -441,6 +588,8 @@ class WebAppAPI:
                 known = {r["postiz_post_id"] for r in self.db.fetchall(
                     "SELECT postiz_post_id FROM entity_platform_status "
                     "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''")}
+                # P0.8: активные тест-посты — не «сироты» (их снимает test/cancel или TTL)
+                known |= self._active_test_post_ids()
                 deleted = 0
                 try:
                     posts = postiz_c.list_scheduled()
@@ -896,33 +1045,22 @@ class WebAppAPI:
                     url = str(data.get("url") or "").strip()
                     if not re.match(r"^https?://", url, re.I):
                         return 400, {"error": "http(s) url required"}, "application/json"
-                    # SSRF-защита: запрещаем приватные/локальные адреса и redirect-хопы на них
-                    from urllib.parse import urlsplit as _us
-                    u = _us(url)
-                    if not u.hostname or not _host_is_public(u.hostname):
-                        return 400, {"error": "url host not allowed (private/loopback)"}, \
-                            "application/json"
+                    # SSRF: pin по проверенному IP (anti-rebinding), ручной redirect ≤3,
+                    # stream cap 25 MiB до чтения тела в память
                     try:
-                        import httpx
-                        with httpx.Client(timeout=25.0, follow_redirects=False) as c:
-                            r = c.get(url, headers={"User-Agent": "orchestrator-cover/1.0"})
-                            hops = 0
-                            while r.is_redirect and hops < 3:
-                                loc = r.headers.get("location") or ""
-                                lu = _us(loc)
-                                if not lu.hostname or not _host_is_public(lu.hostname):
-                                    return 400, {"error": "redirect not allowed"}, \
-                                        "application/json"
-                                r = c.get(loc, headers={"User-Agent": "orchestrator-cover/1.0"})
-                                hops += 1
-                            r.raise_for_status()
-                            blob = r.content
-                            ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
-                            ext = {"image/png": ".png", "image/jpeg": ".jpg",
-                                   "image/webp": ".webp"}.get(
-                                       ctype, Path(urlsplit(url).path).suffix.lower())
-                            if ext not in IMG_EXTS:
-                                ext = ".jpg"
+                        blob, ctype, final_url = _fetch_image_pinned(url)
+                        ext = {"image/png": ".png", "image/jpeg": ".jpg",
+                               "image/webp": ".webp"}.get(
+                                   ctype, Path(urlsplit(final_url).path).suffix.lower())
+                        if ext not in IMG_EXTS:
+                            ext = ".jpg"
+                    except ValueError as e:
+                        msg = str(e)
+                        if "too large" in msg:
+                            return 413, {"error": "image too large (>25MB)"}, "application/json"
+                        if "not allowed" in msg or "scheme" in msg or "no addresses" in msg:
+                            return 400, {"error": f"url not allowed: {msg}"}, "application/json"
+                        return 502, {"error": f"download failed: {msg}"}, "application/json"
                     except Exception as e:
                         return 502, {"error": f"download failed: {e}"}, "application/json"
                 if blob is None or len(blob) < 32:
@@ -1239,6 +1377,12 @@ class WebAppAPI:
                         return 400, {"error": "postiz_post_id required"}, "application/json"
                     return 200, cancel_test_post(self.comps, pid), "application/json"
                 except TestPublishError as e:
+                    _m = self.comps.get("metrics")
+                    if _m is not None and hasattr(_m, "incr"):
+                        try:
+                            _m.incr("test_rejected")
+                        except Exception:
+                            pass
                     return e.code, {"error": str(e)}, "application/json"
             if method == "POST" and route == "schedule":
                 import re as _re
@@ -1345,6 +1489,22 @@ class WebAppAPI:
         data["live"] = live
         return sanitize_metrics(data)
 
+    def _active_test_post_ids(self) -> set[str]:
+        """postiz_post_id тестовых постов, которые ещё не отменены (test_scheduled без test_cancelled)."""
+        scheduled: set[str] = set()
+        for r in self.db.fetchall(
+                "SELECT details FROM publish_log WHERE action='test_scheduled'"):
+            pid = (r["details"] or "").strip().split(" ", 1)[0]
+            if pid:
+                scheduled.add(pid)
+        cancelled: set[str] = set()
+        for r in self.db.fetchall(
+                "SELECT details FROM publish_log WHERE action='test_cancelled'"):
+            pid = (r["details"] or "").strip()
+            if pid:
+                cancelled.add(pid)
+        return scheduled - cancelled
+
     def _rate_limited(self, headers: dict[str, str]) -> bool:
         try:
             limit = int(os.getenv("WEBAPP_RATE_LIMIT", "120"))
@@ -1355,9 +1515,18 @@ class WebAppAPI:
         xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or ""
         # S16: use only the first hop (client) — ignore spoofed chain tail
         client_ip = xff.split(",")[0].strip() if xff else ""
+        # P1.8: НЕ использовать полный Init-Data (меняется каждый запрос → лимит не работал).
+        # Идентификатор: access-key → user id из initData → первый XFF → anon.
+        _init = headers.get("X-Telegram-Init-Data") or headers.get("x-telegram-init-data") or ""
+        _uid = ""
+        if _init:
+            import re as _re
+            m = _re.search(r'"id"\s*:\s*(\d+)', _init)
+            _uid = f"tg:{m.group(1)}" if m else ""
         ident = (
             headers.get("X-Webapp-Key") or headers.get("x-webapp-key")
-            or headers.get("X-Telegram-Init-Data") or headers.get("x-telegram-init-data")
+            or _uid
+            or client_ip
             or client_ip or "local"
         )
         now = time.monotonic()

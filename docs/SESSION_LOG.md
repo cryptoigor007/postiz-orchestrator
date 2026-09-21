@@ -574,3 +574,22 @@
 - Проверки: 233 теста + GUI-проверка — зелёные (локальный стенд, dry-run).
 - Решения: postiz_create_per_hour=60 (наше), config.yaml/.env/БД не трогаем, панель /webapp/b/<build>/,
   MCP/bridge — позже; на сервере перед деплоем бэкап + ORCH_HTTP_BIND=0.0.0.0.
+
+## 2026-09-21 — Деплой 8.1.2 на сервер (этапы 2–3) — ЗАВЕРШЕНО
+- Бэкап отката: /root/orchestrator_rollback_20260921_120525.tar.gz (21 МБ).
+- Деплой: код 8.1.2 на /opt/orchestrator (наш config.yaml/.env/БД не тронуты; конфиги были идентичны).
+- В .env добавлен ORCH_HTTP_BIND=0.0.0.0 (для LAN/проверок с Mac).
+- Миграция БД: schema_version 11 -> 12, создан idx_eps_postiz_id_unique ✓.
+- ИНЦИДЕНТ при деплое (найден и устранён): watcher падал с PermissionError на
+  /mnt/video/ssd_backup/кальянная/vertical (маковские права после ночной догрузки) ->
+  падал весь цикл раннера (streak/backoff). Исправлено: (а) права на сервере
+  (chown orchestrator + 755/644), (б) hardening: _walk обёрнут try/except OSError
+  (одна недоступная папка больше не роняет цикл) + тест.
+- Найдено и исправлено: меню-кнопка не обновлялась — cloudflared_url_sync.sh брал URL
+  только из journalctl, а журнал был очищен (SystemMaxUse=300M) -> "no url yet".
+  Добавлен fallback базового URL из /var/lib/cloudflared-webapp.url; вручную синхронизировано.
+- Панель: https://...trycloudflare.com/webapp/b/812/ (200), меню-кнопка обновлена, .env
+  WEBAPP_PUBLIC_URL обновлён.
+- Проверки: 233 теста + GUI (локально и ПРОТИВ БОЕВОГО СЕРВЕРА) — зелёные; reconcile 0/0;
+  публикация 12:00 (шорт 304) вышла https://www.youtube.com/watch?v=3IFDDfJHoh4,
+  Telegram-ссылка встала на 12:15; следующий слот 18:00 (шорт 305).

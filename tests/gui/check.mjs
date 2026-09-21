@@ -27,7 +27,7 @@ const key = process.env.WEBAPP_ACCESS_KEY
 const apiBase = `${parsed.origin}/webapp/api`;
 const realFixtures = {};
 const GET_ENDPOINTS = ["version", "status", "roots", "browse", "calendar", "queue",
-  "platforms", "schedule_settings", "failed", "tail", "backlog", "metrics",
+  "platforms", "schedule_settings", "failed", "tail", "backlog", "metrics", "trash",
   "manual/plan", "manual/uploads"];
 for (const ep of GET_ENDPOINTS) {
   try {
@@ -66,6 +66,11 @@ const fixtures = {
   tail: { items: [] },
   backlog: { items: [] },
   metrics: {},
+  trash: { items: [
+    { key: "short|1|youtube", entity_type: "short", entity_id: 1, platform: "youtube",
+      title: "Тестовый шортс", deleted_at: "2026-09-21T09:00:00+00:00",
+      deleted_reason: "platform", cascade_from: "", scheduled_for: null, parent_id: null }],
+    total: 1 },
   "manual/plan": { total: 0, by_status: {}, by_platform: {}, platforms: [], last_scan: null },
   "manual/uploads": { items: [] },
   "browse/search": { q: "готов", items: [
@@ -110,7 +115,18 @@ const dom = new JSDOM(html, {
       if (opts && opts.body) bodies.push(String(opts.body));
       const ep = path.replace(/^\/webapp\/api\//, "");
       if (ep === "roots" && opts.method === "POST") return response(fixtures.roots_post);
-      if (ep.startsWith("queue/remove")) return response(fixtures["queue/remove"]);
+      if (ep.startsWith("queue/remove")) {
+        if (opts.body && String(opts.body).includes("plan_only")) {
+          let req = {};
+          try { req = JSON.parse(String(opts.body)); } catch (_) { /* ignore */ }
+          const plat = req.platform || "youtube";
+          const plats = plat === "youtube" ? ["youtube", "telegram"] : [plat];
+          return response({ ok: true, plan_only: true, blocked: [], count: plats.length,
+            targets: plats.map((p) => ({ entity_type: req.entity_type || "short",
+              entity_id: req.entity_id || 1, platform: p, status: "scheduled" })) });
+        }
+        return response(fixtures["queue/remove"]);
+      }
       if (realFixtures[ep] !== undefined) return response(realFixtures[ep]);
       if (fixtures[ep]) return response(fixtures[ep]);
       return response({});
@@ -139,6 +155,20 @@ for (const v of views) {
   }
 }
 if (!viewFails) ok(`все ${views.length} экранов открываются без ошибок`);
+
+// 1b. Шторка «Ещё»: failed / help / trash — каждый в свой экран (не «Настройки»)
+for (const v of ["failed", "help", "trash"]) {
+  const mb = doc.getElementById("tab-more");
+  if (mb) { mb.click(); await wait(150); }
+  const sheet = doc.getElementById("more-sheet");
+  const b = sheet && sheet.querySelector(`button[data-view="${v}"]`);
+  if (!b) { fail(`шторка: нет пункта ${v}`); continue; }
+  b.click();
+  await wait(220);
+  const text = (doc.getElementById("content").textContent || "").trim();
+  if (text) ok(`шторка: ${v} — свой экран, непустой`);
+  else fail(`шторка: экран ${v} пуст`);
+}
 
 // 2. Очередь: редактирование → выбор обложки
 doc.querySelector('#nav button[data-view="queue"]').click();
@@ -215,14 +245,20 @@ if (selBtn) {
   if (done) { done.click(); await wait(150); }
 } else fail("нет кнопки «Выбрать»");
 
-// 3. Удаление: запрос ушёл, список обновился, оверлей погас
+// 3. Удаление: интерактивное окно (план) → подтверждение → запрос, список обновился
 const qBefore = calls.filter((c) => c === "GET /webapp/api/queue").length;
 doc.querySelector('[data-act="queue-remove"]').click();
-await wait(350);
+await wait(300);
+const dl = doc.getElementById("delDialog");
+if (dl) ok("удаление: интерактивное окно открылось");
+else fail("удаление: окно удаления не открылось");
+if (calls.some((c) => c === "POST /webapp/api/queue/remove")) ok("удаление: план запрошен (plan_only)");
+else fail("удаление: план НЕ запрошен");
+const okBtn = dl && dl.querySelector('[data-dd="ok"]');
+if (okBtn) { okBtn.click(); await wait(400); }
+else fail("удаление: нет кнопки подтверждения");
 const qAfter = calls.filter((c) => c === "GET /webapp/api/queue").length;
 const busy = doc.getElementById("busy");
-if (calls.some((c) => c === "POST /webapp/api/queue/remove")) ok("удаление: запрос отправлен");
-else fail("удаление: запрос НЕ отправлен");
 const delBody = bodies.filter((b) => b.includes("entity_type")).slice(-1)[0] || "";
 if (delBody.includes("platform")) ok("удаление: платформенное (platform в запросе)");
 else fail(`удаление: платформа НЕ передана (body=${delBody.slice(0, 80)})`);

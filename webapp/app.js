@@ -44,6 +44,18 @@
       scan_run_q: "Запускать последовательно?", scan_run_now: "Да, запустить", scan_run_from: "С даты", scan_run_go: "Запустить с даты",
       t_sched_started: "Запущено", t_error_date: "Выбери дату",
       nav_settings: "Настройки", title_settings: "Настройки",
+      title_trash: "Корзина", trash_selected: "выбрано", trash_restore: "Восстановить",
+      trash_restore_all: "Восстановить всё", trash_purge: "Удалить навсегда",
+      trash_hint: "Удалённое можно вернуть в очередь или убрать окончательно. Файлы на диске не трогаем.",
+      trash_empty: "Корзина пуста", trash_cascade_yt: "снято за YouTube",
+      confirm_purge: "Удалить выбранное из корзины навсегда? Файлы на диске останутся.",
+      del_title: "Удалить «%s»?", del_scope: "Что удаляем",
+      del_scope_series: "Только серию", del_scope_all: "Серию и связанные шорты (%s)",
+      del_yt_note: "Удаление с YouTube автоматически удалит Telegram (они связаны).",
+      del_tg_ask: "Удалить также с YouTube", del_will_delete: "Будет удалено",
+      del_confirm: "Удалить", del_tg_btn: "Удалить из Telegram",
+      del_all_btn: "Удалить везде", del_posts_n: "%s постов",
+      del_blocked: "Нельзя: есть опубликованное. Сначала снимите с платформы.",
       sched_title: "Расписание постинга",
       sched_explain: "Настройки постинга по каждой соцсети отдельно: серии (фильмы), шортсы серии (тематические) и обычные шортсы. Группы задают общий таймер — соцсети из одной группы публикуются одновременно.",
       sched_long: "Серии (фильмы)", sched_thematic: "Шортсы серии", sched_standalone: "Обычные шортсы",
@@ -219,6 +231,18 @@
       scan_run_q: "Start sequentially?", scan_run_now: "Yes, start", scan_run_from: "From date", scan_run_go: "Start from date",
       t_sched_started: "Started", t_error_date: "Pick a date",
       nav_settings: "Settings", title_settings: "Settings",
+      title_trash: "Trash", trash_selected: "selected", trash_restore: "Restore",
+      trash_restore_all: "Restore all", trash_purge: "Delete permanently",
+      trash_hint: "Deleted items can be restored to the queue or removed permanently. Files on disk are kept.",
+      trash_empty: "Trash is empty", trash_cascade_yt: "removed with YouTube",
+      confirm_purge: "Permanently delete the selected items? Files on disk are kept.",
+      del_title: "Delete “%s”?", del_scope: "What to delete",
+      del_scope_series: "Series only", del_scope_all: "Series and related shorts (%s)",
+      del_yt_note: "Deleting from YouTube also removes Telegram (they are linked).",
+      del_tg_ask: "Also delete from YouTube", del_will_delete: "Will be deleted",
+      del_confirm: "Delete", del_tg_btn: "Delete from Telegram",
+      del_all_btn: "Delete everywhere", del_posts_n: "%s posts",
+      del_blocked: "Blocked: something is already published. Detach it first.",
       sched_title: "Posting schedule",
       sched_explain: "Posting settings per network: series (films), series shorts (thematic) and regular shorts. Groups share one timer — networks in one group publish simultaneously.",
       sched_long: "Series (films)", sched_thematic: "Series shorts", sched_standalone: "Regular shorts",
@@ -834,6 +858,7 @@
     queue: t("title_queue"), platforms: t("title_platforms"), tail: t("title_tail"),
     failed: t("title_failed"), actions: t("title_actions"), metrics: t("title_metrics"),
     help: t("title_help"), manual: t("title_manual"), settings: t("title_settings"),
+    trash: t("title_trash"),
   });
 
   let _loadGen = 0;  // P1-14: поколение запроса — поздний ответ прошлого экрана игнорируем
@@ -871,6 +896,7 @@
         data = { ...status, queue, test };
       }
       else if (v === "metrics") data = await api("/metrics");
+      else if (v === "trash") data = await api("/trash");
       else if (v === "manual") {
         const plan = await api("/manual/plan");
         const uploads = await api("/manual/uploads");
@@ -1363,8 +1389,8 @@
              <div class="divider"></div>
              <div class="hint">${t("delete_everywhere_hint")}</div>
              <div class="btn-grid">
-               <button class="btn secondary danger-text" data-act="queue-remove-everywhere" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("delete_everywhere")}</button>
-               ${it.entity_type === "long_video" ? `<button class="btn secondary danger-text" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
+               <button class="btn secondary danger-text" data-act="queue-remove-everywhere" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}" data-title="${esc(it.title || "")}">${t("delete_everywhere")}</button>
+               ${it.entity_type === "long_video" ? `<button class="btn secondary danger-text" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}" data-title="${esc(it.title || "")}">${t("queue_remove_film_only")}</button>` : ""}
              </div>
            </div>`
         : "";
@@ -1377,7 +1403,7 @@
         : `<button class="q-cover-btn q-cover-empty" data-act="queue-edit" data-key="${key}" title="${t("cover_pick")}"></button>`;
       const col = select ? "" : `<div class="item__actions">
           <button class="icon-btn" data-act="queue-edit" data-key="${key}" title="${t("queue_edit")}" aria-label="${t("queue_edit")}">${icon("edit", 18)}</button>
-          <button class="icon-btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}" title="${t("queue_remove")}" aria-label="${t("queue_remove")}">${icon("trash", 18)}</button>
+          <button class="icon-btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}" data-title="${esc(it.title || "")}" title="${t("queue_remove")}" aria-label="${t("queue_remove")}">${icon("trash", 18)}</button>
         </div>`;
       return `<div class="item q-item${checked ? " picked" : ""}${select ? " with-check" : ""}">
         ${check}${cover}
@@ -1870,6 +1896,7 @@
     else if (state.view === "tail") renderTail(d);
     else if (state.view === "actions") renderActions(d);
     else if (state.view === "metrics") renderMetrics(d);
+    else if (state.view === "trash") renderTrash(d);
     else if (state.view === "manual") renderManual(d);
     const root = content();
     root.classList.remove("view-enter");
@@ -1916,12 +1943,196 @@
     if (more) more.classList.toggle("active", !primary);
   }
 
+  async function confirmDialog(msg) {
+    const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
+    if (tgConfirm) return await new Promise((res) => window.Telegram.WebApp.showConfirm(msg, res));
+    if (typeof window.confirm === "function") return window.confirm(msg);
+    return true;
+  }
+
+  // Интерактивное окно удаления: сначала объём (только серия / +шорты), затем платформы.
+  // Направление: с YouTube Telegram уходит автоматически; с Telegram — спрашиваем про YouTube.
+  function openDeleteDialog(opts) {
+    const etype = opts.etype;
+    const eid = Number(opts.eid);
+    const trigger = opts.platform || "";
+    const title = opts.title || `${etype} #${eid}`;
+    const old = document.getElementById("delDialog");
+    if (old) old.remove();
+    let all = [];
+    let blockedList = [];
+    let shortsN = 0;
+    let scopeAll = false;
+    let alsoYt = false;
+    let loaded = false;
+
+    const ov = document.createElement("div");
+    ov.className = "sheet-overlay";
+    ov.id = "delDialog";
+    document.body.appendChild(ov);
+    const _useBack = showNativeBack(() => close());
+    ov.dataset.nativeBack = _useBack ? "1" : "";
+
+    function close() { ov.remove(); hideNativeBack(); }
+    function inScope(x) {
+      if (scopeAll) return true;
+      return x.entity_type === etype && Number(x.entity_id) === eid;
+    }
+    function decorated(x) {
+      if (trigger === "telegram") return x.platform === "telegram" || alsoYt;
+      return true;  // youtube: Telegram всегда; "": все платформы
+    }
+    function chosen() { return all.filter((x) => inScope(x) && decorated(x)); }
+
+    function body() {
+      if (!loaded) {
+        return `<div class="sheet"><div class="sheet-grab"></div>
+          <div class="sheet-title">${esc(t("del_title").replace("%s", title))}</div>
+          <div class="empty">${t("loading")}</div></div>`;
+      }
+      const ch = chosen();
+      const plats = Array.from(new Set(ch.map((x) => x.platform)));
+      const cnt = ch.length;
+      const scopeBlock = shortsN ? `
+        <div class="field"><span class="field__label">${t("del_scope")}</span>
+          <div class="seg" role="group">
+            <button class="${!scopeAll ? "on" : ""}" data-dd="scope|series" aria-pressed="${!scopeAll}">${t("del_scope_series")}</button>
+            <button class="${scopeAll ? "on" : ""}" data-dd="scope|all" aria-pressed="${scopeAll}">${t("del_scope_all").replace("%s", shortsN)}</button>
+          </div></div>` : "";
+      const platBlock = trigger === "telegram"
+        ? `<label class="field"><span class="field__label">${t("del_tg_ask")}</span>
+             <input type="checkbox" data-dd="yt" ${alsoYt ? "checked" : ""}/></label>`
+        : `<div class="hint">${t("del_yt_note")}</div>`;
+      const platsHtml = plats.map((p) => `<span class="badge info"><span class="q-plat">${pIcon(p)}</span>${esc(p)}</span>`).join(" ");
+      return `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(t("del_confirm"))}">
+        <div class="sheet-grab"></div>
+        <div class="sheet-title">${esc(t("del_title").replace("%s", title))}</div>
+        ${scopeBlock}${platBlock}
+        <div class="field"><span class="field__label">${t("del_will_delete")}</span>
+          <div class="row row-center-8">${platsHtml || `<span class="meta">${t("none")}</span>`}
+            <span class="meta">${t("del_posts_n").replace("%s", cnt)}</span></div></div>
+        ${blockedList.length ? `<div class="hint danger-text">${t("del_blocked")}</div>` : ""}
+        <div class="btn-grid">
+          <button class="btn secondary" data-dd="cancel">${t("cancel")}</button>
+          <button class="btn danger" data-dd="ok" ${cnt && !blockedList.length ? "" : "disabled"}>${
+            trigger === "telegram" ? (alsoYt ? t("del_all_btn") : t("del_tg_btn")) : t("del_confirm")}</button>
+        </div>
+      </div>`;
+    }
+    function paint() { ov.innerHTML = body(); }
+
+    async function submit() {
+      if (!chosen().length) return;
+      close();
+      busy(t("working"));
+      try {
+        const r = await api("/queue/remove", { method: "POST", body: JSON.stringify({
+          entity_type: etype, entity_id: eid, platform: trigger,
+          with_shorts: scopeAll, also_youtube: alsoYt }) });
+        if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
+        else toast(`${t("queue_removed")}: ${r.removed || 0}`);
+      } catch (e) {
+        toast(`${t("error_prefix")}: ${e.message}`);
+      } finally {
+        unbusy();
+      }
+      state.queueEdit = null;
+      return load();
+    }
+
+    ov.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-dd]");
+      if (!b) { if (e.target === ov) close(); return; }
+      const a = b.dataset.dd;
+      if (a === "cancel") return close();
+      if (a === "scope|series") { scopeAll = false; return paint(); }
+      if (a === "scope|all") { scopeAll = true; return paint(); }
+      if (a === "ok") return submit();
+      // yt-чекбокс обрабатываем в change, чтобы не было двойного переключения
+    });
+    ov.addEventListener("change", (e) => {
+      const b = e.target.closest("[data-dd='yt']");
+      if (b) { alsoYt = !!e.target.checked; paint(); }
+    });
+
+    paint();
+    api("/queue/remove", { method: "POST", body: JSON.stringify({
+      entity_type: etype, entity_id: eid, platform: trigger,
+      with_shorts: true, also_youtube: true, plan_only: true }) })
+      .then((plan) => {
+        all = plan.targets || [];
+        blockedList = plan.blocked || [];
+        shortsN = all.filter((x) => x.entity_type === "short").length;
+        loaded = true;
+        paint();
+      })
+      .catch((e) => { close(); toast(`${t("error_prefix")}: ${e.message}`); });
+  }
+
+  function renderTrash(d) {
+    const items = (d && d.items) || [];
+    const sel = state.trashSelected || {};
+    const select = !!state.trashSelect;
+    const keys = Object.keys(sel).filter((k) => sel[k]);
+    const fmt = (iso) => {
+      if (!iso) return "";
+      const ts = Date.parse(iso);
+      if (isNaN(ts)) return "";
+      try {
+        return new Intl.DateTimeFormat(state.lang === "ru" ? "ru-RU" : "en-GB",
+          { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+          .format(new Date(ts));
+      } catch (_) { return ""; }
+    };
+    const groups = [];
+    for (const it of items) {
+      const gk = `${it.entity_type}|${it.entity_id}`;
+      let g = groups.find((x) => x.key === gk);
+      if (!g) { g = { key: gk, type: it.entity_type, id: it.entity_id, title: it.title, items: [] }; groups.push(g); }
+      g.items.push(it);
+    }
+    const toolbar = `<div class="q-toolbar">
+        <button class="btn secondary" data-act="trash-restore-all" ${items.length ? "" : "disabled"}>${t("trash_restore_all")}</button>
+        <button class="btn ${select ? "primary" : "secondary"} q-sel-btn" data-act="trash-select" ${items.length ? "" : "disabled"}>${select ? t("queue_done") : t("queue_select")}</button>
+      </div>`;
+    const bulk = !select ? "" : `<div class="bulk-bar">
+        <span class="meta"><b>${keys.length}</b> ${t("trash_selected")}</span>
+        <button class="btn secondary" data-act="trash-check-all">${t("queue_all")}</button>
+        <button class="btn primary" data-act="trash-restore" ${keys.length ? "" : "disabled"}>${t("trash_restore")}</button>
+        <button class="btn danger" data-act="trash-purge" ${keys.length ? "" : "disabled"}>${t("trash_purge")}</button>
+      </div>`;
+    const kindOf = (t2) => (t2 === "long_video" ? "Фильм" : "Шортс");
+    const body = groups.map((g) => {
+      const rows = g.items.map((it) => {
+        const k = it.key;
+        const on = !!sel[k];
+        const check = !select ? "" : `<button class="q-check${on ? " on" : ""}" data-act="trash-check"
+            data-key="${esc(k)}" aria-pressed="${on}" aria-label="${t("queue_select")}">${on ? icon("check", 13) : ""}</button>`;
+        const casc = it.cascade_from === "youtube"
+          ? ` · <span class="badge">${t("trash_cascade_yt")}</span>` : "";
+        return `<div class="item${on ? " picked" : ""}${select ? " with-check" : ""}">
+          ${check}
+          <span class="q-plat big">${pIcon(it.platform)}</span>
+          <div class="item__main">
+            <div class="item__title">${esc(g.title || (kindOf(g.type) + " #" + g.id))}</div>
+            <div class="item__meta">${esc(it.platform)} · ${esc(fmt(it.deleted_at))}${casc}</div>
+          </div>
+        </div>`;
+      }).join("");
+      return `<div class="panel"><div class="panel-head"><h3>${kindOf(g.type)} #${g.id}</h3>
+        <span class="badge">${g.items.length}</span></div>${rows}</div>`;
+    }).join("");
+    content().innerHTML = `<div class="view-enter">${toolbar}${bulk}
+      <div class="hint">${t("trash_hint")}</div>
+      ${body || `<div class="empty">${t("trash_empty")}</div>`}</div>`;
+  }
+
   function openMoreSheet() {
     if ($("more-sheet")) { closeMoreSheet(); return; }  // повторный тап = закрыть
     const items = [
       ["platforms", "users"], ["tail", "folder"], ["manual", "edit"],
       ["actions", "swap"], ["metrics", "chart"], ["failed", "warn"],
-      ["help", "help"], ["settings", "gear"],
+      ["help", "help"], ["settings", "gear"], ["trash", "trash"],
     ];
     const rows = items.map(([v, ic]) =>
       `<button class="sheet-item" data-view="${v}">${icon(ic, 22)}<span>${esc(t("title_" + v))}</span><span class="chev">›</span></button>`
@@ -2197,45 +2408,16 @@
         return load();
       }
       if (act === "queue-remove-everywhere") {
-        let ask = t("confirm_delete_everywhere");
-        if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
-        const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-        let ok = true;
-        if (tgConfirm) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
-        else if (typeof window.confirm === "function") ok = window.confirm(ask);
-        if (!ok) return;
-        busy(t("working"));
-        try {
-          const r = await api("/queue/remove", { method: "POST", body: JSON.stringify({
-            entity_type: el.dataset.et, entity_id: Number(el.dataset.eid) }) });
-          unbusy();
-          if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
-          else toast(`${t("queue_removed")}: ${r.removed || 0}`);
-        } catch (e) {
-          unbusy();
-          toast(`${t("error_prefix")}: ${esc(e.message)}`);
-        }
-        state.queueEdit = null;
-        return load();
+        return openDeleteDialog({
+          etype: el.dataset.et, eid: el.dataset.eid, platform: "",
+          tg: el.dataset.tg === "1", title: el.dataset.title || "",
+        });
       }
       if (act === "queue-remove-film-only") {
-        let ask = t("confirm_film_only");
-        if (el.dataset.tg === "1") ask += "\n\n" + t("warn_tg_link");
-        const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-        let ok = true;
-        if (tgConfirm) {
-          ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
-        } else if (typeof window.confirm === "function") {
-          ok = window.confirm(ask);
-        }
-        if (!ok) return;
-        busy(t("working"));
-        const r = await api("/queue/remove", {
-          method: "POST",
-          body: JSON.stringify({ entity_type: "long_video", entity_id: Number(el.dataset.eid), keep_shorts: true }),
-        }).finally(() => unbusy());
-        toast(`${t("queue_removed")}: ${r.removed || 0}`);
-        return load();
+        return openDeleteDialog({
+          etype: "long_video", eid: el.dataset.eid, platform: "",
+          tg: el.dataset.tg === "1", title: el.dataset.title || "",
+        });
       }
       if (act === "queue-edit") {
         state.queueEdit = { key: el.dataset.key };
@@ -2332,70 +2514,55 @@
         return load();
       }
       if (act === "queue-remove") {
-        {
-          const plat = el.dataset.p || "";
-          const ask = t("confirm_delete_row").replace("%s", plat);
-          const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-          let ok = true;
-          if (tgConfirm) {
-            ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
-          } else if (typeof window.confirm === "function") {
-            ok = window.confirm(ask);
-          }
-          if (!ok) return;
-        }
-        busy(t("working"));
-        const payload = JSON.stringify({
-          entity_type: el.dataset.et,
-          entity_id: Number(el.dataset.eid),
-          platform: el.dataset.p || "",
+        return openDeleteDialog({
+          etype: el.dataset.et, eid: el.dataset.eid, platform: el.dataset.p || "",
+          tg: el.dataset.tg === "1", title: el.dataset.title || "",
         });
-        let r = null;
+      }
+      if (act === "trash-select") {
+        state.trashSelect = !state.trashSelect;
+        state.trashSelected = {};
+        return render();
+      }
+      if (act === "trash-check") {
+        const k = el.dataset.key || "";
+        state.trashSelected = state.trashSelected || {};
+        state.trashSelected[k] = !state.trashSelected[k];
+        return render();
+      }
+      if (act === "trash-check-all") {
+        const items = state.data?.items || [];
+        const cur = state.trashSelected || {};
+        const ks = items.map((it) => it.key);
+        const allOn = ks.length > 0 && ks.every((k) => cur[k]);
+        state.trashSelected = {};
+        if (!allOn) ks.forEach((k) => { state.trashSelected[k] = true; });
+        return render();
+      }
+      if (act === "trash-restore" || act === "trash-restore-all") {
+        const ids = act === "trash-restore-all" ? [] : Object.keys(state.trashSelected || {}).filter((k) => state.trashSelected[k]);
+        if (act === "trash-restore" && !ids.length) return;
+        busy(t("working"));
         try {
-          r = await api("/queue/remove", { method: "POST", body: payload });
-        } catch (e1) {
-          toast(t("retrying"));
-          try {
-            r = await api("/queue/remove", { method: "POST", body: payload });
-          } catch (e2) {
-            unbusy();
-            toast(`${t("error_prefix")}: ${e2.message}`);
-            return load();
-          }
-        }
-        if (r && r.dependents && r.dependents.shorts) {
-          const ask3 = t("confirm_cascade_shorts").replace("%s", r.dependents.shorts);
-          let ok3 = true;
-          const tgConfirm3 = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-          if (tgConfirm3) ok3 = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask3, res));
-          else if (typeof window.confirm === "function") ok3 = window.confirm(ask3);
-          if (ok3) {
-            try {
-              await api("/queue/remove", { method: "POST", body: JSON.stringify({
-                entity_type: el.dataset.et, entity_id: Number(el.dataset.eid) }) });
-              toast(t("shorts_deleted"));
-            } catch (e) { toast(`${t("error_prefix")}: ${esc(e.message)}`); }
-          }
-        }
-        if (r && r.dependent && r.dependent.includes("telegram")) {
-          const ask2 = t("confirm_cascade_tg");
-          let ok2 = true;
-          const tgConfirm2 = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-          if (tgConfirm2) ok2 = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask2, res));
-          else if (typeof window.confirm === "function") ok2 = window.confirm(ask2);
-          if (ok2) {
-            try {
-              await api("/queue/remove", { method: "POST", body: JSON.stringify({
-                entity_type: el.dataset.et, entity_id: Number(el.dataset.eid),
-                platform: "telegram" }) });
-            } catch (_) {}
-          }
-        }
-        unbusy();
-        if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
-        else if (!r || !r.removed) toast(t("already_removed"));
-        else if (r.cascade && r.cascade.length) toast(t("cascade_deleted"));
-        else toast(`${t("queue_removed")}: ${r.removed}`);
+          const body = act === "trash-restore-all" ? { all: true } : { ids };
+          const r = await api("/trash/restore", { method: "POST", body: JSON.stringify(body) });
+          toast(`${t("restored")}: ${r.restored || 0}`);
+        } catch (e) { toast(`${t("error_prefix")}: ${e.message}`); }
+        finally { unbusy(); }
+        state.trashSelected = {};
+        return load();
+      }
+      if (act === "trash-purge") {
+        const ids = Object.keys(state.trashSelected || {}).filter((k) => state.trashSelected[k]);
+        if (!ids.length) return;
+        if (!(await confirmDialog(t("confirm_purge") + "\n\n" + t("trash_hint")))) return;
+        busy(t("working"));
+        try {
+          const r = await api("/trash/purge", { method: "POST", body: JSON.stringify({ ids }) });
+          toast(`${t("trash_purge")}: ${r.purged || 0}`);
+        } catch (e) { toast(`${t("error_prefix")}: ${e.message}`); }
+        finally { unbusy(); }
+        state.trashSelected = {};
         return load();
       }
       if (act === "toggle-mode") {

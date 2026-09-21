@@ -51,3 +51,33 @@ def test_queue_edit_save_releases_busy():
     block = js[idx:idx + 1600]
     assert "finally" in block
     assert "unbusy()" in block
+
+
+def test_trash_view_is_wired():
+    """Корзина: view, пункт шторки «Ещё», загрузка и рендер."""
+    js = _js()
+    assert "function renderTrash(" in js
+    assert 'state.view === "trash"' in js
+    assert 'else if (v === "trash") data = await api("/trash");' in js
+    assert '["trash", "trash"]' in js          # пункт шторки «Ещё»
+    assert "title_trash" in js
+
+
+def test_trash_actions_are_wired():
+    js = _js()
+    for act in ("trash-select", "trash-check", "trash-check-all",
+                "trash-restore", "trash-restore-all", "trash-purge"):
+        assert f'act === "{act}"' in js, act
+    assert '"/trash/restore"' in js and '"/trash/purge"' in js
+
+
+def test_delete_dialog_uses_plan_and_scope():
+    """Интерактивное окно удаления: план с сервера, выбор объёма и правило YouTube→Telegram."""
+    js = _js()
+    assert "function openDeleteDialog(" in js
+    assert "plan_only: true" in js
+    assert 'data-dd="scope|all"' in js
+    assert "with_shorts: scopeAll" in js
+    assert "also_youtube: alsoYt" in js
+    assert "del_yt_note" in js and "del_tg_ask" in js
+

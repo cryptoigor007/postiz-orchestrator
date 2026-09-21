@@ -403,16 +403,30 @@
   // Инсеты: safeArea + contentSafeAreaInset — второй учитывает кнопки Telegram ✕ и ⋮
   function applyTgInsets() {
     try {
-      const s0 = (tg && tg.safeAreaInset) || {};
-      const c0 = (tg && tg.contentSafeAreaInset) || {};
+      const s0 = tg && tg.safeAreaInset;
+      const c0 = tg && tg.contentSafeAreaInset;
       const px = (v) => (typeof v === "number" && v > 0 ? Math.round(v) : 0);
       const root = document.documentElement.style;
-      root.setProperty("--sa-top", Math.max(px(s0.top), px(c0.top)) + "px");
-      root.setProperty("--sa-bottom", Math.max(px(s0.bottom), px(c0.bottom)) + "px");
-      root.setProperty("--sa-right", Math.max(px(s0.right), px(c0.right)) + "px");
-      root.setProperty("--sa-left", Math.max(px(s0.left), px(c0.left)) + "px");
+      const hasSA = !!(s0 && typeof s0.top === "number");
+      const hasCS = !!(c0 && typeof c0.top === "number");
       const fs = !!(tg && (tg.isFullscreen === true || (window.__fsRequested && tg.isFullscreen !== false)));
       document.body.classList.toggle("tg-fs", fs);
+      if (hasSA || hasCS) {
+        // свежий клиент: берём инсеты SDK — contentSafeAreaInset уже учитывает кнопки Telegram
+        root.setProperty("--sa-top", Math.max(px(s0 && s0.top), px(c0 && c0.top)) + "px");
+        root.setProperty("--sa-bottom", Math.max(px(s0 && s0.bottom), px(c0 && c0.bottom)) + "px");
+        root.setProperty("--sa-right", Math.max(px(s0 && s0.right), px(c0 && c0.right)) + "px");
+        root.setProperty("--sa-left", Math.max(px(s0 && s0.left), px(c0 && c0.left)) + "px");
+        root.setProperty("--chrome-top", "0px");
+      } else {
+        // старый клиент или веб: НЕ затираем фолбэк env; в fullscreen резервируем полосу
+        // под кнопку Telegram ✕ — вертикально, чтобы не разъезжалось выравнивание по правому краю
+        root.removeProperty("--sa-top");
+        root.removeProperty("--sa-bottom");
+        root.removeProperty("--sa-right");
+        root.removeProperty("--sa-left");
+        root.setProperty("--chrome-top", fs && tg ? "46px" : "0px");
+      }
     } catch (_) {}
   }
 
@@ -2515,7 +2529,7 @@
         }
         if (tg.onEvent) {
           try { tg.onEvent("fullscreenChanged", applyFsClass); } catch (_) {}
-          try { tg.onEvent("viewportChanged", () => setTimeout(applyFsClass, 300)); } catch (_) {}
+          try { tg.onEvent("viewportChanged", () => { setTimeout(applyFsClass, 300); applyTgInsets(); }); } catch (_) {}
         }
         setTimeout(applyFsClass, 300);
         setTimeout(applyFsClass, 1200);

@@ -589,3 +589,48 @@ def test_api_queue_remove_film_only_keeps_shorts(env, tmp_path):
     assert db.fetchone("SELECT * FROM long_videos") is None
     sh = db.fetchone("SELECT parent_video_id FROM shorts")
     assert sh is not None and sh["parent_video_id"] is None  # шортс остался, отвязан
+
+
+def test_queue_restore_invalid_id_does_not_restore_all(env):
+    """P2-4: невалидный entity_id не должен восстанавливать ВСЕ skipped."""
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    for eid in (1, 2):
+        db.execute(
+            "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+            "VALUES ('short', ?, 'youtube', 'skipped')",
+            (eid,),
+        )
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/restore", headers,
+        json.dumps({"entity_type": "short", "entity_id": 0}).encode(),
+    )
+    assert code == 400
+    left = db.fetchall("SELECT entity_id FROM entity_platform_status WHERE status='skipped'")
+    assert len(left) == 2
+
+
+def test_rate_limit_ignores_spoofed_key_header(env, monkeypatch):
+    """P2-1: произвольный X-Webapp-Key не должен создавать новый bucket (обход лимита)."""
+    api, db, clock, cfg, watcher = env
+    monkeypatch.setenv("WEBAPP_RATE_LIMIT", "1")
+    api._rl.clear()
+    auth = {"user": {"id": 999}}
+    assert api._rate_limited({"X-Webapp-Key": "spoof-1"}, auth) is False
+    assert api._rate_limited({"X-Webapp-Key": "spoof-2"}, auth) is True
+
+
+def test_calendar_survives_postiz_post_without_text(env):
+    """P2-2: пост Postiz без текста не должен обрывать весь блок Postiz в календаре."""
+    api, db, clock, cfg, watcher = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    postiz = api.comps["postiz"]
+    postiz.create_post("youtube", None, {"description": "no text key"},
+                       datetime(2026, 3, 11, 16, 0, tzinfo=UTC))
+    postiz.create_post("youtube", None, {"text": "GOOD POST"},
+                       datetime(2026, 3, 12, 16, 0, tzinfo=UTC))
+    code, payload, _ = api.handle("GET", "/webapp/api/calendar", headers, b"")
+    assert code == 200
+    titles = [i.get("title", "") for day in payload.get("days", [])
+              for i in day.get("items", [])]
+    assert any("GOOD POST" in t for t in titles), titles

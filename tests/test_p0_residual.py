@@ -202,14 +202,23 @@ def test_rate_limit_identity_stable_across_initdata(tmp_path):
     import os
 
     os.environ["WEBAPP_RATE_LIMIT"] = "2"
-    h1 = {"X-Webapp-Key": "K1", "X-Telegram-Init-Data": "auth_date=1&hash=aaa"}
-    h2 = {"X-Webapp-Key": "K1", "X-Telegram-Init-Data": "auth_date=2&hash=bbb"}
-    assert api._rate_limited(h1) is False
-    assert api._rate_limited(h2) is False
-    assert api._rate_limited(h1) is True  # 3-й запрос того же клиента → лимит
-    # другой ключ — свой bucket
-    assert api._rate_limited({"X-Webapp-Key": "K2"}) is False
-    os.environ.pop("WEBAPP_RATE_LIMIT", None)
+    try:
+        auth = {"access_key": True}
+        h1 = {"X-Webapp-Key": "K1", "X-Telegram-Init-Data": "auth_date=1&hash=aaa"}
+        h2 = {"X-Webapp-Key": "K1", "X-Telegram-Init-Data": "auth_date=2&hash=bbb"}
+        assert api._rate_limited(h1, auth) is False
+        assert api._rate_limited(h2, auth) is False
+        assert api._rate_limited(h1, auth) is True  # 3-й запрос того же клиента → лимит
+        # другой ключ — свой bucket
+        assert api._rate_limited({"X-Webapp-Key": "K2"}, auth) is False
+        # P2-1: при авторизации по initData сырой заголовок НЕ создаёт новый bucket
+        api._rl.clear()
+        uid_auth = {"user": {"id": 42}}
+        assert api._rate_limited({"X-Webapp-Key": "x1"}, uid_auth) is False
+        assert api._rate_limited({"X-Webapp-Key": "x2"}, uid_auth) is False
+        assert api._rate_limited({"X-Webapp-Key": "x3"}, uid_auth) is True
+    finally:
+        os.environ.pop("WEBAPP_RATE_LIMIT", None)
 
 
 def test_direct_youtube_delete_does_not_lie():

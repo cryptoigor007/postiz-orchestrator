@@ -796,3 +796,16 @@
 - **P1-14** гонка `load()`: добавлен счётчик поколений `_loadGen` — поздний ответ прошлого экрана
   больше не перезаписывает `state.data` и не перерисовывает текущий экран.
 - +5 тестов (333): `tests/test_webapp_wiring.py` + jsdom-smoke PASS; build 825→826.
+
+## 2026-09-21 — 8.4.8: P1/P2 безопасность и устойчивость
+- **P2-1** `_rate_limited`: сырой `X-Webapp-Key` — identity только при `auth.access_key`; при initData
+  подмена заголовка больше не обнуляет лимит (тест обновлён и покрывает оба случая).
+- **P2-2** `_calendar`: `content=None` → `splitlines()` без `[0]` (IndexError обрывал весь Postiz-блок).
+- **P2-3** legacy-ключ `/webapp/k/<key>/` маскируется в логах (`/webapp/k/***`).
+- **P2-4** `queue/restore`: явный `all: true` для глобального восстановления, иначе 400.
+- **P2-5** `http_server.do_POST`: `Content-Length` < 0 / нечисловой → 400 до чтения тела.
+- **P2-7** `postiz_mcp_server`: verify ON по умолчанию, opt-out `POSTIZ_INSECURE_TLS=1`.
+- **P2-8** `token_broker.build_token_sql`: невалидный id → `ValueError` (не токен чужого канала).
+- **P1-15** `deploy.sh`: `systemctl is-active --quiet` + `curl -sf /health` отдельными шагами —
+  деплой теперь падает при не поднявшемся сервисе.
+- +4 теста (337), check.sh PASS.

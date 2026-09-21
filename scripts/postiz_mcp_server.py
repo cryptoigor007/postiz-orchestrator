@@ -18,7 +18,11 @@ import urllib.request
 
 BASE = os.getenv("POSTIZ_URL", "https://192-168-100-60.sslip.io").rstrip("/")
 KEY = os.getenv("POSTIZ_KEY", "")
-VERIFY = os.getenv("POSTIZ_VERIFY_TLS", "0").strip().lower() in ("1", "true", "yes", "on")
+# P2-7: как в src/orchestrator/postiz_http.py — verify ON по умолчанию,
+# opt-out только явным POSTIZ_INSECURE_TLS=1 (раньше default "0" молча отключал проверку).
+VERIFY = os.getenv("POSTIZ_VERIFY_TLS", "1").strip().lower() in ("1", "true", "yes", "on")
+if os.getenv("POSTIZ_INSECURE_TLS", "").strip().lower() in ("1", "true", "yes", "on"):
+    VERIFY = False
 _CTX = ssl.create_default_context()
 if not VERIFY:
     _CTX.check_hostname = False

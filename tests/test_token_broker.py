@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from orchestrator.engines.token_broker_client import TokenBrokerClient
@@ -60,4 +62,6 @@ def test_broker_sql_has_channel_filter():
     import token_broker as tb
     assert "\"id\"='INT1'" in tb.build_token_sql("youtube", "INT1")
     assert "\"id\"=" not in tb.build_token_sql("youtube", None)
-    assert "\"id\"=" not in tb.build_token_sql("youtube", "bad';drop")
+    # P2-8: невалидный id — ошибка, а не запрос без фильтра (токен чужого канала)
+    with pytest.raises(ValueError):
+        tb.build_token_sql("youtube", "bad';drop")

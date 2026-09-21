@@ -115,7 +115,16 @@ def start_http_server(
                 max_body = int(os.getenv("ORCH_MAX_BODY_BYTES", str(50 * 1024 * 1024)))
             except ValueError:
                 max_body = 50 * 1024 * 1024
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                self._send(400, {"error": "bad content-length"}, "application/json")
+                return
+            if length < 0:
+                # P2-5: отрицательная длина проходила проверку `> max_body`, а read(-1)
+                # читал до EOF без таймаута — pre-auth зависание потока.
+                self._send(400, {"error": "bad content-length"}, "application/json")
+                return
             if length > max_body:
                 self._send(413, {"error": "payload too large"}, "application/json")
                 return

@@ -1,5 +1,24 @@
 # Changelog
 
+## 8.4.8 — P1/P2 безопасность и устойчивость (API, HTTP, брокер, deploy)
+
+### Security / reliability
+- **P2-1** rate-limit: сырой `X-Webapp-Key` — identity только когда он и есть авторизация; при
+  initData-сессии подделка заголовка больше не даёт новый bucket (обход лимита).
+- **P2-2** календарь: пост Postiz без текста больше не обрушает весь блок Postiz (`IndexError`).
+- **P2-3** ключ в legacy-пути `/webapp/k/<key>/` маскируется в логах.
+- **P2-4** `queue/restore`: невалидный `entity_id` → 400, а не восстановление ВСЕХ `skipped`;
+  глобальное восстановление — только по явному `all: true`.
+- **P2-5** `http_server`: `Content-Length` < 0 или нечисловой → 400 (был pre-auth hang/DoS).
+- **P2-7** `postiz_mcp_server`: TLS-verify ON по умолчанию, opt-out только `POSTIZ_INSECURE_TLS=1`.
+- **P2-8** `token_broker`: невалидный `integration_id` → ошибка, а не токен другого канала.
+- **P1-15** `deploy.sh`: отдельные проверки `systemctl is-active`/`/health` — деплой падает, если
+  сервис не поднялся (раньше цепочка заканчивалась `echo` и всегда печатала `>> done`).
+
+### Tests
+- +4 (337): restore-400, spoof rate-limit, календарь без текста, Content-Length guard.
+- version 8.4.8 (build 826)
+
 ## 8.4.7 — P1 UI: живые «Остаток»/«Ошибки»/«Справка», оверлей, гонка load()
 
 ### Fixed

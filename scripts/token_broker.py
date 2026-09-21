@@ -60,7 +60,9 @@ def build_token_sql(platform: str, integration_id: str | None = None) -> str:
     )
     if integration_id:
         if not _re.fullmatch(r"[A-Za-z0-9_-]+", integration_id):
-            return sql + 'ORDER BY "updatedAt" DESC LIMIT 1'
+            # P2-8: раньше возвращался SQL БЕЗ фильтра → отдавался токен самого свежего
+            # канала платформы (чужого), а не ошибка.
+            raise ValueError(f"invalid integration_id: {integration_id!r}")
         sql += "AND \"id\"='" + integration_id + "' "
     return sql + 'ORDER BY "updatedAt" DESC LIMIT 1'
 

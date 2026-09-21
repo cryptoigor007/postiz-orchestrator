@@ -28,9 +28,15 @@ rsync -az --delete --no-owner --no-group \
 
 echo ">> ownership + restart"
 ssh "$HOST" "chown -R orchestrator:orchestrator '$DEST'; chmod 600 '$DEST/.env' 2>/dev/null || true; \
-  systemctl restart orchestrator.service; sleep 3; \
-  echo service=\$(systemctl is-active orchestrator.service); \
-  curl -s http://127.0.0.1:8080/health | head -c 80; echo"
+  systemctl restart orchestrator.service"
+sleep 3
+# P1-15: проверки отдельными ssh-вызовами — раньше цепочка заканчивалась `echo`/`curl | head`,
+# поэтому ssh всегда возвращал 0 и деплой был «зелёным» даже при упавшем сервисе.
+ssh "$HOST" 'systemctl is-active --quiet orchestrator.service' \
+  || { echo "ERROR: orchestrator.service не active после рестарта" >&2; exit 1; }
+ssh "$HOST" 'curl -sf --max-time 5 http://127.0.0.1:8080/health >/dev/null' \
+  || { echo "ERROR: /health не отвечает после рестарта" >&2; exit 1; }
+echo "service=active health=ok"
 
 echo ">> sync menu button"
 ssh "$HOST" "/usr/local/bin/cloudflared_url_sync.sh >/dev/null 2>&1 || true; cat /var/lib/cloudflared-webapp.url"

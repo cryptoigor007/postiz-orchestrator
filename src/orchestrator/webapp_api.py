@@ -274,6 +274,8 @@ class WebAppAPI:
         query = dict(parse_qsl(split.query))
         # A4: не светим ?key=… в логах (access log/журнал видит URL)
         _safe_path = re.sub(r"(key=)[^&\s]+", r"\1***", path)
+        # P2-3: legacy-форма /webapp/k/<key>/… тоже не должна светить ключ в логах
+        _safe_path = re.sub(r"(/webapp/k/)[^/\s]+", r"\1***", _safe_path)
         logger.info(
             "WEBAPP_REQ %s %s ua=%s ip=%s",
             method, _safe_path,
@@ -633,12 +635,15 @@ class WebAppAPI:
                         "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
                         "last_error=NULL WHERE status='skipped' AND entity_type=? AND entity_id=?",
                         (etype, eid))
-                else:
+                elif data.get("all"):
                     before = self.db.fetchone(
                         "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
                     self.db.execute(
                         "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
                         "last_error=NULL WHERE status='skipped'")
+                else:
+                    # P2-4: раньше невалидный entity_id (0/"abc") попадал в else и восстанавливал ВСЁ.
+                    return 400, {"error": "entity_type/entity_id or all=true required"}, "application/json"
                 return 200, {"ok": True, "restored": (before or {}).get("c", 0)}, "application/json"
             if method == "POST" and route == "queue/remove":
                 etype = str(data.get("entity_type") or "").strip()
@@ -1534,12 +1539,12 @@ class WebAppAPI:
             _u = (auth.get("user") or {}).get("id")
             if _u:
                 _uid = f"tg:{_u}"
-        ident = (
-            headers.get("X-Webapp-Key") or headers.get("x-webapp-key")
-            or _uid
-            or client_ip
-            or "local"
-        )
+        # P2-1: сырой X-Webapp-Key — только когда он и есть авторизация. Иначе валидный
+        # initData + произвольный заголовок на каждый запрос давал новый bucket (обход лимита).
+        _key_hdr = ""
+        if auth and auth.get("access_key"):
+            _key_hdr = headers.get("X-Webapp-Key") or headers.get("x-webapp-key") or ""
+        ident = _key_hdr or _uid or client_ip or "local"
         now = time.monotonic()
         dq = self._rl.setdefault(ident, deque())
         while dq and now - dq[0] > 60:
@@ -1899,13 +1904,14 @@ class WebAppAPI:
                     content = p.content.get("text") if isinstance(p.content, dict) else ""
                     iso = p.scheduled_for.isoformat() if p.scheduled_for else ""
                     date_l, time_l = self._to_local(iso)
+                    # P2-2: пустой content раньше давал IndexError и обрывал весь блок Postiz
+                    lines = (content or "").strip().splitlines()
                     entries.append({
                         "scheduled_for": iso,
                         "date": date_l,
                         "time": time_l,
                         "platform": p.platform,
-                        "title": (content or "").strip().splitlines()[0][:90]
-                                 or f"Postiz {str(p.id)[:8]}",
+                        "title": (lines[0][:90] if lines else "") or f"Postiz {str(p.id)[:8]}",
                         "status": state,
                         "source": "postiz",
                         "url": p.release_url,

@@ -205,6 +205,24 @@ def test_build_path_serves_app_and_assets(env):
     assert ctype.startswith("application/javascript")
 
 
+def test_build_path_rejects_absolute_and_dotdot(env, tmp_path):
+    """P0 (8.4.5): /webapp/b/<build>//abs/path уходил за WEBAPP_DIR (Path / abs == abs)."""
+    api, db, clock, cfg, watcher = env
+    secret = tmp_path / "secret.env"
+    secret.write_text("TOPSECRET=1", encoding="utf-8")
+    # абсолютный путь из URL (без ключа) — файл существует, но вне webapp/
+    code, body, _ = api.handle(
+        "GET", f"/webapp/b/{WEBAPP_BUILD}//{str(secret).lstrip('/')}", {}, b""
+    )
+    assert code == 404, (code, body[:80])
+    # обычный ..-обход по-прежнему отбивается
+    code, _, _ = api.handle("GET", f"/webapp/b/{WEBAPP_BUILD}/../../etc/host.conf", {}, b"")
+    assert code == 404
+    # легитимный ассет по-прежнему отдаётся
+    code, _, _ = api.handle("GET", f"/webapp/b/{WEBAPP_BUILD}/styles.css", {}, b"")
+    assert code == 200
+
+
 def test_browse_restricted_to_configured_root(env, tmp_path):
     api, db, clock, cfg, watcher = env
     headers = {"X-Telegram-Init-Data": "dev"}

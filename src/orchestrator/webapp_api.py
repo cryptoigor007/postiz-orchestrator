@@ -1805,8 +1805,12 @@ class WebAppAPI:
         return html.encode("utf-8")
 
     def _file(self, name: str, ctype: str) -> tuple[int, bytes, str]:
-        path = WEBAPP_DIR / name
-        if not path.is_file():
+        # P0 (8.4.5): имя приходит из URL. Без containment-проверки абсолютный путь
+        # ("/webapp/b/<build>//etc/host.conf" → name "/etc/host.conf") выходил за WEBAPP_DIR,
+        # потому что Path("/base") / "/etc/x" == "/etc/x" — это отдавало .env/БД/ключи без ключа.
+        base = WEBAPP_DIR.resolve()
+        path = (base / name.lstrip("/")).resolve()
+        if base not in path.parents or not path.is_file():
             return 404, {"error": "file not found"}, "application/json"
         return 200, path.read_bytes(), ctype
 

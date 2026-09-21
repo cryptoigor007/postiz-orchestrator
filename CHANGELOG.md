@@ -1,5 +1,19 @@
 # Changelog
 
+## 8.4.5 — P0: чтение произвольных файлов через /webapp/b/<build>/
+
+### Security
+- **P0 (критично)**: `WebAppAPI._file()` строил путь как `WEBAPP_DIR / name`, а `name` берётся из URL.
+  Абсолютный путь (`GET /webapp/b/825//etc/host.conf`, без ключа) давал `Path(base) / "/etc/…" == "/etc/…"`
+  → **неаутентифицированное чтение любых файлов**, доступных пользователю сервиса: `.env` (819 Б),
+  `data/data.sqlite` (544 КБ), pinned CA и т.п. Проверялся только `".." not in qpath`, ведущий `/` не отбивался.
+- Фикс: `_file` резолвит путь и требует, чтобы он лежал внутри `WEBAPP_DIR` (containment), плюс срезает
+  ведущие `/`; иначе 404. Симптом воспроизведён живьём на проде (в т.ч. через публичный cloudflared-туннель).
+- Регресс-тест: `tests/test_webapp_roots.py::test_build_path_rejects_absolute_and_dotdot`
+
+### Tests
+- 324 теста · ruff 0 · check.sh PASS · version 8.4.5 (build 825)
+
 ## 8.4.4 — Заголовок страницы по-настоящему по центру
 
 ### Fixed

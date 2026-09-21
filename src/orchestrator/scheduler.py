@@ -356,7 +356,7 @@ class Scheduler:
         )
         if not shorts:
             return 0
-        slots = self._backlog_slots(start_date=start_date)
+        slots = self._backlog_slots(platform, start_date=start_date)
         count = 0
         for s in shorts:
             for slot in slots:
@@ -565,21 +565,31 @@ class Scheduler:
                 )
         return count
 
-    def _backlog_slots(self, days: int = 30, start_date: str | None = None) -> list[datetime]:
-        """Свободные слоты: слот серии + обычные шортсы + тематические."""
+    def _backlog_slots(self, platform: str, days: int = 30,
+                       start_date: str | None = None) -> list[datetime]:
+        """Свободные слоты платформы: слот серии + обычные шортсы + тематические.
+
+        P1-3: берём ЭФФЕКТИВНЫЕ настройки (override платформы/группы → конфиг → дефолты),
+        иначе при любом override слоты бэклога не проходят `_is_canonical` и раскладка встаёт.
+        """
         from datetime import timedelta
 
         from .slots import DAY_MAP, get_tz, local_to_utc, parse_time
 
         tz = get_tz(self.cfg.timezone)
-        long_sched = self.cfg.schedules.get("long_video", {})
-        long_days = {DAY_MAP[d.lower()[:3]] for d in long_sched.get("days", ["tue", "fri"])
-                     if d.lower()[:3] in DAY_MAP}
-        long_time = long_sched.get("time", "16:00")
-        sa = self.cfg.schedules.get("shorts_standalone", {})
-        sa_days = {DAY_MAP[d.lower()[:3]] for d in sa.get("days", []) if d.lower()[:3] in DAY_MAP}
-        sa_times = sa.get("times", [])
-        th_time = self.cfg.schedules.get("shorts_thematic", {}).get("default_time", "20:30")
+        eff_long = sched_settings.effective(self.db, self.cfg, platform, "long")
+        eff_sa = sched_settings.effective(self.db, self.cfg, platform, "standalone")
+        eff_th = sched_settings.effective(self.db, self.cfg, platform, "thematic")
+
+        def _days(spec: dict) -> set:
+            return {DAY_MAP[str(d).lower()[:3]] for d in (spec.get("days") or [])
+                    if str(d).lower()[:3] in DAY_MAP}
+
+        long_days = _days(eff_long) or {DAY_MAP["tue"], DAY_MAP["fri"]}
+        long_time = eff_long.get("time") or "16:00"
+        sa_days = _days(eff_sa)
+        sa_times = list(eff_sa.get("times") or [])
+        th_time = eff_th.get("time") or "20:30"
 
         now = self.clock.now()
         local_today = now.astimezone(tz).date()

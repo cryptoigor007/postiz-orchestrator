@@ -847,3 +847,14 @@
 - **F7** RU-плюрализация «1 пост / 2 поста / 5 постов». **F8** висячий «·» без даты.
 - **F9** фокус в окне + Escape. **F10** favicon `data:`. **F11** guards для SDK (haptics/цвета/фуллскрин/swipes).
 - +4 теста (350); `check.sh` PASS; jsdom-smoke PASS (фокус/Escape); build 829.
+
+## 2026-09-21 — 8.4.12: бэклог (override-слоты и фиксация решения) + total корзины
+- **P1-3** `Scheduler._backlog_slots(platform)` берёт слоты из `sched_settings.effective`
+  (платформа → группа → конфиг), а не из сырого `cfg.schedules` — при override раскладка остатка
+  больше не отклоняется как `non_canonical_slot`.
+- **P1-5** `BacklogManager.resolve()` фиксирует решение по слоту (`backlog_slot_done_<platform>`):
+  «Ждать»/«Не публиковать» не повторяются каждый цикл, `auto_default` не переопределяет ответ;
+  следующий слот по-прежнему спрашивает.
+- Открытый пункт регресса Hearn: `GET /trash` отдаёт настоящий `total` + `shown` (LIMIT 500) и
+  UI-подсказку «показаны первые N из M».
+- +3 теста (353); `check.sh` PASS; build 830.

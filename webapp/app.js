@@ -60,6 +60,7 @@
       trash_restore_all: "Восстановить всё", trash_purge: "Удалить навсегда",
       trash_hint: "Удалённое можно вернуть в очередь или убрать окончательно. Файлы на диске не трогаем.",
       trash_empty: "Корзина пуста", trash_cascade_yt: "снято за YouTube",
+      trash_shown: "показаны первые %s из %s",
       confirm_purge: "Удалить выбранное из корзины навсегда? Файлы на диске останутся.",
       del_title: "Удалить «%s»?", del_scope: "Что удаляем",
       del_scope_series: "Только серию", del_scope_all: "Серию и связанные шорты (%s)",
@@ -259,6 +260,7 @@
       trash_restore_all: "Restore all", trash_purge: "Delete permanently",
       trash_hint: "Deleted items can be restored to the queue or removed permanently. Files on disk are kept.",
       trash_empty: "Trash is empty", trash_cascade_yt: "removed with YouTube",
+      trash_shown: "showing %s of %s",
       confirm_purge: "Permanently delete the selected items? Files on disk are kept.",
       del_title: "Delete “%s”?", del_scope: "What to delete",
       del_scope_series: "Series only", del_scope_all: "Series and related shorts (%s)",
@@ -2174,8 +2176,11 @@
       return `<div class="panel"><div class="panel-head"><h3>${kindOf(g.type)} #${g.id}</h3>
         <span class="badge">${g.items.length}</span></div>${rows}</div>`;
     }).join("");
+    const more = (d && d.total > items.length)
+      ? `<div class="hint">${t("trash_shown").replace("%s", items.length).replace("%s", d.total)}</div>` : "";
     content().innerHTML = `<div class="view-enter">${toolbar}${bulk}
       <div class="hint">${t("trash_hint")}</div>
+      ${more}
       ${body || `<div class="empty">${t("trash_empty")}</div>`}</div>`;
   }
 

@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "829"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "830"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -686,7 +686,11 @@ class WebAppAPI:
                         "scheduled_for": r["postiz_scheduled_for"],
                         "parent_id": r["parent_id"],
                     })
-                return 200, {"items": items, "total": len(items)}, "application/json"
+                total_row = self.db.fetchone(
+                    "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
+                total = int((total_row or {}).get("c") or 0)
+                return 200, {"items": items, "total": total, "shown": len(items)}, \
+                    "application/json"
             if method == "POST" and route in ("trash/restore", "trash/purge"):
                 ids = data.get("ids") or []
                 all_flag = bool(data.get("all"))

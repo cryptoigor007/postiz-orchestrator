@@ -82,8 +82,8 @@ def test_backlog_wait_and_skip(tmp_path):
     assert mgr.awaiting("youtube") is False
     assert mgr.has_backlog("youtube") == 2  # ничего не опубликовано
     # skip
-    slot2 = mgr.needs_question("youtube", clock.now())
-    assert slot2 is None or True  # после wait повторный вопрос возможен по кулдауну/окну
+    # P1-5: решение по слоту зафиксировано — повторного вопроса в том же окне нет
+    assert mgr.needs_question("youtube", clock.now()) is None
 
 
 def test_backlog_api(tmp_path):
@@ -176,3 +176,51 @@ def test_question_even_if_new_episode_ready(tmp_path):
         "VALUES ('videomaker','/S2','Сериал 2','/S2/w.mp4',?)", (clock.now().isoformat(),))
     slot = mgr.needs_question("youtube", clock.now())
     assert slot is not None  # остаток важнее старта новой серии
+
+
+def test_backlog_slots_use_effective_override(tmp_path):
+    """P1-3: слоты бэклога строятся из effective-настроек, а не из сырого конфига."""
+    import json
+    from zoneinfo import ZoneInfo
+
+    db, cfg, clock, mgr, sched, postiz = make(
+        tmp_path, datetime(2026, 3, 15, 6, 0, tzinfo=UTC))  # Sunday
+    db.set_setting("schedule_settings", json.dumps({
+        "youtube": {"long": {"days": ["sun"], "time": "10:00"},
+                    "standalone": {"days": ["sun"], "times": ["11:00"]},
+                    "thematic": {"time": "12:00"}}}))
+    slots = sched._backlog_slots("youtube")
+    hhmm = {x.astimezone(ZoneInfo("Europe/Moscow")).strftime("%H:%M") for x in slots}
+    assert {"10:00", "11:00", "12:00"} <= hhmm
+    assert "16:00" not in hhmm and "20:30" not in hhmm
+
+
+def test_schedule_backlog_with_override_places_shorts(tmp_path):
+    """P1-3: при override раскладка остатка проходит (слоты канонические)."""
+    import json
+
+    db, cfg, clock, mgr, sched, postiz = make(
+        tmp_path, datetime(2026, 3, 15, 6, 0, tzinfo=UTC))  # Sunday 09:00 MSK
+    seed_series(db, clock, n_shorts=2)
+    db.set_setting("schedule_settings", json.dumps({
+        "youtube": {"long": {"days": ["sun"], "time": "10:00"},
+                    "standalone": {"days": ["sun"], "times": ["11:00"]},
+                    "thematic": {"time": "12:00"}}}))
+    assert sched.schedule_backlog("youtube") == 2
+
+
+def test_backlog_wait_is_recorded_and_not_reasked(tmp_path):
+    """P1-5: wait сохраняется — вопрос не повторяется, дефолт не раскладывает остаток."""
+    db, cfg, clock, mgr, sched, postiz = make(
+        tmp_path, datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    seed_series(db, clock)
+    slot = mgr.needs_question("youtube", clock.now())
+    assert slot is not None
+    mgr.ask("youtube", slot)
+    assert mgr.resolve("youtube", "wait") == 0
+    assert mgr.needs_question("youtube", clock.now()) is None
+    clock.set(datetime(2026, 3, 10, 13, 0, tzinfo=UTC))  # слот настал
+    assert mgr.auto_default("youtube", clock.now()) == 0
+    assert mgr.has_backlog("youtube") == 2  # ничего не ушло
+    # следующий слот по-прежнему спрашивает — фича не выключена
+    assert mgr.needs_question("youtube", datetime(2026, 3, 13, 12, 0, tzinfo=UTC)) is not None

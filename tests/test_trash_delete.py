@@ -140,7 +140,7 @@ def test_trash_list_restore_selected_and_all(env):
                "deleted_at, deleted_reason) VALUES "
                "('short', 2, 'telegram', 'skipped', '2026-03-10T12:01:00+00:00', 'platform')")
     code, payload, _ = api.handle("GET", "/webapp/api/trash", HEADERS, b"")
-    assert code == 200 and payload["total"] == 2
+    assert code == 200 and payload["total"] == 2 and payload["shown"] == 2
     code, payload, _ = api.handle("POST", "/webapp/api/trash/restore", HEADERS,
                                   json.dumps({"ids": ["short|1|youtube"]}).encode())
     assert code == 200 and payload["restored"] == 1

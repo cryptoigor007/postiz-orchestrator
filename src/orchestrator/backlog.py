@@ -58,6 +58,20 @@ class BacklogManager:
             (platform,),
         )
 
+    def _decision_slot(self, platform: str, slot: datetime | None) -> datetime | None:
+        """P1-5: слот, к которому относится решение (pending_backlog_at → last/next)."""
+        if slot is not None:
+            return slot
+        st = self._state(platform)
+        raw = (st or {}).get("pending_backlog_at")
+        if raw:
+            try:
+                dt = datetime.fromisoformat(str(raw))
+                return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+            except Exception:
+                pass
+        return self.last_long_slot(platform) or self.next_long_slot(platform)
+
     def awaiting(self, platform: str) -> bool:
         st = self._state(platform)
         return bool(st and st["pending_backlog_question"])
@@ -85,6 +99,9 @@ class BacklogManager:
             return None
         if self.has_backlog(platform) == 0:
             return None
+        # P1-5: если по этому слоту решение уже принято (wait/skip/distribute) — не спрашиваем снова
+        if self.db.get_setting(f"backlog_slot_done_{platform}") == slot.isoformat():
+            return None
         st = self._state(platform)
         if st and st["pending_backlog_question"] and \
                 st["pending_backlog_at"] == slot.isoformat():
@@ -106,6 +123,10 @@ class BacklogManager:
 
     def resolve(self, platform: str, answer: str, slot: datetime | None = None) -> int:
         now = self.clock.now().isoformat()
+        # P1-5: фиксируем решение по слоту — вопрос не повторяется, дефолт не переопределяет ответ
+        dec_slot = self._decision_slot(platform, slot)
+        if dec_slot is not None:
+            self.db.set_setting(f"backlog_slot_done_{platform}", dec_slot.isoformat())
         if answer == "distribute":
             self.db.execute(
                 "UPDATE platform_queue_state SET pending_backlog_question=0, "

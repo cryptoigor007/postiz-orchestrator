@@ -659,3 +659,17 @@
 - R5: CSP TODO переформулирован (nonce/hash в 8.3); helper YT-удаления не делал (ops-инструкция достаточна).
 - Деплой 8.2.2/b816: сервис active, меню-кнопка 816, панель 200, боевые 39/39/4 без изменений, 0 ERROR.
 - Тесты 304 → 305; ruff 0; check.sh PASS.
+
+## 2026-09-21 — 8.2.3: закрытие residual-списка 8.2.2 (CSP nonce, тест-ролики, live-проверки)
+- СПС: инлайн-скрипты панели получили per-request nonce; script-src без 'unsafe-inline'
+  (разрешён только 'self' + https://telegram.org + nonce); object-src/base-uri 'none';
+  style-src оставлен inline (style-атрибуты UI) — задокументировано в коде.
+  Live: заголовок и тело nonce совпадают, gui_check PASS (панель работает под новым CSP).
+- Оба тестовых ролика [orch-test] удалены с YouTube через token broker → OAuth refresh → direct engine;
+  на канале 2 боевых видео. Добавлен scripts/yt_cleanup_test_videos.py (dry-run по умолчанию).
+- Live initData: свежий → 200, 3-суточный → 401 (реальный bot-token на сервере).
+- Live TTL: тест-пост +120 мин, created_at -48ч, рестарт → цикл runner снял его до публикации
+  (test_auto_cancelled), метрика test_cancelled=1 в /metrics (flush в конце цикла watcher).
+- Юнит: 429-backoff транспорта, CSP nonce (unit + HTTP-заголовок), uid-bucket.
+- Найдено и исправлено: хардкод /webapp/b/816/ в новых CSP-тестах → WEBAPP_BUILD из кода.
+- Тесты 305 → 308; версия 8.2.3/b817; деплой ок; боевые 39/39/4 без изменений.

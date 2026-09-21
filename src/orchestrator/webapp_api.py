@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "816"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "817"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -240,6 +240,7 @@ class WebAppAPI:
         self.db = comps["db"]
         self.token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         self._rl: dict[str, deque] = {}
+        self._tls = threading.local()  # per-request nonce для CSP
 
     def _auth(self, headers: dict[str, str], query: dict[str, str] | None = None) -> dict[str, Any] | None:
         access_key = os.getenv("WEBAPP_ACCESS_KEY", "").strip()
@@ -304,9 +305,15 @@ class WebAppAPI:
                     or qpath.startswith(bprefix + "/")
                 )
                 if is_page:
+                    import secrets as _secrets
+
+                    from . import http_server as _hs
+                    nonce = _secrets.token_urlsafe(16)
+                    self._tls.nonce = nonce
+                    _hs._webapp_nonce.value = nonce
                     return (
                         200,
-                        self._compose_index(self._key_from_request(qpath, query)),
+                        self._compose_index(self._key_from_request(qpath, query), nonce),
                         "text/html; charset=utf-8",
                     )
                 for prefix in (bprefix + "/", "/webapp/"):
@@ -1768,23 +1775,28 @@ class WebAppAPI:
                 meta.update(available=False, note="диск отключён — подключи его или выбери другой корень")
         return meta
 
-    def _compose_index(self, key: str = "") -> bytes:
-        """Self-contained page: inline CSS/JS so nothing can be cached separately."""
+    def _compose_index(self, key: str = "", nonce: str = "") -> bytes:
+        """Self-contained page: inline CSS/JS so nothing can be cached separately.
+
+        CSP: инлайн-скрипты получают per-request nonce (script-src без 'unsafe-inline');
+        style-src по-прежнему 'unsafe-inline' — в UI используются style-атрибуты (косметика).
+        """
         try:
             html = (WEBAPP_DIR / "index.html").read_text(encoding="utf-8")
             css = (WEBAPP_DIR / "styles.css").read_text(encoding="utf-8")
             js = (WEBAPP_DIR / "app.js").read_text(encoding="utf-8")
         except OSError:
             return (WEBAPP_DIR / "index.html").read_bytes()
+        _n = f' nonce="{nonce}"' if nonce else ""
         html = re.sub(
             r'<link rel="stylesheet" href="styles\.css\?v=\d+"\s*/?>',
-            lambda m: f"<style>\n{css}\n</style>",
+            lambda m: f"<style{_n}>\n{css}\n</style>",
             html,
         )
         html = re.sub(
             r'<script src="app\.js\?v=\d+"></script>',
-            lambda m: ("<script>window.__WEBAPP_KEY__=" + json.dumps(key) + ";</script>\n"
-                       f"<script>\n{js}\n</script>"),
+            lambda m: (f'<script{_n}>window.__WEBAPP_KEY__=' + json.dumps(key) + ";</script>\n"
+                       f"<script{_n}>\n{js}\n</script>"),
             html,
         )
         return html.encode("utf-8")

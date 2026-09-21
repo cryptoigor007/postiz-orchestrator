@@ -262,3 +262,99 @@ def test_rate_limit_bucket_uses_validated_uid(tmp_path, monkeypatch):
     assert api._rate_limited({}, api._auth({"X-Telegram-Init-Data": h1})) is True   # лимит 2/мин
     # невалидный init → uid нет → отдельный anon-bucket
     assert api._rate_limited({}, api._auth({"X-Telegram-Init-Data": "bogus=1"})) is False
+
+
+# --- 8.2.2+ CSP nonce ---
+
+def _api_env(tmp_path):
+    import os
+
+    os.environ["WEBAPP_DEV"] = "1"
+    e = make(tmp_path)
+
+    from orchestrator.link_updater import LinkUpdater
+    from orchestrator.webapp_api import WebAppAPI
+
+    e["link_upd"] = LinkUpdater(e["db"], e["cfg"], e["postiz"], e["clock"], e["tg"])
+    return WebAppAPI(e)
+
+
+def test_csp_nonce_in_composed_page(tmp_path):
+    import re
+
+    from orchestrator.webapp_api import WEBAPP_BUILD
+
+    api = _api_env(tmp_path)
+    code, body, ctype = api.handle("GET", f"/webapp/b/{WEBAPP_BUILD}/", {}, b"")
+    assert code == 200
+    html = body.decode() if isinstance(body, bytes) else str(body)
+    nonces = set(re.findall(r'nonce="([^"]+)"', html))
+    assert len(nonces) == 1, "стиль и оба скрипта должны иметь один nonce"
+    n = nonces.pop()
+    assert html.count(f'<script nonce="{n}">') == 2
+    assert html.count(f'<style nonce="{n}">') == 1
+    assert "telegram-web-app.js" in html
+
+
+def test_csp_header_has_nonce_without_script_unsafe_inline(tmp_path):
+    import socket
+    import urllib.request
+
+    from orchestrator.http_server import start_http_server
+    from orchestrator.webapp_api import WEBAPP_BUILD
+
+    api = _api_env(tmp_path)
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    srv = start_http_server(port, lambda: {"ok": True}, api.handle)
+    assert srv is not None
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/webapp/b/{WEBAPP_BUILD}/", timeout=5
+            ) as r:
+            csp = r.headers.get("Content-Security-Policy") or ""
+            html = r.read().decode()
+        assert "script-src 'self' https://telegram.org 'nonce-" in csp
+        assert "'unsafe-inline'" not in csp.split("style-src")[0], "script-src не должен иметь unsafe-inline"
+        assert "style-src 'self' 'unsafe-inline'" in csp  # осознанно (style-атрибуты UI)
+        n = csp.split("'nonce-")[1].split("'")[0]
+        assert f'nonce="{n}"' in html, "nonce из заголовка должен совпадать с телом"
+    finally:
+        srv.shutdown()
+
+
+def test_transport_send_message_429_backoff(monkeypatch):
+    """P1.10: 429 от Bot API → пауза Retry-After и один повтор; не-ok логируется."""
+    import httpx
+
+    from orchestrator.telegram_transport import TelegramTransport
+
+    calls = {"post": 0, "sleep": []}
+
+    class Resp:
+        def __init__(self, code, ok, retry_after=None):
+            self.status_code = code
+            self._ok = ok
+            self.text = "{}"
+            self._ra = retry_after
+
+        def json(self):
+            d = {"ok": self._ok}
+            if self._ra is not None:
+                d["parameters"] = {"retry_after": self._ra}
+            return d
+
+    def fake_post(url, **kw):
+        calls["post"] += 1
+        if calls["post"] == 1:
+            return Resp(429, False, retry_after=2)
+        return Resp(200, True)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr("time.sleep", lambda s: calls["sleep"].append(s))
+    t = TelegramTransport(token="123:TEST")
+    t.send_message(1, "hello")
+    assert calls["post"] == 2
+    assert calls["sleep"] == [2.0]

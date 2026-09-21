@@ -11,6 +11,9 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
+# per-request nonce для CSP: webapp-слой выставляет, _send читает (тот же поток запроса)
+_webapp_nonce = threading.local()
+
 
 def start_http_server(
     port: int,
@@ -47,12 +50,18 @@ def start_http_server(
             else:
                 self.send_header("Cache-Control", "no-store")
             if "html" in (ctype or ""):
-                # TODO(8.3): 'unsafe-inline' нужен инлайн-bootstrap панели; план — nonce/hash
-                # при выносе скрипта в отдельный файл. Пока XSS-поверхность закрыта esc() в UI.
+                # script-src без 'unsafe-inline': инлайн-скрипты панели подписаны per-request
+                # nonce (см. WebAppAPI._compose_index); внешний Telegram SDK — явный origin.
+                # style-src 'unsafe-inline' оставлен осознанно: в UI есть style-атрибуты (косметика).
+                nonce = getattr(_webapp_nonce, "value", "") or ""
+                src = "script-src 'self' https://telegram.org"
+                if nonce:
+                    src += f" 'nonce-{nonce}'"
                 self.send_header(
                     "Content-Security-Policy",
-                    "default-src 'self'; script-src 'self' 'unsafe-inline'; "
-                    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'",
+                    f"default-src 'self'; {src}; "
+                    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+                    "connect-src 'self'; object-src 'none'; base-uri 'none'",
                 )
             self.end_headers()
             self.wfile.write(body)

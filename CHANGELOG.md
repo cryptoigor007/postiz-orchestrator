@@ -1,5 +1,22 @@
 # Changelog
 
+## 8.2.3 — Residual list closure (CSP nonce, YT test-clips, live-проверки)
+
+### Security
+- CSP: инлайн-скрипты панели подписаны **per-request nonce** (`script-src 'self' https://telegram.org 'nonce-…'`,
+  без `'unsafe-inline'`); `style-src` оставлен inline осознанно (style-атрибуты UI) + `object-src 'none'`, `base-uri 'none'`
+
+### Added
+- `scripts/yt_cleanup_test_videos.py` — повторяемое удаление роликов `[orch-test]` с канала
+  (token broker → OAuth refresh → direct engine; dry-run по умолчанию, `--yes` для удаления)
+- Тесты: CSP nonce (unit + HTTP-заголовок), 429-backoff transport, uid-bucket
+
+### Ops / verified live
+- Оба тестовых ролика удалены с YouTube (канал = 2 боевых видео)
+- initData freshness: свежий → 200, 3-суточный → 401 (боевой сервер)
+- TTL-авто-очистка тест-постов: цикл runner снял просроченный пост до публикации, `test_auto_cancelled`,
+  метрика `test_cancelled` видна в `/webapp/api/metrics`
+- version 8.2.3 / WEBAPP_BUILD=817
 ## 8.2.2 — Residual polish
 
 ### Fixed

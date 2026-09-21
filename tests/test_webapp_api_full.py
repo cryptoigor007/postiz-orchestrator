@@ -414,3 +414,17 @@ def test_schedule_endpoint_single_flight(env):
         assert code == 200 and payload.get("busy") is True
     finally:
         wa._SCHEDULE_LOCK.release()
+
+
+def test_cover_fetch_blocks_private_urls(env):
+    """cover/fetch не ходит на приватные адреса (SSRF)."""
+    import json as _json
+
+    api, db, clock, cfg = env
+    headers = {"X-Telegram-Init-Data": "dev"}
+    for url in ("http://127.0.0.1:8080/health", "http://localhost/x.png",
+                "http://169.254.169.254/latest/", "http://192.168.1.5/a.jpg"):
+        code, payload, _ = api.handle(
+            "POST", "/webapp/api/cover/fetch", headers,
+            _json.dumps({"entity_type": "short", "entity_id": 1, "url": url}).encode())
+        assert code == 400 and "not allowed" in str(payload.get("error", "")), (url, code, payload)

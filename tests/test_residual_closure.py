@@ -106,3 +106,13 @@ def test_read_only_blocks_all_mutations(tmp_path, monkeypatch):
         code, payload, _ = api.handle("POST", path, {"X-Telegram-Init-Data": "dev"},
                                       _json.dumps(body).encode())
         assert code == 403 and payload.get("error") == "read_only", (path, code, payload)
+
+
+def test_host_is_public_blocks_private():
+    """SSRF-защита cover/fetch: приватные/локальные адреса запрещены."""
+    from orchestrator.webapp_api import _host_is_public
+
+    assert _host_is_public("8.8.8.8") is True
+    for bad in ("127.0.0.1", "localhost", "10.0.0.5", "192.168.1.1", "169.254.169.254",
+                "0.0.0.0", "::1"):
+        assert _host_is_public(bad) is False, bad

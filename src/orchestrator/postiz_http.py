@@ -33,6 +33,9 @@ def _request_with_retry(client: httpx.Client, method: str, url: str, retries: in
     for i in range(retries):
         try:
             r = client.request(method, url, **kwargs)
+            if r.status_code == 429:
+                # лимит: пост/ресурс НЕ создан — повторять безопасно
+                raise httpx.HTTPStatusError("rate limited", request=r.request, response=r)
             if r.status_code >= 500 and not is_post:
                 raise httpx.HTTPStatusError("server error", request=r.request, response=r)
             return r  # для POST 5xx отдаём вызывающему (повтор мог бы создать дубликат)
@@ -296,7 +299,7 @@ class HttpPostizClient:
             "startDate": (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "endDate": (now + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
-        r = self._client.get(self.path_posts, params=params)
+        r = _request_with_retry(self._client, "GET", self.path_posts, params=params)
         r.raise_for_status()
         payload = r.json()
         items = payload if isinstance(payload, list) else (

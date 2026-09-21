@@ -189,3 +189,45 @@ def test_create_post_youtube_keeps_thumbnail_and_adds_title():
     assert settings["thumbnail"]["id"] == "c1"
     assert settings["title"] == "Заголовок"      # платформенные поля не потерялись
     assert settings["type"] == "public"
+
+
+def test_post_429_is_retried(monkeypatch):
+    """429 (лимит) можно повторять: ресурс не создан — повторяем и получаем успех."""
+    import httpx
+
+    from orchestrator.postiz_http import _request_with_retry
+
+    class Stub:
+        def __init__(self):
+            self.calls = 0
+
+        def request(self, method, url, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return httpx.Response(429, request=httpx.Request(method, url))
+            return httpx.Response(201, json={"id": "p1"}, request=httpx.Request(method, url))
+
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    c = Stub()
+    r = _request_with_retry(c, "POST", "https://x/posts")
+    assert r.status_code == 201 and c.calls == 2
+
+
+def test_post_500_is_not_retried(monkeypatch):
+    """5xx на POST не повторяем (защита от дубликата поста)."""
+    import httpx
+
+    from orchestrator.postiz_http import _request_with_retry
+
+    class Stub:
+        def __init__(self):
+            self.calls = 0
+
+        def request(self, method, url, **kwargs):
+            self.calls += 1
+            return httpx.Response(500, request=httpx.Request(method, url))
+
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    c = Stub()
+    r = _request_with_retry(c, "POST", "https://x/posts")
+    assert r.status_code == 500 and c.calls == 1

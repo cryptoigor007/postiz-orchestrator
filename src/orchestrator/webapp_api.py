@@ -19,6 +19,28 @@ from . import sched_settings
 from .metrics import sanitize_metrics
 from .watcher import WATCH_ROOTS_KEY
 
+
+def _host_is_public(host: str) -> bool:
+    """True, если все адреса хоста — публичные (защита cover/fetch от SSRF)."""
+    import ipaddress
+    import socket
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    if not infos:
+        return False
+    for _fam, _t, _p, _c, sa in infos:
+        try:
+            ip = ipaddress.ip_address(sa[0])
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            return False
+    return True
+
+
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 _SCHEDULE_LOCK = threading.Lock()  # одна раскладка за раз (защита от двойного запуска)
 
@@ -874,10 +896,25 @@ class WebAppAPI:
                     url = str(data.get("url") or "").strip()
                     if not re.match(r"^https?://", url, re.I):
                         return 400, {"error": "http(s) url required"}, "application/json"
+                    # SSRF-защита: запрещаем приватные/локальные адреса и redirect-хопы на них
+                    from urllib.parse import urlsplit as _us
+                    u = _us(url)
+                    if not u.hostname or not _host_is_public(u.hostname):
+                        return 400, {"error": "url host not allowed (private/loopback)"}, \
+                            "application/json"
                     try:
                         import httpx
-                        with httpx.Client(timeout=25.0, follow_redirects=True) as c:
+                        with httpx.Client(timeout=25.0, follow_redirects=False) as c:
                             r = c.get(url, headers={"User-Agent": "orchestrator-cover/1.0"})
+                            hops = 0
+                            while r.is_redirect and hops < 3:
+                                loc = r.headers.get("location") or ""
+                                lu = _us(loc)
+                                if not lu.hostname or not _host_is_public(lu.hostname):
+                                    return 400, {"error": "redirect not allowed"}, \
+                                        "application/json"
+                                r = c.get(loc, headers={"User-Agent": "orchestrator-cover/1.0"})
+                                hops += 1
                             r.raise_for_status()
                             blob = r.content
                             ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()

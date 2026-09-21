@@ -37,7 +37,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "812"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "813"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -1665,7 +1665,7 @@ class WebAppAPI:
                    ON eps.entity_type='long_video' AND lv.id = eps.entity_id
             LEFT JOIN shorts sh
                    ON eps.entity_type='short' AND sh.id = eps.entity_id
-            WHERE eps.status IN ('ready', 'scheduled', 'updating')
+            WHERE eps.status IN ('ready', 'scheduled', 'updating', 'publishing')
             ORDER BY eps.postiz_scheduled_for LIMIT 300
             """
         )

@@ -358,3 +358,40 @@ def test_transport_send_message_429_backoff(monkeypatch):
     t.send_message(1, "hello")
     assert calls["post"] == 2
     assert calls["sleep"] == [2.0]
+
+
+def test_auto_cancelled_excluded_from_cleanup_active(tmp_path):
+    """Живая находка: после test_auto_cancelled повторные DELETE не выполняются."""
+    e = make(tmp_path)
+    db, clock, postiz = e["db"], e["clock"], e["postiz"]
+    e["cfg"].test_publish.cleanup_after_hours = 24
+    from orchestrator.test_publish import cleanup_expired_test_posts
+
+    post = postiz.create_post(platform="youtube", media=None,
+                              content={"description": "aged"}, scheduled_for=None)
+    db.execute("INSERT INTO publish_log (entity_type, entity_id, platform, action, details, created_at) "
+               "VALUES ('short', 1, 'youtube', 'test_scheduled', ?, ?)",
+               (f"{post.id} @ 2026-01-01T00:00:00+00:00",
+                (clock.now() - timedelta(hours=48)).isoformat()))
+    assert cleanup_expired_test_posts(e) == 1
+    # повторный прогон: авто-снятый уже не в active → 0 и никаких DELETE
+    calls = {"n": 0}
+    real_delete = postiz.delete_post
+
+    def counting_delete(pid):
+        calls["n"] += 1
+        return real_delete(pid)
+
+    postiz.delete_post = counting_delete
+    assert cleanup_expired_test_posts(e) == 0
+    assert calls["n"] == 0
+
+
+def test_httpx_logger_quiet_after_main_setup():
+    """SEC: httpx/httpcore не логируют URL с токеном (уровень >= WARNING)."""
+    import logging as _lg
+
+    import orchestrator.main  # noqa: F401  (модуль настраивает логгеры при импорте)
+
+    assert _lg.getLogger("httpx").level >= _lg.WARNING
+    assert _lg.getLogger("httpcore").level >= _lg.WARNING

@@ -220,7 +220,9 @@ def cleanup_expired_test_posts(comps: dict[str, Any]) -> int:
         pid = (r["details"] or "").strip().split(" ", 1)[0]
         if pid:
             active[pid] = r["created_at"] or ""
-    for r in db.fetchall("SELECT details FROM publish_log WHERE action='test_cancelled'"):
+    # снимаем и вручную отменённые, и авто-снятые по TTL (иначе повторные DELETE каждый цикл)
+    for r in db.fetchall("SELECT details FROM publish_log "
+                         "WHERE action IN ('test_cancelled', 'test_auto_cancelled')"):
         active.pop((r["details"] or "").strip(), None)
     now = comps["clock"].now()
     n = 0

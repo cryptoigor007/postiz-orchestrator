@@ -40,6 +40,10 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+# SEC: httpx на INFO печатает полные URL, включая https://api.telegram.org/bot<TOKEN>/...
+# и Postiz-запросы — приглушаем транспортные логгеры до WARNING.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("orchestrator")
 
 

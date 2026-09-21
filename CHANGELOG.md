@@ -1,5 +1,16 @@
 # Changelog
 
+## 8.2.4 — Live-находки: TTL-повторы + утечка токена в логи
+
+### Fixed
+- TTL-авто-очистка: `test_auto_cancelled` теперь исключается из «активных» тест-постов —
+  повторные DELETE уже снятого поста каждый цикл (Postiz отвечал 500 на stale id) устранены
+- **SECURITY**: httpx/httpcore логгеры приглушены до WARNING — на INFO они печатали полные URL,
+  включая `https://api.telegram.org/bot<TOKEN>/getUpdates` (утечка токена в journal)
+
+### Tests
+- +2: повторная авто-очистка не делает DELETE; уровень httpx/httpcore ≥ WARNING
+- version 8.2.4 / WEBAPP_BUILD=818
 ## 8.2.3 — Residual list closure (CSP nonce, YT test-clips, live-проверки)
 
 ### Security

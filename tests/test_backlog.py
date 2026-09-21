@@ -224,3 +224,18 @@ def test_backlog_wait_is_recorded_and_not_reasked(tmp_path):
     assert mgr.has_backlog("youtube") == 2  # ничего не ушло
     # следующий слот по-прежнему спрашивает — фича не выключена
     assert mgr.needs_question("youtube", datetime(2026, 3, 13, 12, 0, tzinfo=UTC)) is not None
+
+
+def test_backlog_schedule_no_upload_storm(tmp_path):
+    """P1-6: раскладка остатка при ошибке create — одна попытка на шорт и кулдаун."""
+    db, cfg, clock, mgr, sched, postiz = make(
+        tmp_path, datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+    seed_series(db, clock, n_shorts=2)
+    postiz.fail_create = True
+    sched.schedule_backlog("youtube")
+    assert len(postiz._orphan_media) == 2  # по одной попытке на шорт
+    sched.schedule_backlog("youtube")
+    assert len(postiz._orphan_media) == 2  # кулдаун — новых нет
+    clock.advance(minutes=31)
+    sched.schedule_backlog("youtube")
+    assert len(postiz._orphan_media) == 4

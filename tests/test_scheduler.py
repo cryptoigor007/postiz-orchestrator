@@ -373,3 +373,24 @@ def test_telegram_ready_row_time_follows_youtube_replan(env):
     from datetime import datetime as _dt
     t = _dt.fromisoformat(row["postiz_scheduled_for"])
     assert t.strftime("%m-%d %H:%M") == "03-19 13:15"
+
+
+def test_standalone_no_upload_storm_on_create_failure(env):
+    """P1-6: ошибка create не приводит к шторму загрузок — одна попытка и кулдаун."""
+    db, cfg, clock, postiz, safety, pub, sched = env
+    db.execute(
+        "INSERT INTO shorts (source, folder_path, order_index, video_path, title_text, created_at) "
+        "VALUES ('shortsmaker','/sm/s0',0,'/sm/s0/v.mp4','S',?)",
+        (clock.now().isoformat(),),
+    )
+    postiz.fail_create = True
+    sched.schedule_standalone_shorts(None)
+    first = len(postiz._orphan_media)
+    assert first >= 1
+    for _ in range(3):  # следующие циклы — в кулдауне, новых попыток нет
+        clock.advance(minutes=5)
+        sched.schedule_standalone_shorts(None)
+    assert len(postiz._orphan_media) == first
+    clock.advance(minutes=31)  # кулдаун истёк — попытка снова
+    sched.schedule_standalone_shorts(None)
+    assert len(postiz._orphan_media) > first

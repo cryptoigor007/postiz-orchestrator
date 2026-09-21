@@ -858,3 +858,10 @@
 - Открытый пункт регресса Hearn: `GET /trash` отдаёт настоящий `total` + `shown` (LIMIT 500) и
   UI-подсказку «показаны первые N из M».
 - +3 теста (353); `check.sh` PASS; build 830.
+
+## 2026-09-21 — 8.4.13: P1-6 — шторм загрузок при ошибке create
+- `Scheduler`: при ошибке create/upload — `break` по ошибке в `schedule_standalone_shorts` и
+  `schedule_backlog` (одна попытка на сущность за цикл) + кулдаун `PUBLISH_ERROR_COOLDOWN` (30 мин)
+  на пару (сущность, платформа); тот же кулдаун для `schedule_long_videos`.
+- Репро аудита (20/40/60/80 загрузок за 4 цикла) закрыт; после кулдауна попытка повторяется.
+- +2 теста (355); `check.sh` PASS; build 830 (backend-only).

@@ -14,6 +14,9 @@ from .slots import next_long_video_dates, thematic_slot_days
 
 logger = logging.getLogger(__name__)
 
+# P1-6: после ошибки create не дёргаем медиа повторно — кулдаун на пару (сущность, платформа)
+PUBLISH_ERROR_COOLDOWN = timedelta(minutes=30)
+
 
 class Scheduler:
     def __init__(
@@ -30,6 +33,7 @@ class Scheduler:
         self.safety = safety
         self.clock = clock
         self.job = None  # Job для прогресса/отмены (задаётся перед запуском)
+        self._publish_cooldown: dict[str, datetime] = {}
 
     def _slot_for_safety(self, slot: datetime) -> datetime:
         """Same jitter as Publisher before can_schedule (L8)."""
@@ -41,6 +45,17 @@ class Scheduler:
             return jittered
         return slot
 
+
+    def _cooldown_key(self, etype: str, eid: int, platform: str) -> str:
+        return f"{etype}:{eid}:{platform}"
+
+    def _in_publish_cooldown(self, etype: str, eid: int, platform: str) -> bool:
+        until = self._publish_cooldown.get(self._cooldown_key(etype, eid, platform))
+        return bool(until and self.clock.now() < until)
+
+    def _mark_publish_failed(self, etype: str, eid: int, platform: str) -> None:
+        self._publish_cooldown[self._cooldown_key(etype, eid, platform)] = \
+            self.clock.now() + PUBLISH_ERROR_COOLDOWN
 
     def _pick_path(self, row, platform: str, pcfg=None):
         """Путь под платформу (platform_paths) или общий wide/vertical/video."""
@@ -175,6 +190,8 @@ class Scheduler:
                 path = self._pick_path(video, platform, pcfg)
                 if not path:
                     continue
+                if self._in_publish_cooldown("long_video", video["id"], platform):
+                    continue
                 for slot in future_slots:
                     # P1-7: слоты «в прошлом» (start_date из панели) Postiz публикует
                     # немедленно — для standalone такая защита уже была, для фильмов нет.
@@ -194,6 +211,8 @@ class Scheduler:
                             count += 1
                             if self.job is not None:
                                 self.job.tick(1, f"Фильм #{video['id']} → {platform}")
+                        else:
+                            self._mark_publish_failed("long_video", video["id"], platform)
                         break
         return count
 
@@ -359,6 +378,8 @@ class Scheduler:
         slots = self._backlog_slots(platform, start_date=start_date)
         count = 0
         for s in shorts:
+            if self._in_publish_cooldown("short", s["id"], platform):
+                continue
             for slot in slots:
                 ok, _ = self.safety.can_schedule(platform, self._slot_for_safety(slot), sched_settings.effective_daily_limit(self.db, self.cfg, platform))
                 if not ok:
@@ -375,6 +396,9 @@ class Scheduler:
                 if post:
                     count += 1
                     break
+                # P1-6: ошибка create — не перебираем остальные слоты и не грузим медиа снова
+                self._mark_publish_failed("short", s["id"], platform)
+                break
         return count
 
     def _link_text(self, etype: str, eid: int, url: str | None) -> str | None:
@@ -702,8 +726,11 @@ class Scheduler:
             for short in ready:
                 if self.job is not None and self.job.cancelled:
                     break
+                if self._in_publish_cooldown("short", short["id"], platform):
+                    continue
                 cur = local_today
                 placed = False
+                failed = False
                 for _ in range(28):
                     if (
                         cur.weekday() in weekday_set
@@ -733,8 +760,12 @@ class Scheduler:
                                     placed = True
                                     if self.job is not None:
                                         self.job.tick(1, f"Обычный шортс #{short['id']}")
+                                else:
+                                    # P1-6: ошибка create — не перебираем дни и не грузим медиа заново
+                                    failed = True
+                                    self._mark_publish_failed("short", short["id"], platform)
                                 break
-                        if placed:
+                        if placed or failed:
                             break
                     cur += timedelta(days=1)
         return count

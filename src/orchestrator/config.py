@@ -83,6 +83,22 @@ class BackupCfg(BaseModel):
     method: str = "sqlite_backup"  # Connection.backup API (8.1.1+)
 
 
+class TestPublishCfg(BaseModel):
+    """Пробный (тестовый) пост: отдельный контур, не трогает боевые строки расписания."""
+    enabled: bool = False
+    default_delay_minutes: int = 1
+    min_delay_minutes: int = 1
+    max_delay_minutes: int = 120
+    title_prefix: str = "[orch-test] "
+    platforms: list[str] = Field(default_factory=list)      # allowlist платформ
+    require_explicit_platforms: bool = True                 # true: только из allowlist
+    allow_prod_channel: bool = False                        # разрешить боевой канал
+    prod_integration_ids: list[str] = Field(default_factory=list)  # id боевых каналов
+    skip_tail_side_effects: bool = True
+    skip_thematic_cascade: bool = True
+    zero_jitter: bool = True
+
+
 class AppConfig(BaseModel):
     schedules: dict[str, Any]
     platforms: dict[str, PlatformCfg]
@@ -100,6 +116,7 @@ class AppConfig(BaseModel):
     manual_uploads: ManualUploadsCfg = Field(default_factory=ManualUploadsCfg)
     backup: BackupCfg = Field(default_factory=BackupCfg)
     engines: dict[str, str] = Field(default_factory=dict)
+    test_publish: TestPublishCfg = Field(default_factory=TestPublishCfg)
     reconciliation_interval_hours: int = 24
     telegram_link_delay_min: int = 15
     timezone: str = "Europe/Moscow"

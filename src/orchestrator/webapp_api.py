@@ -59,7 +59,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "813"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "814"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -1189,6 +1189,57 @@ class WebAppAPI:
                 bdir = Path(self.db.path).parent.parent / "backups"
                 p = run_backup(self.db, self.cfg, bdir)
                 return 200, {"ok": True, "path": str(p) if p else None}, "application/json"
+            if route in ("test/schedule", "test/status", "test/cancel"):
+                from .test_publish import (
+                    TestPublishError,
+                    cancel_test_post,
+                    schedule_test_post,
+                    test_recent,
+                )
+                tcfg = self.cfg.test_publish
+                if method == "GET" and route == "test/status":
+                    return 200, {
+                        "enabled": bool(tcfg.enabled),
+                        "default_delay_minutes": tcfg.default_delay_minutes,
+                        "min_delay_minutes": tcfg.min_delay_minutes,
+                        "max_delay_minutes": tcfg.max_delay_minutes,
+                        "platforms": list(tcfg.platforms or []),
+                        "title_prefix": tcfg.title_prefix,
+                        "require_explicit_platforms": tcfg.require_explicit_platforms,
+                        "allow_prod_channel": tcfg.allow_prod_channel,
+                        "recent": test_recent(self.db, 10),
+                    }, "application/json"
+                if method != "POST":
+                    return 404, {"error": "unknown route"}, "application/json"
+                try:
+                    if route == "test/schedule":
+                        platforms = data.get("platforms") or []
+                        platform = str(data.get("platform") or "").strip()
+                        if not platform and isinstance(platforms, list) and platforms:
+                            platform = str(platforms[0])
+                        if not platform:
+                            return 400, {"error": "platform required"}, "application/json"
+                        try:
+                            entity_id = int(data.get("entity_id") or 0)
+                        except Exception:
+                            entity_id = 0
+                        if not entity_id:
+                            return 400, {"error": "entity_id required"}, "application/json"
+                        res = schedule_test_post(
+                            self.comps, platform=platform,
+                            entity_type=str(data.get("entity_type") or "short").strip(),
+                            entity_id=entity_id,
+                            delay_minutes=data.get("delay_minutes"),
+                            scheduled_for=data.get("scheduled_for"),
+                            dry_run=bool(data.get("dry_run")),
+                        )
+                        return 200, res, "application/json"
+                    pid = str(data.get("postiz_post_id") or "").strip()
+                    if not pid:
+                        return 400, {"error": "postiz_post_id required"}, "application/json"
+                    return 200, cancel_test_post(self.comps, pid), "application/json"
+                except TestPublishError as e:
+                    return e.code, {"error": str(e)}, "application/json"
             if method == "POST" and route == "schedule":
                 import re as _re
 

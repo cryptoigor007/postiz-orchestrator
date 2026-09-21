@@ -602,3 +602,26 @@
 - Живая проверка: Telegram-ссылка шорта 304 опубликована (t.me/tochkanablyudeniya/7, 12:16);
   слот 18:00 (шорт 305 + ссылка 18:15) взведён; панель b/813 — 200; GUI-проверка против
   боевого сервера — зелёная; ошибок после 12:13 — 0.
+
+## 2026-09-21 — 8.2.0: тестовый контур публикации (test_publish) + закрепление H1–H3
+- Добавлен `test_publish` (config): enabled/allowlist/границы задержки/title_prefix/prod-guard/zero_jitter;
+  по умолчанию выключено; в конфиге включено только для тестовых каналов (youtube, telegram).
+- API: `POST /webapp/api/test/schedule` (платформы[], delay_minutes, scheduled_for, entity_type/id, dry_run),
+  `GET /webapp/api/test/status` (состояние + последние тесты), `POST /webapp/api/test/cancel` (только помеченные
+  `test_scheduled`); read-only → 403 для всех (в т.ч. новых) POST.
+- Ключевое свойство: пробный пост НЕ трогает `entity_platform_status` (боевая сетка не подменяется):
+  пост создаётся напрямую в Postiz тем же клиентом/медиа-путём; факт — в `publish_log` (test_scheduled/dry_run/cancelled).
+- link-режим (telegram): тест-пост = ссылка на YouTube из `release_url` (боевой формат канала), медиа не грузится.
+- Media-режим: предохранитель Telegram Bot API (>45 МБ → 400 с понятным текстом; 413 ловили вживую).
+- UI: панель «Проверка (тестовый пост)» в Actions — платформа из allowlist, задержка, entity из очереди,
+  кнопки Тест/Dry-run, список последних тестов с отменой; i18n ru/en.
+- CLI: `--test-schedule --test-platform P --test-entity TYPE:ID [--test-delay N] [--test-dry-run]`.
+- Инцидент деплоя: меню-кнопка осталась на 813 (404) — `cloudflared_url_sync.sh` не находил URL в journalctl.
+  Скрипт переписан (fallback URL из state-файла, build динамически, БЕЗ legacy /webapp/k/, ключ в query);
+  версия в репо `scripts/cloudflared_url_sync.sh`; кнопка и per-chat кнопки → `/webapp/b/814/?key=…`.
+- Живой E2E: youtube (шорт 270, +1 мин) → PUBLISHED `[orch-test] Одиночество…` watch?v=5JeLhbun98k;
+  telegram link (шорт 304) → PUBLISHED t.me/tochkanablyudeniya/8 (`[orch-test]` + ссылка) — сообщение удалено
+  админ-ботом после проверки; оба Postiz-поста сняты через `/test/cancel`; боевые счётчики не изменились
+  (4/39/39), строк 82 до и после, ошибок циклов 0.
+- Тесты: 239 → **255** (+16: test_publish 16 кейсов, SQLi, read-only для нового маршрута); check.sh и gui_check.sh
+  (против боевого сервера) — зелёные; ruff — 0.

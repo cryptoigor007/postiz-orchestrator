@@ -81,6 +81,10 @@
       tail_title: "Остаток шортсов серии", tail_explain: "Шортсы уже нарезаны для серии, но ещё не опубликованы. Когда новых серий больше нет, система распределяет остаток по слотам (в слот основной серии — обычные шортсы, в 20:30 — шортсы к другим сериям), и только после этого запускается следующая серия. Перед запуском она спросит подтверждение.", enable: "Включить", disable: "Выключить",
       tail_off: "выкл", no_errors: "Ошибок нет",
       quick_actions: "Быстрые действия", act_sync: "Обновить статусы",
+      test_title: "Проверка (тестовый пост)", test_hint: "Пробный пост в Postiz с выбранной задержкой. Боевая очередь не затрагивается.",
+      test_schedule: "Тест-пост", test_dry: "Dry-run", test_disabled: "Тестовый контур выключен (test_publish.enabled=false).",
+      test_recent: "Последние тестовые посты", test_cancel: "Отменить", test_entity: "Что публикуем", test_delay: "задержка, мин",
+      t_test_sched: "Тест-пост поставлен:", t_test_dry: "Dry-run:", t_test_cancelled: "Тестовый пост удалён", t_test_failed: "Ошибка теста:",
       act_reconcile: "Сверка с Postiz", act_backup: "Резервная копия", act_schedule: "Разложить по слотам",
       pa_pause: "Пауза", distribute: "Распределить длинные", refresh_data: "Обновить данные",
       force_link_title: "Обновить ссылку вручную", save: "Сохранить",
@@ -232,6 +236,10 @@
       tail_title: "Unposted series shorts", tail_explain: "Shorts already cut for the series but not published yet. When no new episodes appear, the system distributes the backlog into slots (standard shorts in the main-series slot, other series' shorts at 20:30) and only then starts the next series. It asks for confirmation first.", enable: "Enable", disable: "Disable",
       tail_off: "off", no_errors: "No errors",
       quick_actions: "Quick actions", act_sync: "Sync now",
+      test_title: "Test (trial post)", test_hint: "Creates a trial post in Postiz with the chosen delay. The live queue is untouched.",
+      test_schedule: "Test post", test_dry: "Dry run", test_disabled: "Test contour is off (test_publish.enabled=false).",
+      test_recent: "Recent test posts", test_cancel: "Cancel", test_entity: "Publish what", test_delay: "delay, min",
+      t_test_sched: "Test post scheduled:", t_test_dry: "Dry run:", t_test_cancelled: "Test post removed", t_test_failed: "Test failed:",
       act_reconcile: "Check against Postiz", act_backup: "Backup now", act_schedule: "Schedule now",
       pa_pause: "Pause", distribute: "Distribute long", refresh_data: "Refresh data",
       force_link_title: "Update link manually", save: "Save",
@@ -691,7 +699,14 @@
         state.data = { items: tail.items || [], backlog: backlog.platforms || [] };
       }
       else if (v === "failed") state.data = await api("/failed");
-      else if (v === "actions") state.data = await api("/status");
+      else if (v === "actions") {
+        const status = await api("/status");
+        let queue = { items: [] };
+        let test = { enabled: false, recent: [] };
+        try { queue = await api("/queue"); } catch (_) {}
+        try { test = await api("/test/status"); } catch (_) {}
+        state.data = { ...status, queue, test };
+      }
       else if (v === "metrics") state.data = await api("/metrics");
       else if (v === "manual") {
         const plan = await api("/manual/plan");
@@ -1157,6 +1172,22 @@
           <button class="btn secondary" data-act="refresh">${t("refresh_data")}</button>
         </div>
       </div>
+      <div class="panel"><div class="panel-header">${t("test_title")}</div>
+        ${(d && d.test && d.test.enabled) ? `
+          <div class="row"><span class="meta">${t("test_hint")}</span></div>
+          <div class="form-row">
+            <select id="tp-p">${((d.test.platforms || []).map((p) => `<option>${esc(p)}</option>`).join("")) || `<option>youtube</option>`}</select>
+            <input id="tp-delay" type="number" min="${d.test.min_delay_minutes || 1}" max="${d.test.max_delay_minutes || 120}"
+              value="${d.test.default_delay_minutes || 1}" title="${t("test_delay")}" style="width:86px" />
+            <select id="tp-e" style="flex:1;min-width:180px" title="${t("test_entity")}">${testEntityOpts(d.queue)}</select>
+          </div>
+          <div class="form-row">
+            <button class="btn primary" data-act="test-schedule">${t("test_schedule")}</button>
+            <button class="btn secondary" data-act="test-dry">${t("test_dry")}</button>
+          </div>
+          ${testRecent(d.test)}`
+        : `<div class="row"><span class="meta">${t("test_disabled")}</span></div>`}
+      </div>
       <div class="panel"><div class="panel-header">${t("force_link_title")}</div>
         <div class="row"><span class="meta">${t("fl_hint")}</span></div>
         <div class="form-row">
@@ -1166,6 +1197,33 @@
           <button class="btn primary" data-act="force-link">${t("save")}</button>
         </div>
       </div>`;
+  }
+
+  function testEntityOpts(queue) {
+    const seen = new Set();
+    const out = [];
+    for (const it of ((queue && queue.items) || [])) {
+      const key = `${it.entity_type}:${it.entity_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const label = `${it.entity_type === "short" ? "Шорт" : "Фильм"} #${it.entity_id} · ${(it.title || "").slice(0, 42)}`;
+      out.push(`<option value="${esc(key)}">${esc(label)}</option>`);
+      if (out.length >= 120) break;
+    }
+    return out.join("") || `<option value="">—</option>`;
+  }
+
+  function testRecent(test) {
+    const items = (test && test.recent) || [];
+    if (!items.length) return "";
+    const rows = items.map((r) => {
+      const pid = String(r.details || "").split(" ")[0];
+      return `<div class="row" style="align-items:center;gap:8px">
+        <span class="meta">${esc(r.platform)} · ${esc(r.entity_type)}#${esc(String(r.entity_id))} · ${esc(pid)}</span>
+        <button class="btn secondary" data-act="test-cancel" data-pid="${esc(pid)}">${t("test_cancel")}</button>
+      </div>`;
+    }).join("");
+    return `<div class="row"><span class="meta">${t("test_recent")}</span></div>${rows}`;
   }
 
   function fmtDuration(sec) {
@@ -1873,6 +1931,22 @@
       } else if (act === "tail-off") {
         await api("/series_end", { method: "POST", body: JSON.stringify({ platform: el.dataset.p, enable: false }) });
         toast(`${t("t_tail_off")} · ${el.dataset.p}`);
+      } else if (act === "test-schedule" || act === "test-dry") {
+        const platform = ($("tp-p") || {}).value;
+        const minutes = Number(($("tp-delay") || {}).value || 1);
+        const sel = (($("tp-e") || {}).value || "").split(":");
+        if (!platform || !sel[0] || !sel[1]) { toast(t("test_hint")); return; }
+        const r = await api("/test/schedule", {
+          method: "POST",
+          body: JSON.stringify({
+            platforms: [platform], platform, delay_minutes: minutes,
+            entity_type: sel[0], entity_id: Number(sel[1]), dry_run: act === "test-dry",
+          }),
+        });
+        toast(`${r.dry_run ? t("t_test_dry") : t("t_test_sched")} ${r.scheduled_for || ""}`);
+      } else if (act === "test-cancel") {
+        await api("/test/cancel", { method: "POST", body: JSON.stringify({ postiz_post_id: el.dataset.pid }) });
+        toast(t("t_test_cancelled"));
       } else if (act === "distribute") {
         const r = await api("/distribute", { method: "POST", body: "{}" });
         toast(`${t("t_distributed")}: ${r.count ?? 0}`);

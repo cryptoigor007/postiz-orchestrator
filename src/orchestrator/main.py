@@ -6,6 +6,7 @@ try:
 except ImportError:
     pass
 import argparse
+import json
 import logging
 import os
 import sys
@@ -97,6 +98,7 @@ def build(args: argparse.Namespace) -> dict:
         "manual": manual,
         "manual_sources": manual_sources,
         "backlog": backlog,
+        "broker": broker,
     }
     setup_commands(tg, comps)
     db = comps["db"]
@@ -125,6 +127,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sync", action="store_true")
     parser.add_argument("--reconcile", action="store_true")
     parser.add_argument("--backup", action="store_true")
+    parser.add_argument("--test-schedule", action="store_true",
+                        help="Пробный пост: --test-platform P --test-entity TYPE:ID [--test-delay N] [--test-dry-run]")
+    parser.add_argument("--test-platform", default="")
+    parser.add_argument("--test-entity", default="", help="short:123 | long_video:45")
+    parser.add_argument("--test-delay", type=int, default=None)
+    parser.add_argument("--test-dry-run", action="store_true")
     parser.add_argument("--version", action="store_true")
     parser.add_argument("--daemon", action="store_true", help="Run continuous loop")
     parser.add_argument("--health-port", type=int, default=8080)
@@ -183,6 +191,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.reconcile or args.once:
         r = comps["recon"].run()
         logger.info("Reconciliation: %s", r)
+
+    if args.test_schedule:
+        from .test_publish import TestPublishError, schedule_test_post
+
+        if ":" not in args.test_entity or not args.test_platform:
+            print("нужно: --test-platform P --test-entity TYPE:ID", file=sys.stderr)
+            return 2
+        etype, eid = args.test_entity.split(":", 1)
+        try:
+            res = schedule_test_post(comps, platform=args.test_platform,
+                                     entity_type=etype.strip(), entity_id=int(eid),
+                                     delay_minutes=args.test_delay,
+                                     dry_run=args.test_dry_run)
+        except TestPublishError as e:
+            print(f"test-schedule: {e}", file=sys.stderr)
+            return 1
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
 
     if args.backup or args.once:
         bdir = Path(args.db).resolve().parent.parent / "backups"

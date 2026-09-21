@@ -1,5 +1,21 @@
 # Changelog
 
+## 8.2.0 — Test publish (отдельный контур) + регресс-закрепление H1–H3
+
+### Added
+- `test_publish` (config): enabled/allowlist/лимиты задержки/title_prefix/prod-guard/zero_jitter; по умолчанию выключено
+- `POST /webapp/api/test/schedule` — пробный пост в Postiz через N минут (по умолчанию 1), БЕЗ записи в `entity_platform_status`
+- `GET /webapp/api/test/status` — состояние контура + последние тестовые посты
+- `POST /webapp/api/test/cancel` — удалить тестовый пост из Postiz (только помеченные `test_scheduled`)
+- UI: панель «Проверка (тестовый пост)» в Actions (платформа из allowlist, задержка, entity, dry-run, отмена)
+- CLI: `--test-schedule --test-platform P --test-entity TYPE:ID [--test-delay N] [--test-dry-run]`
+- Тесты: `tests/test_test_publish.py` (13): границы задержки, allowlist, prod-guard, dry-run, cancel, API-level, read-only, SQLi
+
+### Изменено
+- `broker` доступен компонентам через `comps` (симлинк-медиа для тестового поста)
+- version 8.2.0 / WEBAPP_BUILD=814
+
+
 ## 8.1.2 — Final parity polish
 
 ### Fixed

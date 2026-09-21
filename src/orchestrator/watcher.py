@@ -206,7 +206,7 @@ class Watcher:
         return max(0, (before or {}).get("c", 0) - (after or {}).get("c", 0))
 
     def scan(self) -> dict[str, int]:
-        stats = {"long": 0, "shorts": 0, "standalone": 0}
+        stats = {"long": 0, "shorts": 0, "standalone": 0, "checked": 0, "unstable": 0}
         max_depth = getattr(self.cfg, "watch_max_depth", 5)
         for spec in self.effective_root_specs():
             root = Path(spec["path"])
@@ -267,8 +267,9 @@ class Watcher:
         if depth > max_depth:
             return
         if self._is_episode(d):
+            stats["checked"] = stats.get("checked", 0) + 1
             if mode != "shorts":
-                stats["long"] += self._scan_long(d)
+                stats["long"] += self._scan_long(d, stats)
                 stats["shorts"] += self._scan_shorts(d)
             else:
                 stats["standalone"] += self._scan_shorts(d, with_parent=False)
@@ -292,7 +293,7 @@ class Watcher:
         platforms = list(self.cfg.platforms.keys())
         return bool(self._platform_map(d, platforms))
 
-    def _scan_long(self, series: Path) -> int:
+    def _scan_long(self, series: Path, stats: dict | None = None) -> int:
         platforms = list(self.cfg.platforms.keys())
         pmap = self._platform_map(series, platforms)
         wide = self._first_mp4(series / "wide")
@@ -301,6 +302,8 @@ class Watcher:
             return 0
         for p in (wide, vert):
             if p and not self._is_stable(p):
+                if stats is not None:
+                    stats["unstable"] = stats.get("unstable", 0) + 1
                 return 0
 
         folder = str(series.resolve())

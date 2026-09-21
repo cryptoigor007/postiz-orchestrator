@@ -155,6 +155,9 @@ def test_api_scan_registers(env, tmp_path):
         total += payload["stats"]["long"]
     assert code == 200
     assert total == 1
+    assert payload["checked"] >= 1          # сколько папок реально проверено
+    assert payload["at"]                    # время скана
+    assert "missing" in payload and "unstable" in payload
     assert db.fetchone("SELECT id FROM long_videos")
 
 

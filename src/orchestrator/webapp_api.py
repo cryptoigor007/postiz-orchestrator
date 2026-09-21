@@ -202,7 +202,7 @@ def _youtube_id_from_url(url: str) -> str:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "833"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "834"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -1186,7 +1186,8 @@ class WebAppAPI:
                 watcher = self.comps.get("watcher")
                 if not watcher:
                     return 500, {"error": "watcher unavailable"}, "application/json"
-                stats = {"long": 0, "shorts": 0, "standalone": 0}
+                stats = {"long": 0, "shorts": 0, "standalone": 0,
+                         "checked": 0, "unstable": 0}
                 passes = max(2, int(getattr(self.cfg, "file_stability_cycles", 2)))
                 jobs = self.comps.get("jobs")
                 job = jobs.start("scan", "Сканирование папок", passes) if jobs is not None else None
@@ -1211,6 +1212,11 @@ class WebAppAPI:
                     "long": sum(1 for r in longs if _under(r["folder_path"] or "")),
                     "shorts": sum(1 for r in shorts_rows if _under(r["folder_path"] or "")),
                 }
+                missing = 0
+                for r in longs + shorts_rows:
+                    fp = str(r["folder_path"] or "").split("::")[0]
+                    if _under(fp) and fp and not Path(fp).exists():
+                        missing += 1
                 skipped = self.db.fetchone(
                     "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
                 last = self.db.fetchone(
@@ -1223,6 +1229,10 @@ class WebAppAPI:
                     "skipped": (skipped or {}).get("c", 0),
                     "last_scheduled": (last or {}).get("m") if last else None,
                     "roots": roots,
+                    "checked": int(stats.get("checked", 0) or 0),
+                    "unstable": int(stats.get("unstable", 0) or 0),
+                    "missing": missing,
+                    "at": self._now_iso(),
                 }, "application/json"
             if route == "manual/plan" and method == "GET":
                 return 200, self._manual_plan(), "application/json"

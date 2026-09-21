@@ -41,6 +41,9 @@
       settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
       scan_found: "Найдено", scan_films: "фильмов", scan_shorts: "шортсов", scan_standalone: "самостоятельных шортсов",
       scan_last: "Последнее запланированное видео", scan_none: "нет",
+      scan_checked: "Проверено папок", scan_new: "Новых", scan_known: "Уже в базе",
+      scan_unstable: "Файлы ещё пишутся", scan_missing: "Нет на диске",
+      scan_roots: "Скан по корням", scan_at: "Время скана",
       scan_run_q: "Запускать последовательно?", scan_run_now: "Да, запустить", scan_run_from: "С даты", scan_run_go: "Запустить с даты",
       t_sched_started: "Запущено", t_error_date: "Выбери дату",
       nav_settings: "Настройки", title_settings: "Настройки",
@@ -257,6 +260,9 @@
       settings_tab_sched: "Groups and schedule", settings_tab_errors: "Errors", settings_tab_help: "Help",
       scan_found: "Found", scan_films: "films", scan_shorts: "shorts", scan_standalone: "standalone shorts",
       scan_last: "Last scheduled video", scan_none: "none",
+      scan_checked: "Folders checked", scan_new: "New", scan_known: "Already in base",
+      scan_unstable: "Files still being written", scan_missing: "Missing on disk",
+      scan_roots: "Scanning roots", scan_at: "Scan time",
       scan_run_q: "Start sequentially?", scan_run_now: "Yes, start", scan_run_from: "From date", scan_run_go: "Start from date",
       t_sched_started: "Started", t_error_date: "Pick a date",
       nav_settings: "Settings", title_settings: "Settings",
@@ -1126,9 +1132,13 @@
     const st = sc ? (sc.stats || {}) : null;
     const tot = sc ? (sc.totals || {}) : {};
     const scanPanel = sc ? `<div class="panel"><div class="panel-header">${t("scan")}</div>
+      <div class="row"><span class="meta">${t("scan_checked")}: <b>${sc.checked || 0}</b> · ${t("scan_new")}: <b>${(st.long || 0) + (st.shorts || 0) + (st.standalone || 0)}</b> · ${t("scan_known")}: <b>${(tot.long || 0) + (tot.shorts || 0)}</b></span></div>
+      ${(sc.unstable || 0) > 0 ? `<div class="row"><span class="meta warn-text">${t("scan_unstable")}: ${sc.unstable}</span></div>` : ""}
+      ${(sc.missing || 0) > 0 ? `<div class="row"><span class="meta warn-text">${t("scan_missing")}: ${sc.missing}</span></div>` : ""}
+      <div class="row"><span class="meta">${t("scan_roots")}: ${esc((sc.roots || []).join(", ") || t("scan_none"))}</span></div>
       <div class="row"><span class="meta">${t("scan_found")}: ${t("scan_films")} ${st.long || 0} · ${t("scan_shorts")} ${st.shorts || 0} · ${t("scan_standalone")} ${st.standalone || 0}</span></div>
       <div class="row"><span class="meta">${t("scan_in_base")}: ${t("scan_films")} ${tot.long || 0} · ${t("scan_shorts")} ${tot.shorts || 0} · ${t("scan_skipped")}: ${sc.skipped || 0}</span></div>
-      <div class="row"><span class="meta">${t("scan_last")}: ${(sc.last_scheduled || "").slice(0, 16).replace("T", " ") || t("scan_none")}</span></div>
+      <div class="row"><span class="meta">${t("scan_at")}: ${(sc.at || "").slice(0, 16).replace("T", " ") || t("scan_none")} · ${t("scan_last")}: ${(sc.last_scheduled || "").slice(0, 16).replace("T", " ") || t("scan_none")}</span></div>
       ${((st.long || 0) + (st.shorts || 0) + (st.standalone || 0)) === 0
           ? `<div class="row"><span class="meta">${(tot.long || 0) + (tot.shorts || 0) > 0 ? t("scan_none_new_hint") : t("scan_empty_hint")}</span></div>`
           : ""}
@@ -2552,7 +2562,8 @@
         const r = await api("/scan", { method: "POST", body: "{}" }).finally(() => unbusy());
         state.scan = r;
         const s = r.stats || {};
-        toast(`${t("t_scan")}: long ${s.long || 0}, shorts ${s.shorts || 0}, standalone ${s.standalone || 0}`);
+        const nw = (s.long || 0) + (s.shorts || 0) + (s.standalone || 0);
+        toast(`${t("t_scan")}: ${t("scan_checked")} ${r.checked || 0}, ${t("scan_new")} ${nw}`);
         return load();
       }
       if (act === "queue-cleanup-orphans") {

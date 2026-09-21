@@ -364,3 +364,14 @@ def test_watcher_survives_permission_denied_dir(env):
     finally:
         os.chmod(bad, stat.S_IRWXU)
     assert True
+
+
+def test_scan_reports_checked_and_unstable(env):
+    """Скан сообщает, сколько папок проверено и сколько пропущено из-за нестабильности."""
+    db, cfg, clock, root, series = env
+    w = Watcher(db, cfg, clock, [str(root)])
+    first = w.scan()
+    assert first["checked"] >= 1
+    assert first["unstable"] >= 1  # первый проход: файлы ещё не стабильны
+    second = w.scan()
+    assert second["checked"] >= 1

@@ -425,7 +425,7 @@
         root.removeProperty("--sa-bottom");
         root.removeProperty("--sa-right");
         root.removeProperty("--sa-left");
-        root.setProperty("--chrome-top", fs && tg ? "46px" : "0px");
+        root.setProperty("--chrome-top", fs && tg ? "60px" : "0px");
       }
     } catch (_) {}
   }
@@ -934,7 +934,7 @@
       })
       .join("");
     content().innerHTML = `<div class="view-enter">
-      <div class="btn-grid">
+      <div class="grid cta-grid">
         <button class="btn primary" data-goto="folders">${esc(t("status_cta_add"))}</button>
         <button class="btn secondary" data-goto="queue">${esc(t("status_cta_queue"))}</button>
       </div>

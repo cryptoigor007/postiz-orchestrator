@@ -31,7 +31,7 @@
   --sa-right: env(safe-area-inset-right, 0px);
   --sa-left: env(safe-area-inset-left, 0px);
   /* Резерв полосы под кнопку Telegram ✕ (для клиентов без contentSafeAreaInset) */
-  --chrome-top: 0px;
+  --chrome-top: 0px;   /* + запас под кнопку TG на старых клиентах */
   /* Единая система кнопок (Emil Kowalski: одна высота, один ритм) */
   --btn-h: 44px;
   --btn-h-sm: 36px;
@@ -208,6 +208,12 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   }
   .topbar { padding: calc(8px + var(--sa-top) + var(--chrome-top)) calc(14px + var(--sa-right)) 4px calc(14px + var(--sa-left)); }
   .topbar h2 { font-size: 22px; letter-spacing: -0.02em; }
+  /* Полоса кнопок Telegram (✕/⋮) — в правом верхнем углу: держим её пустой.
+     Заголовок остаётся слева в первой строке, действия переносим ниже — они не могут
+     совпасть с нативными кнопками и при этом выровнены по краю карточек. */
+  body.tg-fs .topbar { flex-wrap: wrap; }
+  body.tg-fs .topbar h2 { flex: 1 1 100%; }
+  body.tg-fs .topbar-actions { flex: 1 1 100%; justify-content: flex-end; }
   .btn { height: var(--btn-h); min-height: var(--btn-h); }
   .row { padding: 10px 14px; }
   .form-row { gap: var(--btn-gap); }
@@ -321,6 +327,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .pico-20, .pico-20 svg { width: 20px; height: 20px; }
 .pico-22, .pico-22 svg { width: 22px; height: 22px; }
 .pico-26, .pico-26 svg { width: 26px; height: 26px; }
+
+/* CTA на «Обзоре»: та же сетка, что и карточки → те же левый/правый края */
+.cta-grid { margin-bottom: 12px; }
+.cta-grid .btn { width: 100%; }
 
 /* ===== B3: примитивы интерфейса (единый ритм и выравнивание) ===== */
 .item {

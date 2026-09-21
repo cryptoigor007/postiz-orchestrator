@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "828"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "829"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -272,6 +272,9 @@ class WebAppAPI:
         split = urlsplit(path)
         qpath = split.path
         query = dict(parse_qsl(split.query))
+        # F6c: клиент присылает lang=ru|en — серверные подписи сущностей локализуются
+        _lang = str(query.get("lang") or "ru").lower()
+        self._tls.lang = _lang if _lang in ("ru", "en") else "ru"
         # A4: не светим ?key=… в логах (access log/журнал видит URL)
         _safe_path = re.sub(r"(key=)[^&\s]+", r"\1***", path)
         # P2-3: legacy-форма /webapp/k/<key>/… тоже не должна светить ключ в логах
@@ -669,7 +672,7 @@ class WebAppAPI:
                 )
                 items = []
                 for r in rows:
-                    kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+                    kind = self._kind_label(r["entity_type"])
                     title = (r.get("title") or "").strip() or f'{kind} #{r["entity_id"]}'
                     items.append({
                         "key": f'{r["entity_type"]}|{r["entity_id"]}|{r["platform"]}',
@@ -707,17 +710,16 @@ class WebAppAPI:
                 n = 0
                 for r in rows:
                     if route == "trash/restore":
-                        self.db.execute(
+                        n += self.db.execute(
                             "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
                             "last_error=NULL, deleted_at=NULL, deleted_reason=NULL, cascade_from=NULL "
                             "WHERE entity_type=? AND entity_id=? AND platform=? AND status='skipped'",
-                            (r["entity_type"], r["entity_id"], r["platform"]))
+                            (r["entity_type"], r["entity_id"], r["platform"])) or 0
                     else:
-                        self.db.execute(
+                        n += self.db.execute(
                             "DELETE FROM entity_platform_status "
                             "WHERE entity_type=? AND entity_id=? AND platform=? AND status='skipped'",
-                            (r["entity_type"], r["entity_id"], r["platform"]))
-                    n += 1
+                            (r["entity_type"], r["entity_id"], r["platform"])) or 0
                 self.db.log("system", None, "",
                             "trash_restore" if route == "trash/restore" else "trash_purge",
                             f"n={n}")
@@ -764,18 +766,18 @@ class WebAppAPI:
                     return 200, {"ok": True, "removed": 0, "blocked": plan["blocked"]}, \
                         "application/json"
                 reason = str(data.get("reason") or ("platform" if platform else "everywhere"))
-                cascade_from = "youtube" if (
-                    platform == "youtube" or (platform == "telegram" and also_youtube)
-                ) else ""
+                cascade_from = "youtube" if platform == "youtube" else ""
                 self._kill_targets(plan["targets"])
                 now = self._now_iso()
                 removed = 0
                 for et, ei, p, _st in plan["targets"]:
+                    # F3: инициатор (YouTube-строка) не помечается каскадом — только Telegram
+                    cf = cascade_from if p == "telegram" else ""
                     self.db.execute(
                         "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL, "
                         "deleted_at=?, deleted_reason=?, cascade_from=? "
                         "WHERE entity_type=? AND entity_id=? AND platform=?",
-                        (now, reason, cascade_from, et, ei, p))
+                        (now, reason, cf, et, ei, p))
                     self.db.log(et, ei, p, "queue_delete", reason)
                     removed += 1
                 guard = self.comps.get("guard")
@@ -1513,6 +1515,12 @@ class WebAppAPI:
         dq.append(now)
         return False
 
+    def _kind_label(self, entity_type: str) -> str:
+        lang = getattr(self._tls, "lang", "ru")
+        if entity_type == "long_video":
+            return "Film" if lang == "en" else "Фильм"
+        return "Short" if lang == "en" else "Шортс"
+
     def _now_iso(self) -> str:
         clk = self.comps.get("clock")
         if clk is not None and hasattr(clk, "now"):
@@ -1912,7 +1920,7 @@ class WebAppAPI:
             if pid:
                 seen.add(str(pid))
             date_l, time_l = self._to_local(r["postiz_scheduled_for"])
-            kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+            kind = self._kind_label(r["entity_type"])
             title = (r.get("title") or "").strip() or f'{kind} #{r["entity_id"]}'
             entries.append({
                 "scheduled_for": r["postiz_scheduled_for"] or "",
@@ -1989,7 +1997,7 @@ class WebAppAPI:
         )
         items = []
         for r in rows:
-            kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+            kind = self._kind_label(r["entity_type"])
             date_l, time_l = self._to_local(r["postiz_scheduled_for"] or "")
             title = (r.get("title") or "").strip() or f"{kind} #{r['entity_id']}"
             items.append({

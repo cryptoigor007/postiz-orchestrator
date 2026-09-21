@@ -254,7 +254,20 @@ if (dl) ok("удаление: интерактивное окно открыло
 else fail("удаление: окно удаления не открылось");
 if (calls.some((c) => c === "POST /webapp/api/queue/remove")) ok("удаление: план запрошен (plan_only)");
 else fail("удаление: план НЕ запрошен");
-const okBtn = dl && dl.querySelector('[data-dd="ok"]');
+// F9: фокус внутри окна и Escape закрывает
+if (dl && doc.activeElement && dl.contains(doc.activeElement)) ok("удаление: фокус перенесён в окно");
+else fail("удаление: фокус не перенесён в окно");
+if (dl) {
+  doc.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await wait(180);
+}
+if (!doc.getElementById("delDialog")) ok("удаление: Escape закрывает окно");
+else fail("удаление: Escape не закрывает окно");
+// переоткрываем и подтверждаем
+doc.querySelector('[data-act="queue-remove"]').click();
+await wait(300);
+const dl2 = doc.getElementById("delDialog");
+const okBtn = dl2 && dl2.querySelector('[data-dd="ok"]');
 if (okBtn) { okBtn.click(); await wait(400); }
 else fail("удаление: нет кнопки подтверждения");
 const qAfter = calls.filter((c) => c === "GET /webapp/api/queue").length;

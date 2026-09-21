@@ -44,6 +44,18 @@
       scan_run_q: "Запускать последовательно?", scan_run_now: "Да, запустить", scan_run_from: "С даты", scan_run_go: "Запустить с даты",
       t_sched_started: "Запущено", t_error_date: "Выбери дату",
       nav_settings: "Настройки", title_settings: "Настройки",
+      entity_film: "Фильм", entity_short: "Шортс",
+      dow_mon: "Пн", dow_tue: "Вт", dow_wed: "Ср", dow_thu: "Чт", dow_fri: "Пт", dow_sat: "Сб", dow_sun: "Вс",
+      post_one: "пост", post_few: "поста", post_many: "постов",
+      err_non_canonical_slot: "слот не совпадает с расписанием",
+      err_reconciliation_missing: "пост не найден в Postiz",
+      err_waiting_for_youtube: "ждёт выхода на YouTube",
+      err_create_failed_no_post: "Postiz не создал пост",
+      err_upload_failed: "не удалось загрузить медиа",
+      err_safety_block: "заблокировано лимитами или расписанием",
+      err_postiz_error: "ошибка на стороне Postiz",
+      err_missing_in_postiz: "пост пропал из Postiz",
+      err_already_removed: "уже удалено",
       title_trash: "Корзина", trash_selected: "выбрано", trash_restore: "Восстановить",
       trash_restore_all: "Восстановить всё", trash_purge: "Удалить навсегда",
       trash_hint: "Удалённое можно вернуть в очередь или убрать окончательно. Файлы на диске не трогаем.",
@@ -231,6 +243,18 @@
       scan_run_q: "Start sequentially?", scan_run_now: "Yes, start", scan_run_from: "From date", scan_run_go: "Start from date",
       t_sched_started: "Started", t_error_date: "Pick a date",
       nav_settings: "Settings", title_settings: "Settings",
+      entity_film: "Film", entity_short: "Short",
+      dow_mon: "Mon", dow_tue: "Tue", dow_wed: "Wed", dow_thu: "Thu", dow_fri: "Fri", dow_sat: "Sat", dow_sun: "Sun",
+      post_one: "post", post_few: "posts", post_many: "posts",
+      err_non_canonical_slot: "slot does not match the schedule",
+      err_reconciliation_missing: "post not found in Postiz",
+      err_waiting_for_youtube: "waiting for the YouTube release",
+      err_create_failed_no_post: "Postiz did not create the post",
+      err_upload_failed: "media upload failed",
+      err_safety_block: "blocked by limits or schedule",
+      err_postiz_error: "Postiz-side error",
+      err_missing_in_postiz: "post disappeared from Postiz",
+      err_already_removed: "already removed",
       title_trash: "Trash", trash_selected: "selected", trash_restore: "Restore",
       trash_restore_all: "Restore all", trash_purge: "Delete permanently",
       trash_hint: "Deleted items can be restored to the queue or removed permanently. Files on disk are kept.",
@@ -455,8 +479,12 @@
   }
 
   // Хаптики: тактильный отклик как в нативном Telegram
+  // F11: вне Telegram/на старом SDK методы бросают ошибки — проверяем версию
+  const tgOk = (v) => !!(tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v));
+
   function haptic(kind) {
     try {
+      if (!tgOk("6.1")) return;
       const h = tg && tg.HapticFeedback;
       if (!h) return;
       if (kind === "select") h.selectionChanged();
@@ -500,6 +528,18 @@
       .split("'").join("&#39;");
   }
   const t = (k) => (I18N[state.lang] && I18N[state.lang][k]) || I18N.ru[k] || k;
+  const entityLabel = (k) => t(k === "long_video" ? "entity_film" : "entity_short");
+  function errText(raw) {
+    const code = String(raw || "").split(":")[0].trim();
+    const dict = I18N[state.lang] || {};
+    return dict["err_" + code] || raw || "";
+  }
+  function postsLabel(n) {
+    const m100 = n % 100;
+    const form = (m100 >= 11 && m100 <= 14) ? "many"
+      : (n % 10 === 1 ? "one" : (n % 10 >= 2 && n % 10 <= 4 ? "few" : "many"));
+    return `${n} ${t("post_" + form)}`;
+  }
 
   function readKey() {
     const q = new URLSearchParams(location.search).get("key");
@@ -529,7 +569,9 @@
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     const rest = { ...opts };
     delete rest.timeoutMs;
-    return fetch(`/webapp/api${path}`, { ...rest, headers, signal: ctrl.signal }).then((r) => {
+    // F6c: сообщаем язык — серверные подписи сущностей локализуются
+    const _sep = path.includes("?") ? "&" : "?";
+    return fetch(`/webapp/api${path}${_sep}lang=${state.lang}`, { ...rest, headers, signal: ctrl.signal }).then((r) => {
       if (r.status === 401 && !r.__notified) {
         r.__notified = true;
         try { toast(t("session_stale")); } catch (_) {}
@@ -687,12 +729,12 @@
         const key = encodeURIComponent(state.key || "");
         const imgs = (d.frames || []).map((x) => `
           <button class="cp-thumb" data-cp="pick"
-                  data-path="${esc(x.path)}" title="${esc(x.name)} · ${esc(x.at)} с">
+                  data-path="${esc(x.path)}" title="${esc(x.name)} · ${esc(x.at)} ${t("sec_short")}">
             <img loading="lazy" src="/webapp/api/cover/thumb?key=${key}&path=${encodeURIComponent(x.path)}" alt=""/>
-            <span>${esc(x.at)} с</span>
+            <span>${esc(x.at)} ${t("sec_short")}</span>
           </button>`).join("");
         body.innerHTML = `
-          <div class="cp-sec">${t("cover_frames_hint")}${d.duration ? " (" + d.duration + " с)" : ""}</div>
+          <div class="cp-sec">${t("cover_frames_hint")}${d.duration ? " (" + d.duration + " " + t("sec_short") + ")" : ""}</div>
           <div class="cp-grid">${imgs || `<span class="meta">${t("cover_no_images")}</span>`}</div>
           <div class="form-row"><button class="btn secondary" data-cp="frames">${t("cover_frames_regen")}</button></div>`;
       } catch (e) {
@@ -1215,11 +1257,7 @@
     const chosen = all.filter((it) => sel[`${it.entity_type}|${it.entity_id}|${it.platform}`]);
     if (!chosen.length) return;
     const ask = t("queue_bulk_del").replace("%s", chosen.length);
-    const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-    let ok = true;
-    if (tgConfirm) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
-    else if (typeof window.confirm === "function") ok = window.confirm(ask);
-    if (!ok) return;
+    if (!(await confirmDialog(ask))) return;
     const uniq = chosen.slice();
     const prog = (n) => t("queue_bulk_prog").replace("%s", n).replace("%s", uniq.length);
     busy(prog(1));
@@ -1244,11 +1282,7 @@
     }
     if (deps.length) {
       const ask2 = t("confirm_cascade_tg_bulk").replace("%s", deps.length);
-      const tgC2 = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-      let ok2 = true;
-      if (tgC2) ok2 = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask2, res));
-      else if (typeof window.confirm === "function") ok2 = window.confirm(ask2);
-      if (ok2) {
+      if (await confirmDialog(ask2)) {
         for (const it of deps) {
           try {
             await api("/queue/remove", { method: "POST", body: JSON.stringify({
@@ -1510,14 +1544,14 @@
     const panels = Object.entries(byPlat).map(([plat, list]) => `
       <div class="panel">
         <div class="panel-head">
-          <h3><span class="q-plat big">${pIcon(plat)}</span> ${esc(plat)}</h3>
+          <h3><span class="q-plat big">${pIcon(plat)}</span> ${esc(plat.charAt(0).toUpperCase() + plat.slice(1))}</h3>
           <span class="badge err">${list.length}</span>
         </div>
         ${list.map((it) => `<div class="item">
           <span></span>
           <div class="item__main">
-            <div class="item__title">${esc(it.entity_type)} #${esc(String(it.entity_id))}</div>
-            <div class="item__hint">${esc(it.last_error || "")}</div>
+            <div class="item__title">${esc(entityLabel(it.entity_type))} #${esc(String(it.entity_id))}</div>
+            <div class="item__hint">${esc(errText(it.last_error))}</div>
           </div>
           <div class="item__actions row">${statusBadge(it.status, false)}</div>
         </div>`).join("")}
@@ -1593,7 +1627,7 @@
       const key = `${it.entity_type}:${it.entity_id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const label = `${it.entity_type === "short" ? "Шорт" : "Фильм"} #${it.entity_id} · ${(it.title || "").slice(0, 42)}`;
+      const label = `${entityLabel(it.entity_type)} #${it.entity_id} · ${(it.title || "").slice(0, 42)}`;
       out.push(`<option value="${esc(key)}">${esc(label)}</option>`);
       if (out.length >= 120) break;
     }
@@ -1738,11 +1772,11 @@
       ${rows || `<div class="panel"><div class="empty">${t("mu_none")}</div></div>`}`;
   }
 
-  const DAY_KEYS = [["mon", "Пн"], ["tue", "Вт"], ["wed", "Ср"], ["thu", "Чт"], ["fri", "Пт"], ["sat", "Сб"], ["sun", "Вс"]];
+  const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   function dayChips(scope, kind, selected) {
     const sel = selected || [];
-    return `<div class="chips day-chips">${DAY_KEYS.map(([k, l]) =>
-      `<label class="chip${sel.includes(k) ? " on" : ""}"><input type="checkbox" class="chip__input" data-day="${scope}|${kind}" value="${k}"${sel.includes(k) ? " checked" : ""}/>${l}</label>`
+    return `<div class="chips day-chips">${DAY_KEYS.map((k) =>
+      `<label class="chip${sel.includes(k) ? " on" : ""}"><input type="checkbox" class="chip__input" data-day="${scope}|${kind}" value="${k}"${sel.includes(k) ? " checked" : ""}/>${t("dow_" + k)}</label>`
     ).join("")}</div>`;
   }
   function schedBlock(key, title, eff, block, withLimit) {
@@ -1944,8 +1978,15 @@
   }
 
   async function confirmDialog(msg) {
-    const tgConfirm = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-    if (tgConfirm) return await new Promise((res) => window.Telegram.WebApp.showConfirm(msg, res));
+    // F2: вне клиента Telegram — или на SDK < 6.1 — showConfirm идёт через showPopup и падает;
+    // проверяем версию и в любом сбое уходим в window.confirm.
+    try {
+      const w = window.Telegram && window.Telegram.WebApp;
+      if (w && typeof w.showConfirm === "function" && tgOk("6.1")) {
+        const res = await new Promise((resolve) => w.showConfirm(msg, resolve));
+        if (typeof res === "boolean") return res;
+      }
+    } catch (_) { /* fall through to window.confirm */ }
     if (typeof window.confirm === "function") return window.confirm(msg);
     return true;
   }
@@ -1960,7 +2001,6 @@
     const old = document.getElementById("delDialog");
     if (old) old.remove();
     let all = [];
-    let blockedList = [];
     let shortsN = 0;
     let scopeAll = false;
     let alsoYt = false;
@@ -1973,7 +2013,9 @@
     const _useBack = showNativeBack(() => close());
     ov.dataset.nativeBack = _useBack ? "1" : "";
 
-    function close() { ov.remove(); hideNativeBack(); }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    document.addEventListener("keydown", onKey);
+    function close() { document.removeEventListener("keydown", onKey); ov.remove(); hideNativeBack(); }
     function inScope(x) {
       if (scopeAll) return true;
       return x.entity_type === etype && Number(x.entity_id) === eid;
@@ -2010,19 +2052,28 @@
         ${scopeBlock}${platBlock}
         <div class="field"><span class="field__label">${t("del_will_delete")}</span>
           <div class="row row-center-8">${platsHtml || `<span class="meta">${t("none")}</span>`}
-            <span class="meta">${t("del_posts_n").replace("%s", cnt)}</span></div></div>
-        ${blockedList.length ? `<div class="hint danger-text">${t("del_blocked")}</div>` : ""}
+            <span class="meta">${postsLabel(cnt)}</span></div></div>
+        ${ch.some((x) => x.status === "published") ? `<div class="hint danger-text">${t("del_blocked")}</div>` : ""}
         <div class="btn-grid">
           <button class="btn secondary" data-dd="cancel">${t("cancel")}</button>
-          <button class="btn danger" data-dd="ok" ${cnt && !blockedList.length ? "" : "disabled"}>${
+          <button class="btn danger" data-dd="ok" ${cnt && !ch.some((x) => x.status === "published") ? "" : "disabled"}>${
             trigger === "telegram" ? (alsoYt ? t("del_all_btn") : t("del_tg_btn")) : t("del_confirm")}</button>
         </div>
       </div>`;
     }
-    function paint() { ov.innerHTML = body(); }
+    let focused = false;
+    function paint() {
+      ov.innerHTML = body();
+      if (loaded && !focused) {
+        focused = true;
+        const c = ov.querySelector('[data-dd="cancel"]');
+        if (c && c.focus) c.focus();
+      }
+    }
 
     async function submit() {
-      if (!chosen().length) return;
+      const ch = chosen();
+      if (!ch.length || ch.some((x) => x.status === "published")) return;
       close();
       busy(t("working"));
       try {
@@ -2061,7 +2112,6 @@
       with_shorts: true, also_youtube: true, plan_only: true }) })
       .then((plan) => {
         all = plan.targets || [];
-        blockedList = plan.blocked || [];
         shortsN = all.filter((x) => x.entity_type === "short").length;
         loaded = true;
         paint();
@@ -2101,7 +2151,7 @@
         <button class="btn primary" data-act="trash-restore" ${keys.length ? "" : "disabled"}>${t("trash_restore")}</button>
         <button class="btn danger" data-act="trash-purge" ${keys.length ? "" : "disabled"}>${t("trash_purge")}</button>
       </div>`;
-    const kindOf = (t2) => (t2 === "long_video" ? "Фильм" : "Шортс");
+    const kindOf = (t2) => entityLabel(t2);
     const body = groups.map((g) => {
       const rows = g.items.map((it) => {
         const k = it.key;
@@ -2110,12 +2160,14 @@
             data-key="${esc(k)}" aria-pressed="${on}" aria-label="${t("queue_select")}">${on ? icon("check", 13) : ""}</button>`;
         const casc = it.cascade_from === "youtube"
           ? ` · <span class="badge">${t("trash_cascade_yt")}</span>` : "";
+        const deleted = fmt(it.deleted_at);
+        const metaLine = esc(it.platform) + (deleted ? ` · ${esc(deleted)}` : "") + casc;
         return `<div class="item${on ? " picked" : ""}${select ? " with-check" : ""}">
           ${check}
           <span class="q-plat big">${pIcon(it.platform)}</span>
           <div class="item__main">
             <div class="item__title">${esc(g.title || (kindOf(g.type) + " #" + g.id))}</div>
-            <div class="item__meta">${esc(it.platform)} · ${esc(fmt(it.deleted_at))}${casc}</div>
+            <div class="item__meta">${metaLine}</div>
           </div>
         </div>`;
       }).join("");
@@ -2384,12 +2436,8 @@
         return load();
       }
       if (act === "queue-cleanup-orphans") {
-        let ok = true;
         const ask = t("confirm_cleanup_orphans");
-        const tgC = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showConfirm;
-        if (tgC) ok = await new Promise((res) => window.Telegram.WebApp.showConfirm(ask, res));
-        else if (typeof window.confirm === "function") ok = window.confirm(ask);
-        if (!ok) return;
+        if (!(await confirmDialog(ask))) return;
         busy(t("working"));
         try {
           const r = await api("/queue/cleanup_orphans", { method: "POST", body: "{}" });
@@ -2736,12 +2784,12 @@
 
   function boot() {
     if (tg) {
-      try { tg.ready(); } catch (_) {}
-      try { tg.expand(); } catch (_) {}
-      try {
-        tg.setHeaderColor("secondary_bg_color");
-        tg.setBackgroundColor("bg_color");
-      } catch (_) {}
+      try { if (typeof tg.ready === "function") tg.ready(); } catch (_) {}
+      try { if (typeof tg.expand === "function") tg.expand(); } catch (_) {}
+      if (tgOk("6.1")) {
+        try { tg.setHeaderColor("secondary_bg_color"); } catch (_) {}
+        try { tg.setBackgroundColor("bg_color"); } catch (_) {}
+      }
     }
 
     document.documentElement.lang = state.lang;
@@ -2758,7 +2806,7 @@
     try {
       if (tg) {
         if (tg.expand) tg.expand();
-        if (tg.requestFullscreen) {
+        if (tgOk("6.1") && tg.requestFullscreen) {
           try { tg.requestFullscreen(); window.__fsRequested = true; } catch (_) {}
         }
         if (tg.onEvent) {
@@ -2776,9 +2824,13 @@
           const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
           bg = dark ? "#000000" : "#f2f2f7";
         }
-        if (tg.setHeaderColor) { try { tg.setHeaderColor(bg); } catch (_) {} }
-        if (tg.setBackgroundColor) { try { tg.setBackgroundColor(bg); } catch (_) {} }
-        if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch (_) {} }
+        if (tgOk("6.1")) {
+          try { tg.setHeaderColor(bg); } catch (_) {}
+          try { tg.setBackgroundColor(bg); } catch (_) {}
+        }
+        if (tgOk("7.7") && tg.disableVerticalSwipes) {
+          try { tg.disableVerticalSwipes(); } catch (_) {}
+        }
       }
     } catch (_) {}
     // B2: тема/инсеты/цвет нижней панели + реакция на изменения
@@ -2792,7 +2844,7 @@
       }
     } catch (_) {}
     try {
-      if (tg && tg.setBottomBarColor) {
+      if (tgOk("7.0") && tg.setBottomBarColor) {
         const card = getComputedStyle(document.documentElement).getPropertyValue("--card").trim();
         if (card) tg.setBottomBarColor(card);
       }

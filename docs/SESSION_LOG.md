@@ -835,3 +835,15 @@
 - Старые обработчики `queue-remove*` переведены на окно (убран «молчаливый» каскад шортов).
 - `tests/gui/check.mjs`: добавлены экраны шторки (failed/help/trash) и поток удаления через окно.
 - +3 теста (346); `check.sh` PASS; локальный jsdom-smoke PASS; build 828.
+
+## 2026-09-21 — 8.4.11: фиксы по аудиту Hearn (F1–F11)
+- **F1** окно удаления: `published`-блок считается по `chosen()`, а не по полному плану (P1).
+- **F2** `confirmDialog`: guard `tgOk("6.1")` + `try/catch` + фолбэк `window.confirm`; прямые
+  `showConfirm` в bulk-delete/каскаде/cleanup-orphans убраны (P1).
+- **F3** `cascade_from='youtube'` только Telegram-строкам (инициатор не помечает себя).
+- **F4** `restored`/`purged` — по `rowcount` (`Database.execute` теперь возвращает rowcount).
+- **F5** экран «Ошибки»: человекочитаемые коды + локализованные подписи сущностей/платформ.
+- **F6** i18n: `entity_film/entity_short`, `dow_*`, `sec_short` в кадрах, серверные префиксы по `?lang=`.
+- **F7** RU-плюрализация «1 пост / 2 поста / 5 постов». **F8** висячий «·» без даты.
+- **F9** фокус в окне + Escape. **F10** favicon `data:`. **F11** guards для SDK (haptics/цвета/фуллскрин/swipes).
+- +4 теста (350); `check.sh` PASS; jsdom-smoke PASS (фокус/Escape); build 829.

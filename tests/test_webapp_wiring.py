@@ -81,3 +81,29 @@ def test_delete_dialog_uses_plan_and_scope():
     assert "also_youtube: alsoYt" in js
     assert "del_yt_note" in js and "del_tg_ask" in js
 
+
+def test_audit_fixes_8_4_11_wiring():
+    """F1/F2/F5–F11: блокировка по выбранному, fallback confirm, i18n, a11y, favicon, SDK-guards."""
+    js = _js()
+    # F1: блокировка считается по chosen(), а не по полному плану
+    assert "ch.some((x) => x.status === \"published\")" in js
+    assert "blockedList" not in js
+    # F2: showConfirm только внутри confirmDialog (через локальную w + guard), прямой вызов убран
+    assert "window.Telegram.WebApp.showConfirm" not in js
+    assert 'typeof w.showConfirm === "function"' in js
+    assert 'tgOk("6.1")' in js
+    # F5/F6: человекочитаемые коды и локализованные сущности
+    assert "function errText(" in js and "errText(it.last_error)" in js
+    assert "const entityLabel =" in js and "dow_" in js
+    # F7: плюрализация
+    assert "function postsLabel(" in js and "postsLabel(cnt)" in js
+    # F8: пустая дата не оставляет висячий разделитель
+    assert "(deleted ? ` · ${esc(deleted)}` : \"\")" in js
+    # F9: Escape и фокус в окне
+    assert 'document.addEventListener("keydown", onKey)' in js
+    # F11: guards
+    assert 'const tgOk = (v) =>' in js and 'tgOk("7.7")' in js
+    # F10: favicon
+    html = (APP_JS.parent / "index.html").read_text(encoding="utf-8")
+    assert 'rel="icon"' in html
+

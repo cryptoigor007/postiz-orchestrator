@@ -279,9 +279,9 @@ class Database:
         finally:
             c.close()
 
-    def execute(self, sql: str, params: tuple | dict = ()) -> None:
+    def execute(self, sql: str, params: tuple | dict = ()) -> int:
         with self.conn() as c:
-            c.execute(sql, params)
+            return int(c.execute(sql, params).rowcount)
 
     def executemany(self, sql: str, seq: Iterable) -> None:
         with self.conn() as c:

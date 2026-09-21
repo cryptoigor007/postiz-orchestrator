@@ -64,7 +64,7 @@ def _short(db, clock, parent: int) -> int:
 
 def _row(db, et, ei, p):
     return db.fetchone(
-        "SELECT status, deleted_at FROM entity_platform_status "
+        "SELECT status, deleted_at, cascade_from FROM entity_platform_status "
         "WHERE entity_type=? AND entity_id=? AND platform=?", (et, ei, p))
 
 
@@ -161,3 +161,50 @@ def test_trash_purge_removes_rows(env):
                                   json.dumps({"all": True}).encode())
     assert code == 200 and payload["purged"] == 1
     assert _row(db, "short", 5, "youtube") is None
+
+
+def test_cascade_flag_only_on_telegram(env):
+    """F3: пометку «снято за YouTube» получает только Telegram, не инициатор."""
+    api, db, clock, cfg = env
+    fid = _film(db, clock)
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('long_video', ?, 'youtube', 'scheduled')", (fid,))
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('long_video', ?, 'telegram', 'scheduled')", (fid,))
+    code, payload, _ = _remove(api, {"entity_type": "long_video", "entity_id": fid,
+                                     "platform": "youtube"})
+    assert code == 200 and payload["cascade"] == ["telegram"]
+    assert (_row(db, "long_video", fid, "youtube")["cascade_from"] or "") == ""
+    assert _row(db, "long_video", fid, "telegram")["cascade_from"] == "youtube"
+
+
+def test_trash_counts_only_real_changes(env):
+    """F4: restored/purged считают rowcount, а не итерации."""
+    api, db, clock, cfg = env
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+               "deleted_at) VALUES ('short', 5, 'youtube', 'skipped', "
+               "'2026-03-10T12:00:00+00:00')")
+    code, p1, _ = api.handle("POST", "/webapp/api/trash/purge", HEADERS,
+                             json.dumps({"ids": ["short|5|youtube"]}).encode())
+    assert code == 200 and p1["purged"] == 1
+    code, p2, _ = api.handle("POST", "/webapp/api/trash/purge", HEADERS,
+                             json.dumps({"ids": ["short|5|youtube"]}).encode())
+    assert code == 200 and p2["purged"] == 0
+    code, p3, _ = api.handle("POST", "/webapp/api/trash/restore", HEADERS,
+                             json.dumps({"ids": ["long_video|999|youtube"]}).encode())
+    assert code == 200 and p3["restored"] == 0
+
+
+def test_queue_title_localized_by_lang(env):
+    """F6c: серверный префикс сущности локализуется по ?lang=."""
+    api, db, clock, cfg = env
+    db.execute("INSERT INTO long_videos (source, folder_path, title, created_at) "
+               "VALUES ('v', '/l', 'Мой фильм', ?)", (clock.now().isoformat(),))
+    vid = int(db.fetchone("SELECT id FROM long_videos ORDER BY id DESC")["id"])
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+               "postiz_scheduled_for) VALUES ('long_video', ?, 'youtube', 'scheduled', "
+               "'2026-10-20T13:00:00+00:00')", (vid,))
+    code, ru, _ = api.handle("GET", "/webapp/api/queue", HEADERS, b"")
+    assert ru["items"][0]["title"] == "Фильм: Мой фильм"
+    code, en, _ = api.handle("GET", "/webapp/api/queue?lang=en", HEADERS, b"")
+    assert en["items"][0]["title"] == "Film: Мой фильм"

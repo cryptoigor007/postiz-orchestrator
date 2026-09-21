@@ -139,7 +139,7 @@ upload медиа → create post в Postiz, запись статуса, jitter
   (пн/ср/чт/сб/вс в 12:00 и 18:00), `shorts_thematic` (default 20:30).
 - `platforms` — каналы: `enabled`, `video_variant` (wide/vertical), `daily_limit`,
   `integration_id` (ID канала из Postiz).
-- `engines` — какой движок публикации использовать на платформу (см. §6), дефолт `postiz`.
+- `engines` — движки для **manual_uploads** (скан/list/claims), не маршрут основного `Publisher` (см. §6); дефолт `postiz`.
 - `manual_uploads` — параметры распознавания ручных загрузок (§7).
 - `tail`, `limits`, `link_update`, `description_templates`, `safety`, `telegram`,
   `backup`, `timezone`, интервалы.
@@ -191,17 +191,27 @@ sudo systemctl enable --now orchestrator.service orchestrator-watchdog.timer
 
 ---
 
-## 6. Движки публикации (`engines/`)
 
-Единый интерфейс `Destination` (`publish / list_uploads / update_metadata / delete /
-check_claims / capabilities`). Выбор — `config.engines.<platform>` (иначе `postiz`).
 
-| Движок | Умеет | Примечание |
+### TLS / health (ops)
+- Direct YouTube transport: TLS verify **on** by default (`DirectHttpTransport(verify=True)`).
+- Health HTTP bind: `ORCH_HTTP_BIND` (default `127.0.0.1`); metrics may require `ORCH_HEALTH_TOKEN`.
+- `ORCH_READ_ONLY=1` blocks publish creates.
+
+## 6. Движки (`engines/`) — честно о scope
+
+**Важно (v7):** основной publish-path (`Publisher`) ходит **только в Postiz HTTP-клиент**.
+`config.engines.<platform>` используется для **manual_uploads** (скан/list/claims ручных
+загрузок), а **не** как маршрут обычной публикации long/thematic/standalone.
+
+| Движок | Умеет | Где реально используется |
 |---|---|---|
-| `postiz` | publish, delete (поста) | публикация через Postiz (как раньше) |
-| `direct` | publish, **list**, update, delete, claims | прямые API платформ; сейчас `direct:youtube` |
-| `n8n` | publish, list | webhook-воркфлоу; включается `N8N_URL` |
-| `browser` | экспериментальный | Playwright, для платформ без API (по решению — последним) |
+| `postiz` | publish, delete | основной `Publisher` + manual |
+| `direct` | list, update, claims (YouTube) | **только** manual_uploads / claims |
+| `n8n` | publish, list | manual / экспериментально (`N8N_URL`) |
+| `browser` | экспериментальный | не в основном publish-path |
+
+Полный publish-through-engine — отдельное решение (не текущий runtime).
 
 **Token broker** (`token-broker.service` на VM 120) отдаёт OAuth-токен канала из Postiz
 (таблица `Integration`) оркестратору, недоступному к docker-сети. Ограничен секретом

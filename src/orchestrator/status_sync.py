@@ -23,10 +23,14 @@ class StatusSync:
         If fresh_only — only posts scheduled within confirm_published_interval window around now.
         """
         sql = """
-            SELECT entity_type, entity_id, platform, postiz_post_id, status, postiz_scheduled_for
+            SELECT entity_type, entity_id, platform, postiz_post_id, status,
+                   postiz_scheduled_for, release_url, last_error
             FROM entity_platform_status
             WHERE postiz_post_id IS NOT NULL
-              AND status IN ('scheduled', 'updating')
+              AND (
+                status IN ('scheduled', 'updating')
+                OR (status='published' AND (release_url IS NULL OR release_url=''))
+              )
         """
         rows = self.db.fetchall(sql)
         if fresh_only:
@@ -55,14 +59,39 @@ class StatusSync:
                                exc_info=True)
                 continue
             if not post:
-                self.db.execute(
-                    "UPDATE entity_platform_status SET status='error', last_error='missing_in_postiz' "
-                    "WHERE entity_type=? AND entity_id=? AND platform=?",
-                    (row["entity_type"], row["entity_id"], row["platform"]),
-                )
+                # R8: N consecutive misses → error (soft: first misses only warn)
+                prev = row.get("last_error") or ""
+                streak = 0
+                if prev.startswith("missing_in_postiz:"):
+                    try:
+                        streak = int(prev.split(":")[1])
+                    except Exception:
+                        streak = 1
+                streak += 1
+                threshold = int(getattr(self.cfg, "postiz_missing_error_after", 3) or 3)
+                if streak >= threshold:
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET status='error', "
+                        "last_error=? WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (f"missing_in_postiz:{streak}",
+                         row["entity_type"], row["entity_id"], row["platform"]),
+                    )
+                else:
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET last_error=? "
+                        "WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (f"missing_in_postiz:{streak}",
+                         row["entity_type"], row["entity_id"], row["platform"]),
+                    )
+                    logger.warning(
+                        "get_post miss %s/%s/%s streak=%s/%s",
+                        row["entity_type"], row["entity_id"], row["platform"],
+                        streak, threshold,
+                    )
                 updated += 1
                 continue
-            if post.status == "error" and row["status"] != "error":
+            st = self._normalize_postiz_status(getattr(post, "status", None))
+            if st == "error" and row["status"] != "error":
                 self.db.execute(
                     "UPDATE entity_platform_status SET status='error', "
                     "last_error='postiz_error' WHERE entity_type=? AND entity_id=? "
@@ -71,7 +100,8 @@ class StatusSync:
                 )
                 updated += 1
                 continue
-            if post.status == "published" and row["status"] != "published":
+            # L29: treat released/completed as published; persist release_url when present
+            if st == "published" and row["status"] != "published":
                 now = self.clock.now().isoformat()
                 self.db.execute(
                     """
@@ -82,7 +112,32 @@ class StatusSync:
                     (now, post.release_url, row["entity_type"], row["entity_id"], row["platform"]),
                 )
                 updated += 1
+            elif st == "published" and post.release_url and not row.get("release_url"):
+                # already published locally but URL just appeared
+                self.db.execute(
+                    "UPDATE entity_platform_status SET release_url=? "
+                    "WHERE entity_type=? AND entity_id=? AND platform=? "
+                    "AND (release_url IS NULL OR release_url='')",
+                    (post.release_url, row["entity_type"], row["entity_id"], row["platform"]),
+                )
+                updated += 1
         return updated
+
+    @staticmethod
+    def _normalize_postiz_status(raw: str | None) -> str:
+        """Map Postiz state strings to local statuses (L29)."""
+        if not raw:
+            return ""
+        s = str(raw).strip().lower()
+        if s in ("published", "released", "completed", "done", "live"):
+            return "published"
+        if s in ("error", "failed", "rejected"):
+            return "error"
+        if s in ("scheduled", "pending", "queue", "queued"):
+            return "scheduled"
+        if s in ("updating", "draft"):
+            return "updating"
+        return s
 
 
 class Reconciliation:

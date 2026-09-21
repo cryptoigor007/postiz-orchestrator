@@ -44,7 +44,22 @@ class LinkUpdater:
         for r in rows:
             default = self.cfg.link_update.missing_url_default_action
             if default == "post_without_link":
-                # mark so thematic can proceed without link
+                # L45: mark so thematic can proceed with placeholder template
+                self.db.execute(
+                    "UPDATE entity_platform_status SET link_updated_at=? "
+                    "WHERE entity_type='long_video' AND entity_id=? AND platform=?",
+                    (self.clock.now().isoformat(), r["entity_id"], r["platform"]),
+                )
+                # Ensure status stays published so schedule_thematic can pick it up
+                self.db.execute(
+                    "UPDATE entity_platform_status SET status='published' "
+                    "WHERE entity_type='long_video' AND entity_id=? AND platform=? "
+                    "AND status='published'",
+                    (r["entity_id"], r["platform"]),
+                )
+                acted += 1
+            elif default == "refresh":
+                # L45: attempt refresh path even without URL (placeholder) via thematic schedule
                 self.db.execute(
                     "UPDATE entity_platform_status SET link_updated_at=? "
                     "WHERE entity_type='long_video' AND entity_id=? AND platform=?",
@@ -56,7 +71,8 @@ class LinkUpdater:
                 acted += 1
         return acted
 
-    def force_update(self, entity_id: int, platform: str, new_url: str) -> bool:
+    def force_update(self, entity_id: int, platform: str, new_url: str, scheduler=None) -> bool:
+        """Set release_url and drive refresh path (L44)."""
         if not (new_url.startswith("http://") or new_url.startswith("https://")):
             return False
         row = self.db.fetchone(
@@ -72,6 +88,17 @@ class LinkUpdater:
             (new_url, self.clock.now().isoformat(), entity_id, platform),
         )
         self.db.log("long_video", entity_id, platform, "force_link_update", new_url)
+        # L44: refresh thematic descriptions + telegram links when URL appears
+        if scheduler is not None:
+            try:
+                self.refresh_thematic_after_url(entity_id, platform, scheduler)
+            except Exception:
+                logger.exception("force_update thematic refresh failed")
+            try:
+                if hasattr(scheduler, "refresh_telegram_links"):
+                    scheduler.refresh_telegram_links()
+            except Exception:
+                logger.exception("force_update telegram refresh failed")
         return True
 
 

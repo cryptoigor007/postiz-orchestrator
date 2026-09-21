@@ -158,6 +158,7 @@ class Watcher:
             return False
 
     def _is_stable(self, path: Path) -> bool:
+        """R2: require size stable across two stats to reduce race with writers."""
         try:
             size = path.stat().st_size
         except OSError:
@@ -167,8 +168,12 @@ class Watcher:
         if prev and prev[0] == size:
             cycles = prev[1] + 1
             self._size_cache[key] = (size, cycles)
+            if len(self._size_cache) > 10000:
+                self._size_cache.clear()
             return cycles >= self.cfg.file_stability_cycles
         self._size_cache[key] = (size, 1)
+        if len(self._size_cache) > 10000:
+            self._size_cache.clear()
         return False
 
     # ---------- scan ----------

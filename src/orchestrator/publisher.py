@@ -38,14 +38,67 @@ class Publisher:
     def _already_exists(self, entity_type: str, entity_id: int, platform: str) -> str | None:
         row = self.db.fetchone(
             """
-            SELECT postiz_post_id FROM entity_platform_status
+            SELECT postiz_post_id, status FROM entity_platform_status
             WHERE entity_type=? AND entity_id=? AND platform=?
-              AND status IN ('scheduled', 'updating', 'published')
-              AND postiz_post_id IS NOT NULL
+              AND status IN ('scheduled', 'updating', 'published', 'publishing')
             """,
             (entity_type, entity_id, platform),
         )
-        return row["postiz_post_id"] if row else None
+        if not row:
+            return None
+        pid = row["postiz_post_id"]
+        if pid:
+            return pid
+        if row["status"] == "publishing":
+            return "__publishing__"
+        return None
+
+    def _reserve_publish(self, entity_type: str, entity_id: int, platform: str) -> bool:
+        """Atomically claim entity/platform for create (R1')."""
+        with self.db.conn() as c:
+            row = c.execute(
+                """
+                SELECT status, postiz_post_id FROM entity_platform_status
+                WHERE entity_type=? AND entity_id=? AND platform=?
+                """,
+                (entity_type, entity_id, platform),
+            ).fetchone()
+            if row is None:
+                try:
+                    c.execute(
+                        """
+                        INSERT INTO entity_platform_status
+                            (entity_type, entity_id, platform, status, postiz_post_id, last_error)
+                        VALUES (?, ?, ?, 'publishing', NULL, NULL)
+                        """,
+                        (entity_type, entity_id, platform),
+                    )
+                    return True
+                except Exception:
+                    return False
+            status = row["status"]
+            pid = row["postiz_post_id"]
+            # Live posts with an id are taken
+            if pid and status in ("scheduled", "updating", "published"):
+                return False
+            # Another worker already publishing
+            if status == "publishing":
+                return False
+            # refresh path: updating/ready/error without post id may be claimed
+            if status in ("scheduled", "published") and pid:
+                return False
+            cur = c.execute(
+                """
+                UPDATE entity_platform_status
+                SET status='publishing', last_error=NULL
+                WHERE entity_type=? AND entity_id=? AND platform=?
+                  AND postiz_post_id IS NULL
+                  AND status NOT IN ('publishing', 'published')
+                  AND (status NOT IN ('scheduled') OR postiz_post_id IS NULL)
+                """,
+                (entity_type, entity_id, platform),
+            )
+            return cur.rowcount > 0
 
     def publish(
         self,
@@ -69,9 +122,21 @@ class Publisher:
 
         # 1. Idempotency first (prevent self min_interval block)
         existing = self._already_exists(entity_type, entity_id, platform)
+        if existing == "__publishing__":
+            logger.info("Publish in progress %s/%s %s", entity_type, entity_id, platform)
+            return None
         if existing:
             logger.info("Already exists %s/%s %s -> %s", entity_type, entity_id, platform, existing)
             return self.postiz.get_post(existing)
+
+        # 1b. Reserve slot so parallel publish cannot create a second Postiz post (R1')
+        if not self.dry_run:
+            if not self._reserve_publish(entity_type, entity_id, platform):
+                existing = self._already_exists(entity_type, entity_id, platform)
+                if existing and existing != "__publishing__":
+                    return self.postiz.get_post(existing)
+                logger.info("Could not reserve %s/%s %s (race)", entity_type, entity_id, platform)
+                return None
 
         # 2. Safety
         plat_cfg = self.cfg.platforms.get(platform)
@@ -80,8 +145,10 @@ class Publisher:
             return None
 
         if scheduled_for:
+            from . import sched_settings
+            limit = sched_settings.effective_daily_limit(self.db, self.cfg, platform)
             ok, reason = self.safety.can_schedule(
-                platform, scheduled_for, plat_cfg.daily_limit
+                platform, scheduled_for, limit
             )
             if not ok:
                 self.db.log(entity_type, entity_id, platform, "safety_block", reason)
@@ -96,8 +163,10 @@ class Publisher:
                             entity_type, entity_id, platform, reason)
                 return None
 
-        if self.dry_run:
-            logger.info("[DRY-RUN] Would publish %s/%s to %s at %s",
+        if self.dry_run or getattr(self.cfg, "read_only", False) or bool(
+            __import__("os").getenv("ORCH_READ_ONLY")
+        ):
+            logger.info("[READ-ONLY/DRY-RUN] skip publish %s/%s to %s at %s",
                         entity_type, entity_id, platform, scheduled_for)
             self.db.log(entity_type, entity_id, platform, "dry_run", str(scheduled_for))
             return None
@@ -149,9 +218,10 @@ class Publisher:
                 raise
 
         # 4. CREATE with retries
-        last_err = None
         import os
         delays = (0, 0, 0, 0) if os.getenv("ORCH_FAST_RETRY") else (0, 2, 6, 18)
+        post: PostizPost | None = None
+        last_err: Exception | None = None
         for attempt, delay in enumerate(delays, 1):
             if delay:
                 import time
@@ -169,17 +239,30 @@ class Publisher:
                 logger.warning("CREATE attempt %s failed: %s", attempt, e)
                 from .postiz_http import is_safe_retry
                 if not is_safe_retry(e):
-                    # таймаут/5xx: не повторяем, чтобы не создать дубликат поста
                     logger.warning("CREATE не повторяем (возможен дубликат): %s", type(e).__name__)
                     break
-        else:
+
+        if post is None:
+            err_msg = str(last_err) if last_err else "create_failed_no_post"
             self.db.execute(
                 "UPDATE entity_platform_status SET status='error', last_error=? "
                 "WHERE entity_type=? AND entity_id=? AND platform=?",
-                (str(last_err), entity_type, entity_id, platform),
+                (err_msg, entity_type, entity_id, platform),
             )
-            self.db.log(entity_type, entity_id, platform, "create_fail", str(last_err))
-            raise last_err  # type: ignore
+            self.db.log(entity_type, entity_id, platform, "create_fail", err_msg)
+            # R5: track orphan media (uploaded but post not created) for ops visibility
+            try:
+                orphans = []
+                if hasattr(self.postiz, "orphan_media_ids"):
+                    orphans = list(self.postiz.orphan_media_ids())
+                if orphans:
+                    self.db.log(entity_type, entity_id, platform, "orphan_media", ",".join(str(x) for x in orphans))
+                    logger.warning("Orphan media after create fail: %s", orphans)
+            except Exception:
+                pass
+            if last_err is not None:
+                raise last_err
+            raise RuntimeError(err_msg)
 
         # 5. Save
         status = "scheduled" if scheduled_for else "published"

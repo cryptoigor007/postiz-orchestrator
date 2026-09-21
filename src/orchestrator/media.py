@@ -10,6 +10,30 @@ from pathlib import Path
 from .config import AppConfig
 from .postiz import MediaRef
 
+_SIZE_CACHE: dict[str, tuple[float, int]] = {}
+_SIZE_CACHE_MAX = 4096
+
+def _cached_size(path: str) -> int:
+    """R7: bounded size cache to avoid repeated stat on large trees."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return 0
+    mtime = st.st_mtime
+    size = st.st_size
+    cached = _SIZE_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    if len(_SIZE_CACHE) >= _SIZE_CACHE_MAX:
+        # drop arbitrary oldest-ish quarter
+        for i, k in enumerate(list(_SIZE_CACHE.keys())):
+            if i >= _SIZE_CACHE_MAX // 4:
+                break
+            _SIZE_CACHE.pop(k, None)
+    _SIZE_CACHE[path] = (mtime, size)
+    return size
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,15 +51,17 @@ def maybe_compress(path: str, platform: str, cfg: AppConfig) -> str:
         return path
     limit = limit_mb * 1024 * 1024
     try:
-        size = os.path.getsize(path)
+        size = _cached_size(path)
     except OSError:
         return path
     if size <= limit:
         return path
     ffmpeg = _ffmpeg()
     if not ffmpeg:
-        logger.warning("ffmpeg не найден: файл %s больше лимита Telegram", path)
-        return path
+        logger.warning("ffmpeg не найден: файл %s больше лимита Telegram (%s МБ)", path, limit_mb)
+        raise RuntimeError(
+            f"telegram media exceeds {limit_mb}MB and ffmpeg unavailable: {path}"
+        )
     try:
         mtime = os.path.getmtime(path)
     except OSError:
@@ -62,14 +88,18 @@ def maybe_compress(path: str, platform: str, cfg: AppConfig) -> str:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             logger.exception("ffmpeg сжатие не удалось: %s", path)
-            return path
+            # C7: do not return original oversized path
+            continue
         if dst.exists() and dst.stat().st_size <= limit:
             logger.info("Сжат для Telegram: %s -> %s (%.1f МБ)", path, dst,
                         dst.stat().st_size / 1048576)
             return str(dst)
-    if dst.exists() and dst.stat().st_size < size:
+    # C7: never return a path still above telegram_max_mb
+    if dst.exists() and dst.stat().st_size <= limit:
         return str(dst)
-    return path
+    raise RuntimeError(
+        f"telegram media still exceeds {limit_mb}MB after compress: {path}"
+    )
 
 
 def make_media(path: str, platform: str, cfg: AppConfig, postiz, broker=None) -> MediaRef:

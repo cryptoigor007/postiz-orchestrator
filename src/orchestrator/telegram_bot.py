@@ -322,17 +322,17 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
         link_upd = components.get("link_upd")
         if not link_upd:
             return "LinkUpdater not available"
-        ok = link_upd.force_update(eid, platform, url)
+        ok = link_upd.force_update(eid, platform, url, scheduler=components.get('scheduler'))
         return "OK" if ok else "Failed"
 
     def cmd_reload_config(chat_id: int, arg: str) -> str:
-        from .reload import reload_config
+        from .reload import apply_config_to_comps, reload_config
         path = arg.strip() or "config.yaml"
         new_cfg, msg = reload_config(path, cfg)
         if new_cfg is None:
             return f"Reload failed (kept old): {msg}"
-        components["cfg"] = new_cfg
-        return "Config reloaded"
+        updated = apply_config_to_comps(components, new_cfg)
+        return f"Config reloaded → {', '.join(updated)}; restart if bind/TLS changed"
 
     def cmd_next_video(chat_id: int, arg: str) -> str:
         platform = arg.strip() or None

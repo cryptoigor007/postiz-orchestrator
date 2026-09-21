@@ -4,7 +4,7 @@
 Env:
   POSTIZ_URL  base URL (default https://192-168-100-60.sslip.io)
   POSTIZ_KEY  organization API key (Authorization header, raw)
-  POSTIZ_VERIFY_TLS  "1" to verify TLS (default 0 — self-signed self-hosted)
+  POSTIZ_VERIFY_TLS  default ON; set POSTIZ_INSECURE_TLS=1 for self-signed lab
 """
 from __future__ import annotations
 
@@ -158,5 +158,15 @@ def main() -> int:
     return 0
 
 
+
+def _require_mcp_token() -> None:
+    """S17: refuse to start MCP without ORCH_MCP_TOKEN in production-like envs."""
+    import os
+    tok = os.getenv("ORCH_MCP_TOKEN", "").strip()
+    strict = os.getenv("ORCH_MCP_REQUIRE_TOKEN", "").strip() in ("1", "true", "yes")
+    if strict and not tok:
+        raise SystemExit("ORCH_MCP_TOKEN required (set ORCH_MCP_REQUIRE_TOKEN=0 to override)")
+
 if __name__ == "__main__":
+    _require_mcp_token()
     sys.exit(main())

@@ -25,8 +25,10 @@ def test_thematic_slots_basic():
 def test_thematic_slots_no_next():
     long_dt = datetime(2026, 3, 10, 16, 0, tzinfo=UTC)
     slots = thematic_slot_days(long_dt, None, "20:30")
-    assert len(slots) == 1
+    assert len(slots) == 7
     assert slots[0].day == 10
+    slots1 = thematic_slot_days(long_dt, None, "20:30", horizon_days=1)
+    assert len(slots1) == 1
 
 
 def test_next_long_dates():

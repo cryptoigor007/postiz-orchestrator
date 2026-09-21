@@ -22,7 +22,8 @@ const ok = (msg) => console.log("✓ " + msg);
 
 // Реальные ответы API берём с живого сервера (кроме опасных POST)
 const parsed = new URL(url);
-const key = (parsed.pathname.match(/\/webapp\/k\/([^/]+)/) || [])[1] || "";
+const key = process.env.WEBAPP_ACCESS_KEY
+  || ((parsed.pathname.match(/\/webapp\/k\/([^/]+)/) || [])[1] || "");
 const apiBase = `${parsed.origin}/webapp/api`;
 const realFixtures = {};
 const GET_ENDPOINTS = ["version", "status", "roots", "browse", "calendar", "queue",

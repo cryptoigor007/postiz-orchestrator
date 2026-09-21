@@ -45,3 +45,20 @@ class Metrics:
 
     def snapshot(self) -> dict[str, Any]:
         return dict(self.data)
+
+
+def sanitize_metrics(data: dict) -> dict:
+    """S19: strip secrets/tokens from metrics payload before exposure."""
+    if not isinstance(data, dict):
+        return {}
+    banned = ("token", "secret", "password", "api_key", "authorization", "cookie")
+    out = {}
+    for k, v in data.items():
+        kl = str(k).lower()
+        if any(b in kl for b in banned):
+            continue
+        if isinstance(v, dict):
+            out[k] = sanitize_metrics(v)
+        else:
+            out[k] = v
+    return out

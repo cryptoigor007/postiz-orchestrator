@@ -120,7 +120,15 @@ def test_upload_media_requires_path_in_response(tmp_path):
         client.upload_media(str(media_file), "telegram")
 
 
-def test_tls_verification_off_by_default(monkeypatch):
+def test_tls_verification_on_by_default(monkeypatch):
+    monkeypatch.delenv("POSTIZ_VERIFY_TLS", raising=False)
+    monkeypatch.delenv("POSTIZ_INSECURE_TLS", raising=False)
+    client = _client(lambda r: httpx.Response(200, json={}))
+    assert client.verify_tls is True
+
+
+def test_tls_verification_can_be_disabled(monkeypatch):
+    monkeypatch.setenv("POSTIZ_INSECURE_TLS", "1")
     monkeypatch.delenv("POSTIZ_VERIFY_TLS", raising=False)
     client = _client(lambda r: httpx.Response(200, json={}))
     assert client.verify_tls is False

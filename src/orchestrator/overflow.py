@@ -26,6 +26,9 @@ def move_excess_shorts(
     if len(shorts) <= max_n:
         return 0
     excess = shorts[max_n:]
+    # L9: hard cap per call to avoid unbounded FS moves
+    MAX_OVERFLOW_BATCH = 200
+    excess = excess[:MAX_OVERFLOW_BATCH]
     moved = 0
     for s in excess:
         src = Path(s["folder_path"])

@@ -72,17 +72,37 @@ class SafetyChecker:
         else:
             self.db.log("system", None, platform, "resume", "")
 
+    def _local_day_bounds(self, scheduled_for: datetime) -> tuple[str, str, str]:
+        """Calendar day in cfg.timezone → (local_date_iso, utc_start_iso, utc_end_iso)."""
+        from .slots import get_tz
+        if scheduled_for.tzinfo is None:
+            scheduled_for = scheduled_for.replace(tzinfo=UTC)
+        tz = get_tz(self.cfg.timezone)
+        local = scheduled_for.astimezone(tz)
+        day = local.date()
+        start = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=tz).astimezone(UTC)
+        end = start + timedelta(days=1)
+        return day.isoformat(), start.isoformat(), end.isoformat()
+
     def _count_posts_on_date(self, platform: str, target_date: str) -> int:
-        """Count scheduled/published posts for platform on given date (YYYY-MM-DD)."""
+        """Count posts on calendar day target_date (YYYY-MM-DD) in cfg.timezone."""
+        from .slots import get_tz
+        try:
+            y, m, d = (int(x) for x in target_date.split("-"))
+        except Exception:
+            return 0
+        tz = get_tz(self.cfg.timezone)
+        start = datetime(y, m, d, 0, 0, 0, tzinfo=tz).astimezone(UTC)
+        end = start + timedelta(days=1)
         row = self.db.fetchone(
             """
             SELECT COUNT(*) AS cnt FROM entity_platform_status
             WHERE platform = ?
               AND status IN ('scheduled', 'updating', 'published')
               AND postiz_scheduled_for IS NOT NULL
-              AND date(postiz_scheduled_for) = date(?)
+              AND postiz_scheduled_for >= ? AND postiz_scheduled_for < ?
             """,
-            (platform, target_date),
+            (platform, start.isoformat(), end.isoformat()),
         )
         return int(row["cnt"]) if row else 0
 
@@ -92,10 +112,40 @@ class SafetyChecker:
         if self.is_platform_paused(platform):
             return False, "platform_paused"
 
+        # L30: exception_days from sched_settings (YYYY-MM-DD in cfg.timezone)
+        try:
+            from . import sched_settings as _ss
+            from .slots import get_tz
+            block = _ss.platform_block(self.db, platform)
+            # merge group override if any
+            groups = _ss.load_groups(self.db)
+            g = _ss.group_for(platform, groups)
+            if g:
+                settings = _ss.load_schedule_settings(self.db)
+                gblock = settings.get(f"group:{g['name']}") or {}
+                if isinstance(gblock, dict):
+                    block = {**block, **gblock}
+            # also from effective() for long kind
+            try:
+                eff = _ss.effective(self.db, self.cfg, platform, "long")
+                for d in eff.get("exception_days") or []:
+                    block.setdefault("exception_days", [])
+                    if d not in block["exception_days"]:
+                        block["exception_days"] = list(block.get("exception_days") or []) + [d]
+            except Exception:
+                pass
+            exc = {str(d) for d in (block or {}).get("exception_days") or []}
+            if exc:
+                day = scheduled_for.astimezone(get_tz(self.cfg.timezone)).strftime("%Y-%m-%d")
+                if day in exc:
+                    return False, "exception_day"
+        except Exception:
+            pass
+
         if scheduled_for.tzinfo is None:
             scheduled_for = scheduled_for.replace(tzinfo=UTC)
 
-        target_date = scheduled_for.date().isoformat()
+        target_date, _, _ = self._local_day_bounds(scheduled_for)
         count = self._count_posts_on_date(platform, target_date)
 
         # warmup check
@@ -132,16 +182,37 @@ class SafetyChecker:
         return True, "ok"
 
     def record_post(self, platform: str, scheduled_for: datetime) -> None:
+        """Update last_post_at and posts_today (reset when calendar day changes in cfg.timezone)."""
         now = self.clock.now().isoformat()
-        date_str = scheduled_for.date().isoformat()
+        if scheduled_for.tzinfo is None:
+            scheduled_for = scheduled_for.replace(tzinfo=UTC)
+        date_str, _, _ = self._local_day_bounds(scheduled_for)
+        row = self.db.fetchone(
+            "SELECT posts_today, posts_today_date FROM platform_safety_state WHERE platform=?",
+            (platform,),
+        )
+        if row is None:
+            self.db.execute(
+                """
+                INSERT INTO platform_safety_state
+                    (platform, last_post_at, posts_today, posts_today_date, updated_at)
+                VALUES (?, ?, 1, ?, ?)
+                """,
+                (platform, scheduled_for.isoformat(), date_str, now),
+            )
+            return
+        prev_date = row["posts_today_date"]
+        if prev_date != date_str:
+            new_count = 1
+        else:
+            new_count = int(row["posts_today"] or 0) + 1
         self.db.execute(
             """
             UPDATE platform_safety_state
-            SET last_post_at = ?, posts_today = posts_today + 1,
-                posts_today_date = ?, updated_at = ?
+            SET last_post_at = ?, posts_today = ?, posts_today_date = ?, updated_at = ?
             WHERE platform = ?
             """,
-            (scheduled_for.isoformat(), date_str, now, platform),
+            (scheduled_for.isoformat(), new_count, date_str, now, platform),
         )
 
     def start_warmup(self, platform: str) -> None:

@@ -235,3 +235,9 @@ def all_times(db: Database, cfg: AppConfig, platform: str) -> list[str]:
         if t not in seen:
             seen.append(t)
     return seen
+
+def platform_block(db: Database, platform: str) -> dict[str, Any]:
+    """Return schedule settings override block for platform (empty if none)."""
+    settings = load_schedule_settings(db)
+    block = settings.get(platform) or settings.get(f"platform:{platform}") or {}
+    return block if isinstance(block, dict) else {}

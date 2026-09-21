@@ -81,9 +81,17 @@ class HttpPostizClient:
         self.path_upload = os.getenv("POSTIZ_PATH_UPLOAD", "/public/v1/upload")
         self.path_posts = os.getenv("POSTIZ_PATH_POSTS", "/public/v1/posts")
         if verify is None:
-            verify = os.getenv("POSTIZ_VERIFY_TLS", "0").strip().lower() in (
+            # 10.3: TLS verify ON by default; opt-out via POSTIZ_INSECURE_TLS=1 or POSTIZ_VERIFY_TLS=0
+            insecure = os.getenv("POSTIZ_INSECURE_TLS", "").strip().lower() in (
                 "1", "true", "yes", "on",
             )
+            explicit = os.getenv("POSTIZ_VERIFY_TLS", "").strip().lower()
+            if explicit in ("0", "false", "no", "off"):
+                verify = False
+            elif explicit in ("1", "true", "yes", "on"):
+                verify = True
+            else:
+                verify = not insecure  # default secure
         self.verify_tls = verify
         # Real Postiz: Authorization is raw key, not Bearer
         auth_style = os.getenv("POSTIZ_AUTH_STYLE", "raw").lower()  # raw | bearer

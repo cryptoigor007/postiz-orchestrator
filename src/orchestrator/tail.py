@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .clock import Clock
 from .config import AppConfig
@@ -25,23 +25,67 @@ class TailManager:
         )
         return bool(row and row["series_tail_mode"])
 
-    def on_new_long_video(self, platform: str, video_id: int) -> None:
-        """New long video resets tail and pending question."""
-        now = self.clock.now().isoformat()
-        self.db.execute(
-            """
-            UPDATE platform_queue_state
-            SET series_tail_mode=0,
-                active_long_video_id=?,
-                last_long_video_at=?,
-                pending_series_end_question=0,
-                pending_series_end_at=NULL,
-                updated_at=?
-            WHERE platform=?
-            """,
-            (video_id, now, now, platform),
-        )
-        logger.info("Tail reset on %s due to new long video %s", platform, video_id)
+    def on_new_long_video(
+        self,
+        platform: str,
+        video_id: int,
+        at: str | None = None,
+        *,
+        reset_tail: bool | None = None,
+    ) -> None:
+        """Record new long video time (L17: entity time, not now).
+
+        Tail reset policy (L20 / §2): reset series_tail_mode only when the long is
+        already published or scheduled within soft_enter_days of now. Far-future
+        scheduled longs update active/last timestamps but do not clear tail.
+        """
+        now = self.clock.now()
+        now_s = now.isoformat()
+        at_s = at or now_s
+        # Decide whether to clear tail
+        do_reset = reset_tail
+        if do_reset is None:
+            do_reset = True
+            try:
+                at_dt = datetime.fromisoformat(at_s)
+                if at_dt.tzinfo is None:
+                    at_dt = at_dt.replace(tzinfo=UTC)
+                # far-future schedule beyond soft_enter window → keep tail
+                horizon = timedelta(days=int(self.cfg.tail.soft_enter_days or 0))
+                if at_dt > now + horizon:
+                    do_reset = False
+            except Exception:
+                do_reset = True
+        if do_reset:
+            self.db.execute(
+                """
+                UPDATE platform_queue_state
+                SET series_tail_mode=0,
+                    active_long_video_id=?,
+                    last_long_video_at=?,
+                    pending_series_end_question=0,
+                    pending_series_end_at=NULL,
+                    updated_at=?
+                WHERE platform=?
+                """,
+                (video_id, at_s, now_s, platform),
+            )
+            logger.info("Tail reset on %s due to long video %s at %s", platform, video_id, at_s)
+        else:
+            self.db.execute(
+                """
+                UPDATE platform_queue_state
+                SET active_long_video_id=?,
+                    last_long_video_at=?,
+                    updated_at=?
+                WHERE platform=?
+                """,
+                (video_id, at_s, now_s, platform),
+            )
+            logger.info(
+                "Long %s on %s recorded at %s (tail kept — schedule beyond soft_enter)",
+                video_id, platform, at_s,
+            )
 
     def sync_new_long(self, platform: str) -> bool:
         """Отмечает последний запланированный/вышедший фильм.
@@ -64,7 +108,8 @@ class TailManager:
             "WHERE platform=?", (platform,))
         if cur and cur["active_long_video_id"] == row["entity_id"] and cur["last_long_video_at"]:
             return False
-        self.on_new_long_video(platform, row["entity_id"])
+        # L17: pass entity scheduled/published time, not clock.now()
+        self.on_new_long_video(platform, row["entity_id"], at=row["at"])
         return True
 
     def check_soft_enter(self, platform: str) -> None:
@@ -107,7 +152,11 @@ class TailManager:
         return self.is_tail(platform) and self.cfg.tail.use_all_short_slots
 
     def expire_pending_questions(self) -> int:
-        """Clear pending series_end questions past TTL."""
+        """Clear pending series_end questions past TTL (L19).
+
+        Respects tail.default_action: if distribute → enter series_tail_mode;
+        otherwise just clear the pending flag (wait / manual).
+        """
         ttl = self.cfg.tail.series_end_question_ttl_days
         rows = self.db.fetchall(
             "SELECT platform, pending_series_end_at FROM platform_queue_state "
@@ -115,6 +164,7 @@ class TailManager:
         )
         n = 0
         now = self.clock.now()
+        action = (self.cfg.tail.default_action or "wait").lower()
         for r in rows:
             try:
                 at = datetime.fromisoformat(r["pending_series_end_at"])
@@ -123,12 +173,27 @@ class TailManager:
             except Exception:
                 continue
             if (now - at).days >= ttl:
-                self.db.execute(
-                    "UPDATE platform_queue_state SET pending_series_end_question=0, "
-                    "pending_series_end_at=NULL, updated_at=? WHERE platform=?",
-                    (now.isoformat(), r["platform"]),
-                )
+                if action == "distribute":
+                    self.db.execute(
+                        "UPDATE platform_queue_state SET pending_series_end_question=0, "
+                        "pending_series_end_at=NULL, series_tail_mode=1, "
+                        "updated_at=? WHERE platform=?",
+                        (now.isoformat(), r["platform"]),
+                    )
+                    logger.info(
+                        "Expired series_end on %s → tail mode (default_action=distribute)",
+                        r["platform"],
+                    )
+                else:
+                    self.db.execute(
+                        "UPDATE platform_queue_state SET pending_series_end_question=0, "
+                        "pending_series_end_at=NULL, updated_at=? WHERE platform=?",
+                        (now.isoformat(), r["platform"]),
+                    )
+                    logger.info(
+                        "Expired series_end on %s → cleared (default_action=%s)",
+                        r["platform"], action,
+                    )
                 n += 1
-                logger.info("Expired series_end question on %s", r["platform"])
         return n
 

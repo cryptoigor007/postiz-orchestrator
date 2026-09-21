@@ -137,7 +137,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_confirmed
     WHERE match_status = 'confirmed';
 """
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 
@@ -189,6 +189,16 @@ class Database:
         if current < 11:
             try:
                 conn.execute("ALTER TABLE long_videos ADD COLUMN cover_path TEXT")
+            except Exception:
+                pass
+        if current < 12:
+            # R3: unique postiz_post_id where set (prevents silent double-bind)
+            try:
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_eps_postiz_id_unique "
+                    "ON entity_platform_status(postiz_post_id) "
+                    "WHERE postiz_post_id IS NOT NULL AND postiz_post_id != ''"
+                )
             except Exception:
                 pass
         if current < SCHEMA_VERSION or current == 0:

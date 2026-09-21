@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from . import sched_settings
+from .metrics import sanitize_metrics
 from .watcher import WATCH_ROOTS_KEY
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -36,7 +37,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "76"
+WEBAPP_BUILD = "812"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -123,9 +124,13 @@ class WebAppAPI:
                 bprefix = f"/webapp/b/{WEBAPP_BUILD}"
                 last = qpath.rstrip("/").rsplit("/", 1)[-1]
                 is_asset = "." in last
+                # 10.4: /webapp/k/<key>/ only if ORCH_LEGACY_PATH_KEY=1
+                _legacy_path_key = os.getenv("ORCH_LEGACY_PATH_KEY", "").strip().lower() in (
+                    "1", "true", "yes", "on",
+                )
                 is_page = (not is_asset) and (
                     qpath in ("/webapp", "/webapp/", "/webapp/index.html")
-                    or qpath.startswith("/webapp/k/")
+                    or (_legacy_path_key and qpath.startswith("/webapp/k/"))
                     or qpath == bprefix
                     or qpath.startswith(bprefix + "/")
                 )
@@ -156,6 +161,18 @@ class WebAppAPI:
             return 429, {"error": "too many requests"}, "application/json"
 
         route = qpath[len("/webapp/api/") :].strip("/")
+        # R13: read-only mode blocks mutating API routes
+        import os as _os
+        _ro = _os.getenv("ORCH_READ_ONLY", "").strip() in ("1", "true", "yes") or bool(getattr(self.cfg, "read_only", False))
+        if _ro and method in ("POST", "PUT", "DELETE", "PATCH"):
+            _mut = {
+                "schedule", "scan", "delete", "pause", "resume", "settings", "groups",
+                "force_link", "tail", "backlog", "cover", "edit", "bulk", "cleanup",
+            }
+            head = route.split("/")[0]
+            if head in _mut or route in _mut:
+                return 403, {"error": "read_only"}, "application/json"
+
         data = {}
         if body:
             try:
@@ -251,7 +268,9 @@ class WebAppAPI:
                     if not target.is_dir():
                         return 400, {"error": f"not a directory: {raw_path}"}, "application/json"
                     rp = target.resolve()
-                    if not any(rp == r or r in rp.parents for r in allowed):
+                    if not allowed:
+                        return 400, {"error": "no browse roots configured"}, "application/json"
+                    if not self._path_under_roots(rp, allowed):
                         return 400, {"error": f"outside allowed root: {raw_path}"}, "application/json"
                     cleaned.append({"path": str(rp), "kind": kind})
                 self.db.set_setting(WATCH_ROOTS_KEY, json.dumps(cleaned, ensure_ascii=False))
@@ -649,25 +668,34 @@ class WebAppAPI:
                 return 200, {"ok": True, "groups": payload}, "application/json"
             if method == "GET" and route == "browse":
                 roots = self._browse_roots()
+                if not roots:
+                    return 403, {"error": "no browse roots configured (WEBAPP_BROWSE_ROOT)"}, "application/json"
                 metas = [self._root_meta(r) for r in roots]
                 available = [Path(m["path"]) for m in metas if m["available"]]
                 root = available[0] if available else roots[0]
                 sel = query.get("root")
                 if sel:
-                    rp = Path(sel).expanduser()
-                    rp = rp.resolve() if rp.is_dir() else None
-                    if rp in roots:
+                    try:
+                        rp = Path(sel).expanduser().resolve()
+                    except Exception:
+                        rp = None
+                    if rp is not None and rp in roots:
                         root = rp
                 target = query.get("path") or str(root)
-                base = Path(target).expanduser()
-                base = base.resolve() if base.is_dir() else root
-                # если путь внутри другого разрешённого корня — переключаемся на него
-                # (раньше дерево залипало на первом корне и «не открывалось»)
+                try:
+                    base = Path(target).expanduser().resolve()
+                except Exception:
+                    base = root
+                if not base.is_dir():
+                    base = root
                 for r in roots:
-                    if base == r or r in base.parents:
-                        root = r
-                        break
-                if base != root and root not in base.parents:
+                    try:
+                        if base == r or base.is_relative_to(r):
+                            root = r
+                            break
+                    except (ValueError, TypeError):
+                        continue
+                if not self._path_under_roots(base, roots):
                     base = root
                 dirs = []
                 warning = ""
@@ -701,17 +729,17 @@ class WebAppAPI:
             if method == "GET" and route in ("cover/list", "cover/thumb"):
                 roots = self._browse_roots()
 
-                def _allowed(p: Path) -> bool:
-                    try:
-                        rp = p.resolve()
-                    except Exception:
-                        return False
-                    return any(rp == r or r in rp.parents for r in roots)
+                if not roots:
+                    return 403, {"error": "no browse roots configured"}, "application/json"
 
                 target = query.get("path") or str(roots[0])
-                base = Path(target).expanduser()
-                base = base.resolve() if _allowed(base) and base.exists() else roots[0]
-                if not _allowed(base):
+                try:
+                    base = Path(target).expanduser().resolve()
+                except Exception:
+                    base = roots[0]
+                if not (self._path_under_roots(base, roots) and base.exists()):
+                    base = roots[0]
+                if not self._path_under_roots(base, roots):
                     return 403, {"error": "path not allowed"}, "application/json"
                 if route == "cover/thumb":
                     if not base.is_file() or base.suffix.lower() not in IMG_EXTS:
@@ -747,7 +775,7 @@ class WebAppAPI:
                                            "size": child.stat().st_size})
                     except OSError:
                         continue
-                parent = str(base.parent) if base != base.parent and _allowed(base.parent) else None
+                parent = str(base.parent) if base != base.parent and self._path_under_roots(base.parent, roots) else None
                 return 200, {
                     "path": str(base), "parent": parent,
                     "roots": [str(r) for r in roots],
@@ -885,6 +913,8 @@ class WebAppAPI:
                 if len(q) < 2:
                     return 400, {"error": "query too short (min 2 chars)"}, "application/json"
                 roots = self._browse_roots()
+                if not roots:
+                    return 403, {"error": "no browse roots configured"}, "application/json"
                 sel = query.get("root")
                 if sel:
                     rp = Path(sel).expanduser()
@@ -1152,7 +1182,15 @@ class WebAppAPI:
                             sc.job = job
                         sc.schedule_long_videos(start_date=sd)
                         sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd)
+                        pubs = self.db.fetchall(
+                            "SELECT entity_id, platform FROM entity_platform_status "
+                            "WHERE entity_type='long_video' "
+                            "AND status IN ('published','scheduled')"
+                        )
+                        for r in pubs:
+                            sc.schedule_thematic_shorts(r["entity_id"], r["platform"])
                         sc.schedule_telegram_links()
+                        sc.refresh_telegram_links()
                         self._send_schedule_summary(before)
                         if job is not None:
                             job.finish("done", "Готово")
@@ -1171,10 +1209,21 @@ class WebAppAPI:
                 try:
                     n = sc.schedule_long_videos(start_date=sd) if sc else 0
                     n2 = sc.schedule_standalone_shorts(self.comps.get("tail"), start_date=sd) if sc else 0
+                    nt = 0
+                    if sc:
+                        pubs = self.db.fetchall(
+                            "SELECT entity_id, platform FROM entity_platform_status "
+                            "WHERE entity_type='long_video' "
+                            "AND status IN ('published','scheduled')"
+                        )
+                        for r in pubs:
+                            nt += sc.schedule_thematic_shorts(r["entity_id"], r["platform"])
+                        sc.schedule_telegram_links()
+                        sc.refresh_telegram_links()
                     self._send_schedule_summary(before)
                 finally:
                     _SCHEDULE_LOCK.release()
-                return 200, {"ok": True, "long": n, "standalone": n2, "start_date": sd,
+                return 200, {"ok": True, "long": n, "standalone": n2, "thematic": nt, "start_date": sd,
                              "shorts_start_date": shr}, "application/json"
             if method == "POST" and route == "pause_platform":
                 p = (data.get("platform") or "").strip()
@@ -1209,7 +1258,7 @@ class WebAppAPI:
         except Exception:
             logger.debug("live metrics failed", exc_info=True)
         data["live"] = live
-        return data
+        return sanitize_metrics(data)
 
     def _rate_limited(self, headers: dict[str, str]) -> bool:
         try:
@@ -1218,10 +1267,13 @@ class WebAppAPI:
             limit = 120
         if limit <= 0:
             return False
+        xff = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or ""
+        # S16: use only the first hop (client) — ignore spoofed chain tail
+        client_ip = xff.split(",")[0].strip() if xff else ""
         ident = (
             headers.get("X-Webapp-Key") or headers.get("x-webapp-key")
             or headers.get("X-Telegram-Init-Data") or headers.get("x-telegram-init-data")
-            or headers.get("X-Forwarded-For") or "local"
+            or client_ip or "local"
         )
         now = time.monotonic()
         dq = self._rl.setdefault(ident, deque())
@@ -1233,6 +1285,7 @@ class WebAppAPI:
         return False
 
     def _browse_roots(self) -> list[Path]:
+        """Configured browse roots only. Empty → deny all (no fallback to /)."""
         raw = os.getenv("WEBAPP_BROWSE_ROOT", "/mnt/video")
         out: list[Path] = []
         for part in raw.split(","):
@@ -1245,13 +1298,30 @@ class WebAppAPI:
                 continue
             if p.is_dir():
                 out.append(p)
-        return out or [Path("/")]
+        return out
+
+    def _path_under_roots(self, path: Path, roots: list[Path] | None = None) -> bool:
+        """True if resolved path is equal to or under one of the allowed roots."""
+        roots = roots if roots is not None else self._browse_roots()
+        if not roots:
+            return False
+        try:
+            rp = path.expanduser().resolve()
+        except Exception:
+            return False
+        for r in roots:
+            try:
+                if rp == r or rp.is_relative_to(r):
+                    return True
+            except (ValueError, TypeError):
+                continue
+        return False
 
     def _key_from_request(self, qpath: str, query: dict[str, str]) -> str:
         k = query.get("key")
         if k:
             return k
-        m = re.match(r"^/webapp/k/([^/]+)", qpath)
+        m = re.match(r"^/webapp/k/([^/]+)", qpath) if os.getenv("ORCH_LEGACY_PATH_KEY", "").strip().lower() in ("1", "true", "yes", "on") else None
         return m.group(1) if m else ""
 
     def _manual_plan(self) -> dict:

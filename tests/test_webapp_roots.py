@@ -158,7 +158,8 @@ def test_api_scan_registers(env, tmp_path):
     assert db.fetchone("SELECT id FROM long_videos")
 
 
-def test_path_key_serves_app(env):
+def test_path_key_serves_app(env, monkeypatch):
+    monkeypatch.setenv("ORCH_LEGACY_PATH_KEY", "1")
     api, db, clock, cfg, watcher = env
     code, body, ctype = api.handle("GET", "/webapp/k/abc123/", {}, b"")
     assert code == 200
@@ -168,7 +169,16 @@ def test_path_key_serves_app(env):
     assert b"Orchestrator" in body
 
 
-def test_composed_index_inlines_assets_and_key(env):
+def test_path_key_denied_without_legacy(env, monkeypatch):
+    monkeypatch.delenv("ORCH_LEGACY_PATH_KEY", raising=False)
+    monkeypatch.setenv("ORCH_LEGACY_PATH_KEY", "0")
+    api, db, clock, cfg, watcher = env
+    code, body, _ = api.handle("GET", "/webapp/k/abc123/", {}, b"")
+    assert code == 404
+
+
+def test_composed_index_inlines_assets_and_key(env, monkeypatch):
+    monkeypatch.setenv("ORCH_LEGACY_PATH_KEY", "1")
     api, db, clock, cfg, watcher = env
     os.environ["WEBAPP_ACCESS_KEY"] = "s3cret"
     try:

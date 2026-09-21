@@ -31,6 +31,17 @@ class Scheduler:
         self.clock = clock
         self.job = None  # Job для прогресса/отмены (задаётся перед запуском)
 
+    def _slot_for_safety(self, slot: datetime) -> datetime:
+        """Same jitter as Publisher before can_schedule (L8)."""
+        if not slot or not getattr(self.cfg.safety, "jitter_seconds", 0):
+            return slot
+        from .slots import apply_jitter
+        jittered = apply_jitter(slot, self.cfg.safety.jitter_seconds)
+        if jittered > self.clock.now():
+            return jittered
+        return slot
+
+
     def _pick_path(self, row, platform: str, pcfg=None):
         """Путь под платформу (platform_paths) или общий wide/vertical/video."""
         try:
@@ -129,6 +140,13 @@ class Scheduler:
                 continue  # только ссылки: видео на этой платформе не ставим
             if self._backlog_active(platform):
                 continue  # сначала выкладываем остаток предыдущей серии
+            # L21: pending series-end question blocks new long until resolved/expired
+            pq = self.db.fetchone(
+                "SELECT pending_series_end_question FROM platform_queue_state WHERE platform=?",
+                (platform,),
+            )
+            if pq and pq["pending_series_end_question"]:
+                continue
             eff = sched_settings.effective(self.db, self.cfg, platform, "long")
             future_slots = next_long_video_dates(
                 eff.get("days") or ["tue", "fri"],
@@ -156,7 +174,7 @@ class Scheduler:
                 if not path:
                     continue
                 for slot in future_slots:
-                    ok, _ = self.safety.can_schedule(platform, slot, limit)
+                    ok, _ = self.safety.can_schedule(platform, self._slot_for_safety(slot), limit)
                     if ok:
                         content = {
                             "title": video["title_text"] or "",
@@ -254,6 +272,20 @@ class Scheduler:
 
         short_ids = [s["id"] for s in shorts]
         # один шорт на слот ровно в 20:30; занятые слоты пропускаем (остаток -> «Остаток»)
+        def _utc_minute_key(val) -> str:
+            if val is None:
+                return ""
+            if isinstance(val, datetime):
+                dt = val
+            else:
+                try:
+                    dt = datetime.fromisoformat(str(val))
+                except Exception:
+                    return str(val)[:16]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M")
+
         taken = set()
         for r in self.db.fetchall(
             "SELECT postiz_scheduled_for FROM entity_platform_status "
@@ -263,8 +295,8 @@ class Scheduler:
         ):
             ts = r["postiz_scheduled_for"]
             if ts:
-                taken.add(str(ts)[:16])
-        free_slots = [sl for sl in slots if sl.isoformat()[:16] not in taken]
+                taken.add(_utc_minute_key(ts))
+        free_slots = [sl for sl in slots if _utc_minute_key(sl) not in taken]
         assignments = list(zip(short_ids, free_slots, strict=False))
 
         pcfg = self.cfg.platforms[platform]
@@ -322,7 +354,7 @@ class Scheduler:
         count = 0
         for s in shorts:
             for slot in slots:
-                ok, _ = self.safety.can_schedule(platform, slot, pcfg.daily_limit)
+                ok, _ = self.safety.can_schedule(platform, self._slot_for_safety(slot), sched_settings.effective_daily_limit(self.db, self.cfg, platform))
                 if not ok:
                     continue
                 content = {
@@ -423,7 +455,7 @@ class Scheduler:
                 text = self._link_text(etype, eid, url)
                 if not text:
                     continue
-                ok, reason = self.safety.can_schedule("telegram", when, limit)
+                ok, reason = self.safety.can_schedule("telegram", self._slot_for_safety(when), limit)
                 if not ok:
                     logger.info("telegram link skip (%s/%s): %s", etype, eid, reason)
                     continue
@@ -490,26 +522,41 @@ class Scheduler:
                     when = None
             if when is None or when <= self.clock.now():
                 when = self.clock.now() + timedelta(minutes=1)
+            # L28: create new → persist → delete old; rollback on create fail
             old_id = r["postiz_post_id"]
-            if old_id:
-                try:
-                    self.postiz.delete_post(str(old_id))
-                except Exception:
-                    logger.warning("telegram refresh: не удалил старый пост %s", old_id)
+            content = {"title": "", "description": text, "hashtags": ""}
+            # Temporarily clear id so publish can create; keep old_id for rollback
             self.db.execute(
-                "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL "
+                "UPDATE entity_platform_status SET status='updating', postiz_post_id=NULL "
                 "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
                 (etype, eid),
             )
-            content = {"title": "", "description": text, "hashtags": ""}
-            post = self._safe_publish(etype, eid, "telegram", None, content, when)
+            post = None
+            try:
+                post = self._safe_publish(etype, eid, "telegram", None, content, when)
+            except Exception:
+                logger.exception("telegram refresh create failed %s/%s", etype, eid)
+                post = None
             if post:
+                if old_id:
+                    try:
+                        self.postiz.delete_post(str(old_id))
+                    except Exception:
+                        logger.warning("telegram refresh: не удалил старый пост %s", old_id)
                 self.db.execute(
                     "UPDATE entity_platform_status SET link_updated_at=? "
                     "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
                     (self.clock.now().isoformat(), etype, eid),
                 )
                 count += 1
+            elif old_id:
+                # rollback: restore old post id
+                self.db.execute(
+                    "UPDATE entity_platform_status SET status='scheduled', postiz_post_id=?, "
+                    "last_error='refresh_failed' "
+                    "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
+                    (old_id, etype, eid),
+                )
         return count
 
     def _backlog_slots(self, days: int = 30, start_date: str | None = None) -> list[datetime]:
@@ -598,26 +645,7 @@ class Scheduler:
             except Exception:
                 pass
 
-        ready = self.db.fetchall(
-            """
-            SELECT s.id, s.video_path, s.platform_paths, s.title_text, s.description_text,
-                   s.hashtags_text, s.cover_path
-            FROM shorts s
-            WHERE s.source = 'shortsmaker'
-              AND s.parent_video_id IS NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM entity_platform_status eps
-                  WHERE eps.entity_type='short' AND eps.entity_id=s.id
-                    AND eps.status IN ('scheduled','published','skipped')
-              )
-            ORDER BY s.created_at
-            LIMIT ?
-            """,
-            (self.cfg.limits.max_posts_per_distribute,),
-        )
-        if not ready:
-            return 0
-
+        # L1: ready query per platform (NOT EXISTS filters eps.platform)
         count = 0
         for platform, pcfg in self.cfg.platforms.items():
             if not pcfg.enabled:
@@ -625,6 +653,26 @@ class Scheduler:
             if getattr(pcfg, "post_mode", "media") == "link":
                 continue
             if tail_manager and tail_manager.should_pause_standalone(platform):
+                continue
+            ready = self.db.fetchall(
+                """
+                SELECT s.id, s.video_path, s.platform_paths, s.title_text, s.description_text,
+                       s.hashtags_text, s.cover_path
+                FROM shorts s
+                WHERE s.source = 'shortsmaker'
+                  AND s.parent_video_id IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM entity_platform_status eps
+                      WHERE eps.entity_type='short' AND eps.entity_id=s.id
+                        AND eps.platform=?
+                        AND eps.status IN ('scheduled','published','skipped')
+                  )
+                ORDER BY s.created_at
+                LIMIT ?
+                """,
+                (platform, self.cfg.limits.max_posts_per_distribute),
+            )
+            if not ready:
                 continue
             eff = sched_settings.effective(self.db, self.cfg, platform, "standalone")
             days = eff.get("days") or ["mon", "wed", "thu", "sat", "sun"]
@@ -651,7 +699,7 @@ class Scheduler:
                             candidate = local_to_utc(cur, t, self.cfg.timezone)
                             if candidate <= now:
                                 continue
-                            ok, _ = self.safety.can_schedule(platform, candidate, limit)
+                            ok, _ = self.safety.can_schedule(platform, self._slot_for_safety(candidate), limit)
                             if ok:
                                 content = {
                                     "title": short["title_text"] or "",

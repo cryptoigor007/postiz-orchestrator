@@ -41,10 +41,12 @@ def thematic_slot_days(
     next_long_date: datetime | None,
     default_time: str = "20:30",
     tz_name: str = "Europe/Moscow",
+    horizon_days: int = 7,
 ) -> list[datetime]:
     """
     All days from long_video_date (inclusive) to the day before next_long_date.
     Times are wall-clock in tz_name, returned as UTC.
+    If next_long_date is None, use horizon_days (default 7) from long date.
     """
     if long_video_date.tzinfo is None:
         long_video_date = long_video_date.replace(tzinfo=UTC)
@@ -53,7 +55,11 @@ def thematic_slot_days(
     t = parse_time(default_time)
 
     if next_long_date is None:
-        return [local_to_utc(local_long.date(), t, tz_name)]
+        end_day = local_long.date() + timedelta(days=max(0, horizon_days - 1))
+        return [
+            local_to_utc(d, t, tz_name)
+            for d in daterange_dates(local_long.date(), end_day)
+        ]
 
     if next_long_date.tzinfo is None:
         next_long_date = next_long_date.replace(tzinfo=UTC)

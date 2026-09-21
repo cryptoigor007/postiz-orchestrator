@@ -8,7 +8,12 @@ KEY=$(grep -m1 "^WEBAPP_ACCESS_KEY=" "$ENV" 2>/dev/null | cut -d= -f2-)
 URL=$(journalctl -u cloudflared-webapp --no-pager 2>/dev/null | grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" | tail -1)
 BUILD=$(/opt/orchestrator/venv/bin/python -c "import sys; sys.path.insert(0,\"/opt/orchestrator/src\"); from orchestrator.webapp_api import WEBAPP_BUILD; print(WEBAPP_BUILD)" 2>/dev/null)
 if [ -z "$URL" ]; then echo "$(date -Is) no url yet" >> "$LOG"; exit 0; fi
-if [ -n "$KEY" ]; then PUB="$URL/webapp/k/$KEY/b/$BUILD/"; else PUB="$URL/webapp/b/$BUILD/"; fi
+# 10.2: do NOT put access key in URL (query or path). Panel uses header/cookie after open.
+# Optional legacy: ORCH_WEBAPP_URL_WITH_KEY=1 restores ?key= for old Telegram clients.
+PUB="$URL/webapp/b/$BUILD/"
+if [ "${ORCH_WEBAPP_URL_WITH_KEY:-0}" = "1" ] && [ -n "$KEY" ]; then
+  PUB="$URL/webapp/b/$BUILD/?key=$KEY"
+fi
 CUR=$(cat "$STATE" 2>/dev/null || true)
 if [ "$CUR" != "$PUB" ]; then
   MD="{\"menu_button\":{\"type\":\"web_app\",\"text\":\"Панель\",\"web_app\":{\"url\":\"$PUB\"}}}"

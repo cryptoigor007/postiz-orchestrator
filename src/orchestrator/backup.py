@@ -17,13 +17,32 @@ def run_backup(db: Database, cfg: AppConfig, backup_dir: str | Path) -> Path | N
     if not cfg.backup.enabled:
         return None
     backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    dest = backup_dir / f"data_{ts}.sqlite"
-    # VACUUM INTO is safe online backup for SQLite
     try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        # проверяем, что путь реально доступен на запись (иначе — откат к папке рядом с БД)
+        if not os.access(backup_dir, os.W_OK):
+            raise PermissionError(str(backup_dir))
+    except OSError:
+        alt = Path(db.path).resolve().parent / "backups"
+        try:
+            alt.mkdir(parents=True, exist_ok=True)
+            if not os.access(alt, os.W_OK):
+                raise PermissionError(str(alt))
+            logger.warning("Backup dir %s недоступен — использую %s", backup_dir, alt)
+            backup_dir = alt
+        except OSError:
+            logger.warning("Backup пропущен: нет доступной папки для %s", db.path)
+            return None
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    dest = backup_dir.resolve() / f"data_{ts}.sqlite"
+    # 10.1: use sqlite3 backup API (no SQL string with path)
+    try:
+        dest_s = str(dest)
+        if any(c in dest_s for c in ("\x00", "\n", "\r")):
+            raise ValueError(f"unsafe backup path: {dest_s!r}")
         with sqlite3.connect(db.path) as src:
-            src.execute(f"VACUUM INTO '{dest}'")
+            with sqlite3.connect(dest_s) as dst:
+                src.backup(dst)
         logger.info("Backup created: %s", dest)
         mirror = os.getenv("ORCH_BACKUP_MIRROR", "").strip()
         if mirror:

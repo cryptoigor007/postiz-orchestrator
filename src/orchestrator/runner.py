@@ -21,6 +21,9 @@ class Runner:
         self.cfg = comps["cfg"]
         self.dry_run = dry_run
         self._stop = False
+        self._miss_streak: dict[str, int] = {}
+        self._cycle_fail_streak = 0
+        self._miss_error_threshold = 3  # R8: N consecutive misses → error
         db_path = Path(comps["db"].path)
         self.metrics = Metrics(db_path.parent / "metrics.json")
         webapi = WebAppAPI(comps)
@@ -74,7 +77,14 @@ class Runner:
                 self.metrics.incr("errors")
                 self.metrics.set("last_error", str(e))
                 self.metrics.flush()
-                logger.exception("Cycle error")
+                self._cycle_fail_streak += 1
+                # R6: exponential backoff on cycle errors (cap 5 min)
+                delay = min(300, 2 ** min(self._cycle_fail_streak, 8))
+                logger.exception("Cycle error (streak=%s, backoff=%ss)", self._cycle_fail_streak, delay)
+                time.sleep(delay)
+                continue
+            else:
+                self._cycle_fail_streak = 0
             time.sleep(1)
 
         logger.info("Runner stopped")

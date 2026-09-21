@@ -80,7 +80,7 @@ class BackupCfg(BaseModel):
     enabled: bool = True
     interval_hours: int = 6
     keep_days: int = 14
-    method: str = "VACUUM INTO"
+    method: str = "sqlite_backup"  # Connection.backup API (8.1.1+)
 
 
 class AppConfig(BaseModel):

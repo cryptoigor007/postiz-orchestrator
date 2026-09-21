@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Scheduled standalone: %s", n2)
         pubs = comps["db"].fetchall(
             "SELECT entity_id, platform FROM entity_platform_status "
-            "WHERE entity_type='long_video' AND status='published'"
+            "WHERE entity_type='long_video' AND status IN ('published','scheduled')"
         )
         for r in pubs:
             nt = comps["scheduler"].schedule_thematic_shorts(r["entity_id"], r["platform"])
@@ -186,7 +186,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.backup or args.once:
         bdir = Path(args.db).resolve().parent.parent / "backups"
-        path = run_backup(comps["db"], cfg, bdir)
+        try:
+            path = run_backup(comps["db"], cfg, bdir)
+        except Exception:
+            logger.exception("backup failed (не критично, продолжаем)")
+            path = None
         logger.info("Backup: %s", path)
 
     if not any([args.scan, args.schedule, args.sync, args.reconcile, args.backup, args.once]):

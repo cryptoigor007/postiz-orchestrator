@@ -83,13 +83,13 @@ def test_thematic_after_publish(env):
              f"Short {i}", f"Desc {i}", now),
         )
     n = sched.schedule_thematic_shorts(vid, "youtube")
-    # один шорт на день-слот (ровно в 20:30); в окне один день -> один шорт
-    assert n == 1
+    # L5: without next_long horizon 7 days → up to 3 shorts
+    assert n == 3
     rows = db.fetchall(
         "SELECT * FROM entity_platform_status WHERE entity_type='short' AND platform='youtube'"
     )
-    assert len(rows) == 1
-    assert len(postiz.posts) == 1
+    assert len(rows) == 3
+    assert len(postiz.posts) == 3
 
 
 def test_reconciliation(env):
@@ -129,7 +129,7 @@ def test_thematic_shorts_for_scheduled_parent(env):
         (lv["id"],),
     )
     n = sched.schedule_thematic_shorts(lv["id"], "telegram")
-    assert n == 1
+    assert n >= 1
     rows = db.fetchall(
         "SELECT status FROM entity_platform_status WHERE entity_type='short'")
     assert rows and all(r["status"] == "scheduled" for r in rows)
@@ -226,17 +226,17 @@ def test_thematic_short_exact_time_and_busy_slot_skipped(env):
         (lv["id"], long_dt.isoformat()),
     )
     n = sched.schedule_thematic_shorts(lv["id"], "telegram")
-    assert n == 1  # ровно один слот 20:30
+    assert n == 2
     row = db.fetchone(
         "SELECT postiz_scheduled_for FROM entity_platform_status "
-        "WHERE entity_type='short' AND platform='telegram'")
+        "WHERE entity_type='short' AND platform='telegram' "
+        "ORDER BY postiz_scheduled_for LIMIT 1")
     tz = get_tz(cfg.timezone)
     want = local_to_utc(long_dt.astimezone(tz).date(), parse_time("20:30"), cfg.timezone)
     assert row["postiz_scheduled_for"][:16] == want.isoformat()[:16]
-    # повторный запуск не добавляет второй шорт в тот же слот (без сдвига на 20:55/21:20)
     assert sched.schedule_thematic_shorts(lv["id"], "telegram") == 0
     assert len(db.fetchall(
-        "SELECT 1 FROM entity_platform_status WHERE entity_type='short'")) == 1
+        "SELECT 1 FROM entity_platform_status WHERE entity_type='short'")) == 2
 
 
 def test_link_post_without_media_allowed_any_time(env):

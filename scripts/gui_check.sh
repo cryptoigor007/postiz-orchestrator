@@ -12,7 +12,20 @@ if [ -z "${GUI_URL:-}" ]; then
   KEY="${WEBAPP_ACCESS_KEY:-$(ssh -o BatchMode=yes -o ConnectTimeout=5 root@192.168.100.40 \
         'grep -m1 ^WEBAPP_ACCESS_KEY= /opt/orchestrator/.env | cut -d= -f2-' 2>/dev/null || true)}"
   HOST="${GUI_HOST:-192.168.100.40:8080}"
-  GUI_URL="http://$HOST/webapp/k/$KEY/b/dev/?view=queue"
+  BUILD="$(grep -m1 'WEBAPP_BUILD = ' src/orchestrator/webapp_api.py | grep -oE '[0-9]+' || true)"
+  if [ -n "$BUILD" ]; then
+    GUI_URL="http://$HOST/webapp/b/$BUILD/?view=queue"
+  else
+    GUI_URL="http://$HOST/webapp/?view=queue"
+  fi
 fi
-echo ">> проверяю: $GUI_URL"
+export WEBAPP_ACCESS_KEY="${KEY:-${WEBAPP_ACCESS_KEY:-}}"
+# ключ нужен и САМОЙ странице (иначе показывается экран авторизации): ?key=...
+if [ -n "${WEBAPP_ACCESS_KEY:-}" ] && [ "${GUI_URL#*key=}" = "$GUI_URL" ]; then
+  case "$GUI_URL" in
+    *\?*) GUI_URL="$GUI_URL&key=$WEBAPP_ACCESS_KEY" ;;
+    *)    GUI_URL="$GUI_URL?key=$WEBAPP_ACCESS_KEY" ;;
+  esac
+fi
+echo ">> проверяю: $GUI_URL (key в URL + заголовок; путь /webapp/k/ отключён по умолчанию)"
 node "$GUI_DIR/check.mjs" "$GUI_URL"

@@ -319,6 +319,14 @@
 
   const $ = (id) => document.getElementById(id);
   const content = () => $("content");
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .split("&").join("&amp;")
+      .split("<").join("&lt;")
+      .split(">").join("&gt;")
+      .split('"').join("&quot;")
+      .split("'").join("&#39;");
+  }
   const t = (k) => (I18N[state.lang] && I18N[state.lang][k]) || I18N.ru[k] || k;
 
   function readKey() {
@@ -458,7 +466,7 @@
           <div class="cp-sec">${t("cover_images")}</div>
           <div class="cp-grid">${imgs || `<span class="meta">${t("cover_no_images")}</span>`}</div>`;
       } catch (e) {
-        body.innerHTML = `<div class="empty">${t("error_prefix")}: ${e.message}</div>`;
+        body.innerHTML = `<div class="empty">${t("error_prefix")}: ${esc(e.message)}</div>`;
       }
     }
     function renderDevice() {
@@ -502,7 +510,7 @@
           <div class="cp-grid">${imgs || `<span class="meta">${t("cover_no_images")}</span>`}</div>
           <div class="form-row"><button class="btn secondary" data-cp="frames">${t("cover_frames_regen")}</button></div>`;
       } catch (e) {
-        body.innerHTML = `<div class="empty">${t("error_prefix")}: ${e.message}</div>`;
+        body.innerHTML = `<div class="empty">${t("error_prefix")}: ${esc(e.message)}</div>`;
       }
     }
     function renderBody() {
@@ -539,7 +547,7 @@
             apply(r.path);
           } catch (err) {
             unbusy();
-            toast(`${t("error_prefix")}: ${err.message}`);
+            toast(`${t("error_prefix")}: ${esc(err.message)}`);
           }
         };
         reader.readAsDataURL(f);
@@ -558,7 +566,7 @@
           apply(r.path);
         } catch (err) {
           unbusy();
-          toast(`${t("error_prefix")}: ${err.message}`);
+          toast(`${t("error_prefix")}: ${esc(err.message)}`);
         }
       }
     });
@@ -690,7 +698,7 @@
       }
       render();
     } catch (e) {
-      content().innerHTML = `<div class="empty">${t("error_prefix")}: ${e.message}</div>`;
+      content().innerHTML = `<div class="empty">${t("error_prefix")}: ${esc(e.message)}</div>`;
     }
   }
 
@@ -833,7 +841,7 @@
       const d = await api(`/browse/search?q=${encodeURIComponent(q)}${root ? `&root=${encodeURIComponent(root)}` : ""}`);
       state.folderSearch = { q, items: d.items || [] };
     } catch (e) {
-      toast(`${t("error_prefix")}: ${e.message}`);
+      toast(`${t("error_prefix")}: ${esc(e.message)}`);
     }
     unbusy();
     renderFolders(state.data || {});
@@ -1596,7 +1604,7 @@
           const r = await api("/queue/cleanup_orphans", { method: "POST", body: "{}" });
           unbusy();
           toast(`${t("cleaned")}: ${r.deleted || 0}`);
-        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${e.message}`); }
+        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${esc(e.message)}`); }
         return load();
       }
       if (act === "queue-restore-all") {
@@ -1605,7 +1613,7 @@
           const r = await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
           unbusy();
           toast(`${t("restored")}: ${r.restored || 0}`);
-        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${e.message}`); }
+        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${esc(e.message)}`); }
         return load();
       }
       if (act === "queue-remove-everywhere") {
@@ -1625,7 +1633,7 @@
           else toast(`${t("queue_removed")}: ${r.removed || 0}`);
         } catch (e) {
           unbusy();
-          toast(`${t("error_prefix")}: ${e.message}`);
+          toast(`${t("error_prefix")}: ${esc(e.message)}`);
         }
         state.queueEdit = null;
         return load();
@@ -1779,7 +1787,7 @@
               await api("/queue/remove", { method: "POST", body: JSON.stringify({
                 entity_type: el.dataset.et, entity_id: Number(el.dataset.eid) }) });
               toast(t("shorts_deleted"));
-            } catch (e) { toast(`${t("error_prefix")}: ${e.message}`); }
+            } catch (e) { toast(`${t("error_prefix")}: ${esc(e.message)}`); }
           }
         }
         if (r && r.dependent && r.dependent.includes("telegram")) {
@@ -1815,7 +1823,7 @@
           await api("/schedule", { method: "POST", body: JSON.stringify({ async: true }) });
         } catch (e) {
           stopJob();
-          toast(`${t("error_prefix")}: ${e.message}`);
+          toast(`${t("error_prefix")}: ${esc(e.message)}`);
         }
         state.scan = null;
         return;
@@ -1843,7 +1851,7 @@
           await api("/schedule", { method: "POST", body: JSON.stringify(body) });
         } catch (e) {
           stopJob();
-          toast(`${t("error_prefix")}: ${e.message}`);
+          toast(`${t("error_prefix")}: ${esc(e.message)}`);
         }
         state.scan = null;
         return;

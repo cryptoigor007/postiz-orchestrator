@@ -50,40 +50,46 @@ def _run(cmd: list[str]) -> str:
 
 
 def build_token_sql(platform: str, integration_id: str | None = None) -> str:
+    """Build SELECT for Postiz Integration row (S8: no free-form SQL injection)."""
     import re as _re
+    if not _re.fullmatch(r"[A-Za-z0-9_-]+", platform or ""):
+        raise ValueError(f"invalid platform for SQL: {platform!r}")
     sql = (
-        "SELECT token, \"refreshToken\", \"tokenExpiration\" FROM \"Integration\" "
-        f"WHERE \"providerIdentifier\"='{platform}' AND \"deletedAt\" IS NULL "
+        'SELECT token, "refreshToken", "tokenExpiration" FROM "Integration" '
+        "WHERE \"providerIdentifier\"='" + platform + "' AND \"deletedAt\" IS NULL "
     )
-    if integration_id and _re.fullmatch(r"[A-Za-z0-9_-]+", integration_id):
-        sql += f"AND \"id\"='{integration_id}' "
-    return sql + "ORDER BY \"updatedAt\" DESC LIMIT 1"
+    if integration_id:
+        if not _re.fullmatch(r"[A-Za-z0-9_-]+", integration_id):
+            return sql + 'ORDER BY "updatedAt" DESC LIMIT 1'
+        sql += "AND \"id\"='" + integration_id + "' "
+    return sql + 'ORDER BY "updatedAt" DESC LIMIT 1'
 
 
 def token_for(platform: str, integration_id: str | None = None) -> dict | None:
     if platform not in ALLOWED:
         return None
-    sql = build_token_sql(platform, integration_id)
+    try:
+        sql = build_token_sql(platform, integration_id)
+    except ValueError:
+        return None
     out = _run(["docker", "exec", DB, "psql", "-U", "postiz", "-d", "postiz",
                 "-t", "-A", "-F", "\t", "-c", sql]).strip()
     if not out:
         return None
     parts = out.splitlines()[0].split("\t")
     env = _run(["docker", "exec", APP, "env"])
-    cid = csec = ""
+    cid = ""
     prefix = platform.upper()
     for line in env.splitlines():
         if line.startswith(f"{prefix}_CLIENT_ID="):
             cid = line.split("=", 1)[1]
-        elif line.startswith(f"{prefix}_CLIENT_SECRET="):
-            csec = line.split("=", 1)[1]
+    # Never expose client_secret over the broker API (S5).
     return {
         "platform": platform,
         "token": parts[0] if len(parts) > 0 else "",
         "refresh_token": parts[1] if len(parts) > 1 else "",
         "expires_at": parts[2] if len(parts) > 2 else "",
         "client_id": cid,
-        "client_secret": csec,
     }
 
 
@@ -97,10 +103,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _auth(self) -> bool:
+        import hmac
         if not ip_allowed(self.client_address[0]):
             self._json(403, {"error": "forbidden"})
             return False
-        if not SECRET or self.headers.get("X-Broker-Secret") != SECRET:
+        provided = self.headers.get("X-Broker-Secret") or ""
+        if not SECRET or not hmac.compare_digest(provided, SECRET):
             self._json(401, {"error": "unauthorized"})
             return False
         return True
@@ -108,11 +116,29 @@ class Handler(BaseHTTPRequestHandler):
     def _symlink(self, src: str, name: str = "") -> dict:
         import datetime as _dt
         import uuid as _uuid
-        if not src.startswith(SRC_PREFIX):
-            return {"error": f"src must start with {SRC_PREFIX}"}
-        host_src = (src.replace(SRC_PREFIX, HOST_PREFIX, 1) if HOST_PREFIX else src)
+        from pathlib import Path as _Path
+        try:
+            src_resolved = _Path(src).resolve()
+            prefix_resolved = _Path(SRC_PREFIX).resolve()
+        except Exception as e:
+            return {"error": f"bad path: {e}"}
+        try:
+            if not (src_resolved == prefix_resolved or src_resolved.is_relative_to(prefix_resolved)):
+                return {"error": f"src must be under {SRC_PREFIX}"}
+        except (ValueError, TypeError):
+            return {"error": f"src must be under {SRC_PREFIX}"}
+        host_src = str(src_resolved)
+        if HOST_PREFIX:
+            rel = str(src_resolved)[len(str(prefix_resolved)):].lstrip("/")
+            try:
+                host_src = str((_Path(HOST_PREFIX).resolve() / rel).resolve())
+            except Exception:
+                host_src = str(src_resolved)
         if not os.path.isfile(host_src):
-            return {"error": f"src not found ({host_src})"}
+            if not os.path.isfile(str(src_resolved)):
+                return {"error": f"src not found ({host_src})"}
+            host_src = str(src_resolved)
+        verified_target = host_src
         base = os.path.basename(name or src)
         safe = "".join(c for c in base if c.isalnum() or c in "._- ").strip() or "media.mp4"
         now = _dt.date.today()
@@ -125,7 +151,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if os.path.islink(link_path) or os.path.exists(link_path):
                 os.unlink(link_path)
-            os.symlink(src, link_path)
+            os.symlink(verified_target, link_path)
         except Exception as e:
             return {"error": f"symlink failed: {e}"}
         rel = f"/uploads/{rel_dir}/{fname}"

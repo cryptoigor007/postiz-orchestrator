@@ -73,6 +73,7 @@
       trash_restore_all: "Восстановить всё", trash_purge: "Удалить навсегда",
       trash_hint: "Удалённое можно вернуть в очередь или убрать окончательно. Файлы на диске не трогаем.",
       trash_empty: "Корзина пуста", trash_cascade_yt: "снято за YouTube",
+      trash_detached: "снято с платформы",
       trash_shown: "показаны первые %s из %s",
       confirm_purge: "Удалить выбранное из корзины навсегда? Файлы на диске останутся.",
       del_title: "Удалить «%s»?", del_scope: "Что удаляем",
@@ -286,6 +287,7 @@
       trash_restore_all: "Restore all", trash_purge: "Delete permanently",
       trash_hint: "Deleted items can be restored to the queue or removed permanently. Files on disk are kept.",
       trash_empty: "Trash is empty", trash_cascade_yt: "removed with YouTube",
+      trash_detached: "detached from platform",
       trash_shown: "showing %s of %s",
       confirm_purge: "Permanently delete the selected items? Files on disk are kept.",
       del_title: "Delete “%s”?", del_scope: "What to delete",
@@ -966,11 +968,18 @@
       else if (v === "folders") {
         data = await api("/roots");
         state.browseError = "";
+        const nRoots = (data && Array.isArray(data.browse_roots)) ? data.browse_roots.length : -1;
         if (!state.browse) {
-          try { state.browse = await api("/browse"); }
-          catch (e) {
+          if (nRoots === 0) {
+            // N4: корней нет — не дёргаем /browse и не получаем 403 в консоли
             state.browse = { path: "", parent: null, dirs: [], root: "", roots: [] };
-            state.browseError = apiErrorText(e.message);
+            state.browseError = t("e_no_roots");
+          } else {
+            try { state.browse = await api("/browse"); }
+            catch (e) {
+              state.browse = { path: "", parent: null, dirs: [], root: "", roots: [] };
+              state.browseError = apiErrorText(e.message);
+            }
           }
         }
       }
@@ -2140,7 +2149,6 @@
       const ch = chosen();
       const pubs = ch.filter((x) => x.status === "published");
       if (!ch.length || (pubs.length && !detach)) return;
-      close();
       busy(t("working"));
       try {
         // N1: сначала снимаем опубликованное с платформы, затем удаляем набор
@@ -2151,10 +2159,12 @@
         const r = await api("/queue/remove", { method: "POST", body: JSON.stringify({
           entity_type: etype, entity_id: eid, platform: trigger,
           with_shorts: scopeAll, also_youtube: alsoYt }) });
+        close();  // N1-c: закрываем только при успехе
         if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
         else toast(`${t("queue_removed")}: ${r.removed || 0}`);
       } catch (e) {
         toastErr(e);
+        return;   // окно остаётся открытым — можно снять галочку/повторить
       } finally {
         unbusy();
       }
@@ -2233,8 +2243,10 @@
             data-key="${esc(k)}" aria-pressed="${on}" aria-label="${t("queue_select")}">${on ? icon("check", 13) : ""}</button>`;
         const casc = it.cascade_from === "youtube"
           ? ` · <span class="badge">${t("trash_cascade_yt")}</span>` : "";
+        const detached = it.deleted_reason === "detached"
+          ? ` · <span class="badge info">${t("trash_detached")}</span>` : "";
         const deleted = fmt(it.deleted_at);
-        const metaLine = esc(it.platform) + (deleted ? ` · ${esc(deleted)}` : "") + casc;
+        const metaLine = esc(it.platform) + (deleted ? ` · ${esc(deleted)}` : "") + casc + detached;
         return `<div class="item${on ? " picked" : ""}${select ? " with-check" : ""}">
           ${check}
           <span class="q-plat big">${pIcon(it.platform)}</span>
@@ -2798,7 +2810,7 @@
       }
       await load();
     } catch (e) {
-      toast(e.message);
+      toastErr(e);
     }
   }
 

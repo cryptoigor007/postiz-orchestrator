@@ -202,7 +202,7 @@ def _youtube_id_from_url(url: str) -> str:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "831"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "832"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -796,9 +796,16 @@ class WebAppAPI:
                 for et, ei, p, _st in plan["targets"]:
                     # F3: инициатор (YouTube-строка) не помечается каскадом — только Telegram
                     cf = cascade_from if p == "telegram" else ""
+                    # N1-b: повторное удаление не затирает метку «снято с платформы»
+                    # (SQLite в SET видит старые значения строки)
                     self.db.execute(
                         "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL, "
-                        "deleted_at=?, deleted_reason=?, cascade_from=? "
+                        "deleted_at=COALESCE(deleted_at, ?), "
+                        "deleted_reason=CASE WHEN deleted_reason='detached' "
+                        "  THEN 'detached' ELSE ? END, "
+                        "cascade_from=CASE WHEN deleted_reason='detached' "
+                        "  THEN cascade_from ELSE ? END, "
+                        "last_error=NULL "
                         "WHERE entity_type=? AND entity_id=? AND platform=?",
                         (now, reason, cf, et, ei, p))
                     self.db.log(et, ei, p, "queue_delete", reason)

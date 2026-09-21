@@ -275,3 +275,20 @@ def test_browse_error_does_not_leak_env_name(env, monkeypatch):
     code, payload, _ = api.handle("GET", "/webapp/api/browse", HEADERS, b"")
     assert code == 403
     assert payload["error"] == "no browse roots configured"
+
+
+def test_remove_keeps_detached_reason(env):
+    """N1-b: повторное удаление не затирает метку и дату «снято с платформы»."""
+    api, db, clock, cfg = env
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "deleted_at, deleted_reason, cascade_from) VALUES "
+        "('short', 11, 'telegram', 'skipped', '2026-03-01T10:00:00+00:00', 'detached', NULL)")
+    code, payload, _ = _remove(api, {"entity_type": "short", "entity_id": 11,
+                                     "platform": "telegram"})
+    assert code == 200
+    row = db.fetchone(
+        "SELECT deleted_reason, deleted_at, cascade_from FROM entity_platform_status "
+        "WHERE entity_type='short' AND entity_id=11 AND platform='telegram'")
+    assert row["deleted_reason"] == "detached"
+    assert row["deleted_at"] == "2026-03-01T10:00:00+00:00"

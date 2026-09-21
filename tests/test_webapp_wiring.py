@@ -118,3 +118,13 @@ def test_n1_n2_n3_wiring():
     assert 'error_prefix")}: ${e.message}' not in js                      # N2: сырых тостов нет
     assert "state.browseError" in js          # N3
     assert "no browse roots configured (WEBAPP_BROWSE_ROOT)" not in js
+
+
+def test_n1_abc_n2_n4_wiring():
+    """N1-a/b/c, остаток N2 и путь N4: метка detached, закрытие окна, локализация, /browse."""
+    js = _js()
+    assert 'it.deleted_reason === "detached"' in js   # N1-a: метка в корзине
+    assert "trash_detached" in js
+    assert "toast(e.message)" not in js               # N2: сырых тостов больше нет
+    assert "N1-c: закрываем только при успехе" in js  # N1-c
+    assert "nRoots === 0" in js                       # N4: не дёргаем /browse без корней

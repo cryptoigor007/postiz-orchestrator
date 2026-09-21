@@ -1861,7 +1861,7 @@
     document.documentElement.lang = l;
     updateNavLabels();
     syncTabs();
-    $("btn-refresh").textContent = t("refresh");
+    setRefreshLabel();
     $("gate-msg").textContent = t("gate_msg");
     $("lang").querySelectorAll("button").forEach((b) =>
       b.classList.toggle("active", b.dataset.lang === l));
@@ -2460,6 +2460,22 @@
     }
   }
 
+  function setRefreshLabel() {
+    const el = $("btn-refresh");
+    if (!el) return;
+    el.setAttribute("aria-label", t("refresh"));
+    el.setAttribute("title", t("refresh"));
+  }
+
+  function spinRefresh() {
+    const el = $("btn-refresh");
+    if (!el) return;
+    el.classList.remove("spin-once");
+    void el.offsetWidth;
+    el.classList.add("spin-once");
+    setTimeout(() => el.classList.remove("spin-once"), 700);
+  }
+
   function bind() {
     $("nav").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-view]");
@@ -2476,7 +2492,7 @@
         if (btn.dataset.view) gotoView(btn.dataset.view);
       });
     }
-    $("btn-refresh").addEventListener("click", () => load());
+    $("btn-refresh").addEventListener("click", () => { spinRefresh(); load(); });
     $("lang").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-lang]");
       if (b) setLang(b.dataset.lang);
@@ -2598,7 +2614,7 @@
     // B6: сначала локализуем навигацию/заголовки, потом показываем приложение (без FOUC)
     updateNavLabels();
     syncTabs();
-    $("btn-refresh").textContent = t("refresh");
+    setRefreshLabel();
     $("title").textContent = titles()[state.view] || state.view;
     $("gate").hidden = true;
     $("app").hidden = false;

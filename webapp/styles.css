@@ -100,7 +100,10 @@ html, body {
 .lang-btn.active { background: var(--accent); color: #fff; }
 .lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .main { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; display: flex; flex-direction: column; background: var(--bg); }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(12px + var(--sa-top) + var(--chrome-top)) calc(22px + var(--sa-right)) 10px calc(22px + var(--sa-left)); }
+.topbar { display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: calc(12px + var(--sa-top) + var(--chrome-top)) calc(22px + var(--sa-right)) 10px calc(22px + var(--sa-left)); }
+.topbar-center { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.topbar-center h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
 .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px calc(22px + var(--sa-left)) calc(32px + var(--sa-bottom)) calc(22px + var(--sa-right)); -webkit-overflow-scrolling: touch; }
@@ -208,12 +211,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   }
   .topbar { padding: calc(8px + var(--sa-top) + var(--chrome-top)) calc(14px + var(--sa-right)) 4px calc(14px + var(--sa-left)); }
   .topbar h2 { font-size: 22px; letter-spacing: -0.02em; }
-  /* Полоса кнопок Telegram (✕/⋮) — в правом верхнем углу: держим её пустой.
-     Заголовок остаётся слева в первой строке, действия переносим ниже — они не могут
-     совпасть с нативными кнопками и при этом выровнены по краю карточек. */
-  body.tg-fs .topbar { flex-wrap: wrap; }
-  body.tg-fs .topbar h2 { flex: 1 1 100%; }
-  body.tg-fs .topbar-actions { flex: 1 1 100%; justify-content: flex-end; }
+  /* Полоса кнопок Telegram (✕/⋮) — в правом верхнем углу: там ничего не размещаем.
+     Заголовок и иконка обновления — одной центрированной группой по центру экрана. */
+  .topbar-center { gap: 0; }
+  .topbar h2 { text-align: center; }
   .btn { height: var(--btn-h); min-height: var(--btn-h); }
   .row { padding: 10px 14px; }
   .form-row { gap: var(--btn-gap); }
@@ -327,6 +328,20 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .pico-20, .pico-20 svg { width: 20px; height: 20px; }
 .pico-22, .pico-22 svg { width: 22px; height: 22px; }
 .pico-26, .pico-26 svg { width: 26px; height: 26px; }
+
+/* Ghost-иконка (обновление рядом с заголовком): без заливки, крупный тап, мягкий отклик */
+.icon-ghost {
+  all: unset; box-sizing: border-box; width: 44px; height: 44px; flex: 0 0 auto;
+  display: inline-grid; place-items: center; border-radius: 50%;
+  color: var(--accent); cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out), opacity var(--dur-ui) var(--ease-out);
+}
+.icon-ghost .ico, .icon-ghost .ico svg { width: 22px; height: 22px; display: block; }
+.icon-ghost:active { transform: scale(0.9); background: rgba(120,120,128,0.14); }
+.icon-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.icon-ghost.spin-once .ico { animation: ghostSpin 620ms var(--ease-out); }
+@keyframes ghostSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon-ghost.spin-once .ico { animation: none; } }
 
 /* CTA на «Обзоре»: та же сетка, что и карточки → те же левый/правый края */
 .cta-grid { margin-bottom: 12px; }

@@ -165,13 +165,10 @@ class WebAppAPI:
         import os as _os
         _ro = _os.getenv("ORCH_READ_ONLY", "").strip() in ("1", "true", "yes") or bool(getattr(self.cfg, "read_only", False))
         if _ro and method in ("POST", "PUT", "DELETE", "PATCH"):
-            _mut = {
-                "schedule", "scan", "delete", "pause", "resume", "settings", "groups",
-                "force_link", "tail", "backlog", "cover", "edit", "bulk", "cleanup",
-            }
-            head = route.split("/")[0]
-            if head in _mut or route in _mut:
-                return 403, {"error": "read_only"}, "application/json"
+            # read-only: ЛЮБАЯ мутация запрещена (раньше список был неполным:
+            # distribute/sync/reconcile/backup/scheduling_mode/pause_platform/queue/*/
+            # series_end/manual/*/roots проходили и меняли состояние)
+            return 403, {"error": "read_only"}, "application/json"
 
         data = {}
         if body:

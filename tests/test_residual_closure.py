@@ -71,3 +71,38 @@ def test_broker_sql_rejects_injection():
         tb.build_token_sql("you';tube")
     sql = tb.build_token_sql("youtube", "abc-1")
     assert "youtube" in sql and "abc-1" in sql
+
+
+def test_read_only_blocks_all_mutations(tmp_path, monkeypatch):
+    """read-only должен блокировать ВСЕ мутирующие маршруты (не только schedule)."""
+    import json as _json
+
+
+    monkeypatch.setenv("ORCH_READ_ONLY", "1")
+    monkeypatch.setenv("WEBAPP_DEV", "1")
+    from orchestrator.config import load_config
+    from orchestrator.db import Database
+    from orchestrator.webapp_api import WebAppAPI
+
+    db = Database(tmp_path / "ro.sqlite")
+    cfg = load_config(__import__("pathlib").Path(__file__).resolve().parents[1] / "config.yaml")
+    api = WebAppAPI({"cfg": cfg, "db": db})
+    cases = [
+        ("/webapp/api/schedule", {"async": True}),
+        ("/webapp/api/distribute", {}),
+        ("/webapp/api/sync", {}),
+        ("/webapp/api/reconcile", {}),
+        ("/webapp/api/backup", {}),
+        ("/webapp/api/scheduling_mode", {"mode": "auto"}),
+        ("/webapp/api/pause_platform", {"platform": "youtube"}),
+        ("/webapp/api/resume_platform", {"platform": "youtube"}),
+        ("/webapp/api/queue/restore", {"all": True}),
+        ("/webapp/api/queue/remove", {"entity_type": "short", "entity_id": 1}),
+        ("/webapp/api/series_end", {"platform": "youtube", "enable": False}),
+        ("/webapp/api/manual/scan", {}),
+        ("/webapp/api/roots", {"items": []}),
+    ]
+    for path, body in cases:
+        code, payload, _ = api.handle("POST", path, {"X-Telegram-Init-Data": "dev"},
+                                      _json.dumps(body).encode())
+        assert code == 403 and payload.get("error") == "read_only", (path, code, payload)

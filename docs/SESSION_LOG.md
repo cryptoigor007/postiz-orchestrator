@@ -625,3 +625,24 @@
   (4/39/39), строк 82 до и после, ошибок циклов 0.
 - Тесты: 239 → **255** (+16: test_publish 16 кейсов, SQLi, read-only для нового маршрута); check.sh и gui_check.sh
   (против боевого сервера) — зелёные; ruff — 0.
+
+## 2026-09-21 — 8.2.1: residual closure (P0/P1/P2), честный отчёт
+- P0: SSRF IP-pin (anti-rebinding) + stream cap 25MiB + hostname-литералы; test_integration_ids
+  fail-closed; initData freshness; XSS esc()×37; CL-cap 50MiB; тест-посты вне cleanup/recon;
+  schema **v13** (soft-end vs backlog разделены, миграция прошла на живой БД); backlog-слоты из
+  effective; ask_series_end ставит диалог.
+- **N1 (реальный дефект)**: backlog-методы были вложены в setup_commands и падали с NameError на self →
+  вопрос об остатке серии молча не отправлялся. Вынесены на TelegramNotifier + тест.
+- P1: retry DELETE/PUT + Retry-After; тест не жрёт daily_limit (пауза уважается); TTL-авто-очистка
+  тест-постов (24ч) в runner; pause UPSERT; cloudflared_url_sync hardening; CI migrations smoke;
+  backup.method=sqlite_backup; rate-limit identity (ключ/uid/XFF); YT delete honesty; send_message
+  проверяет ответ + 429 backoff.
+- P2: изоляция тест-контура тестом; watcher LRU; CSP TODO; ORCH_GUARD_TTL_SEC; MCP test-tools;
+  метрики test_scheduled/cancelled/rejected (+общий Metrics в comps); CHANGELOG (один заголовок);
+  README/HANDOFF → 8.2.1/b815/304.
+- Тесты 255 → **304**, ruff 0, check.sh PASS, gui_check PASS (боевой). Живой E2E: тест-пост
+  youtube → PUBLISHED watch?v=6HW23NkJMrg, cancel ok; cleanup_orphans deleted=0; боевые 39/39/4
+  без изменений; 0 ERROR за 10 мин.
+- Residual (честно): 2 тестовых ролика остались на YouTube (Postiz delete не удаляет с платформы);
+  esc() — ручной пасс без линтера; CSP unsafe-inline TODO; 429-путь и метрики проверены юнит-тестами,
+  не live; v13 откатывается только вперёд.

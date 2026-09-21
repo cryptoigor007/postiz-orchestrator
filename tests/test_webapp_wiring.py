@@ -98,7 +98,7 @@ def test_audit_fixes_8_4_11_wiring():
     # F7: плюрализация
     assert "function postsLabel(" in js and "postsLabel(cnt)" in js
     # F8: пустая дата не оставляет висячий разделитель
-    assert "(deleted ? ` · ${esc(deleted)}` : \"\")" in js
+    assert '${deleted ? `<div class="item__meta">${esc(deleted)}</div>` : ""}' in js
     # F9: Escape и фокус в окне
     assert 'document.addEventListener("keydown", onKey)' in js
     # F11: guards
@@ -128,3 +128,17 @@ def test_n1_abc_n2_n4_wiring():
     assert "toast(e.message)" not in js               # N2: сырых тостов больше нет
     assert "N1-c: закрываем только при успехе" in js  # N1-c
     assert "nRoots === 0" in js                       # N4: не дёргаем /browse без корней
+
+
+def test_trash_redesign_and_version_wiring():
+    """Корзина v2 (заголовок/группы/пустое состояние/липкая панель) + видимая версия."""
+    js = _js()
+    assert "trash-group__head" in js and "trash-group__kind" in js
+    assert "empty-state__title" in js and "empty-state__hint" in js
+    assert "trash-bulk" in js
+    assert "function versionLine(" in js
+    assert "sheet-ver" in js and "app-ver" in js
+    assert "trash_empty_hint" in js
+    css = (APP_JS.parent / "styles.css").read_text(encoding="utf-8")
+    for cls in (".trash-group", ".trash-bulk", ".empty-state", ".sheet-ver", ".app-ver"):
+        assert cls in css, cls

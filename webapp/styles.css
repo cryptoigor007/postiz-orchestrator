@@ -695,3 +695,47 @@ body.tg-fs:not(.tg-native) .cover-overlay { padding-top: calc(56px + var(--sa-to
 
 /* Базовые правила: изображения не переполняют, фокус видим */
 img { max-width: 100%; height: auto; }
+
+/* ===== Корзина: заголовок, группы, пустое состояние, липкая панель (Emil/Apple) ===== */
+.trash-head .panel-head { margin-bottom: 2px; }
+.trash-actions {
+  display: flex; gap: var(--sp-2); justify-content: flex-end;
+  flex-wrap: wrap; padding-top: var(--sp-3);
+}
+.trash-group { margin-bottom: var(--sp-4); }
+.trash-group__head {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-2);
+}
+.trash-group__kind {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-3); white-space: nowrap;
+}
+.trash-group__title {
+  font-size: 13px; color: var(--text-2); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trash-group__body { padding: 0; overflow: hidden; }
+.trash-row:last-child { border-bottom: none; }
+.trash-bulk {
+  position: sticky; bottom: calc(var(--tabbar-h) + 10px + var(--sa-bottom)); z-index: 5;
+  background: var(--card); border: 1px solid var(--sep); border-radius: 14px;
+  box-shadow: var(--shadow); margin-top: var(--sp-2);
+}
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4); text-align: center;
+}
+.empty-state__ico {
+  display: inline-grid; place-items: center; width: 56px; height: 56px;
+  border-radius: 50%; background: rgba(120, 120, 128, 0.12); color: var(--text-3);
+}
+.empty-state__title { font-size: 15px; font-weight: 650; color: var(--text); }
+.empty-state__hint { font-size: 13px; line-height: 1.45; color: var(--text-3); max-width: 280px; }
+/* Версия приложения: подвал шторки «Ещё» и экрана «Справка» */
+.sheet-ver, .app-ver {
+  text-align: center; font-size: 11px; font-weight: 550; color: var(--text-3);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+}
+.sheet-ver { padding: 10px 16px calc(6px + var(--sa-bottom)); }
+.app-ver { padding: var(--sp-2) 0 var(--sp-1); }

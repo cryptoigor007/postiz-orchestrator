@@ -202,7 +202,7 @@ def _youtube_id_from_url(url: str) -> str:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "832"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "833"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -374,7 +374,7 @@ class WebAppAPI:
         try:
             if method == "GET" and route == "version":
                 from . import __version__
-                return 200, {"version": __version__}, "application/json"
+                return 200, {"version": __version__, "build": WEBAPP_BUILD}, "application/json"
             if method == "GET" and route == "metrics":
                 return 200, self._metrics(), "application/json"
             if method == "GET" and route == "status":

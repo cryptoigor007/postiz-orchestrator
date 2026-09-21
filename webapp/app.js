@@ -72,7 +72,9 @@
       title_trash: "Корзина", trash_selected: "выбрано", trash_restore: "Восстановить",
       trash_restore_all: "Восстановить всё", trash_purge: "Удалить навсегда",
       trash_hint: "Удалённое можно вернуть в очередь или убрать окончательно. Файлы на диске не трогаем.",
+      trash_title: "Корзина",
       trash_empty: "Корзина пуста", trash_cascade_yt: "снято за YouTube",
+      trash_empty_hint: "Удалённые посты попадут сюда — их можно вернуть в очередь или убрать навсегда.",
       trash_detached: "снято с платформы",
       trash_shown: "показаны первые %s из %s",
       confirm_purge: "Удалить выбранное из корзины навсегда? Файлы на диске останутся.",
@@ -286,7 +288,9 @@
       title_trash: "Trash", trash_selected: "selected", trash_restore: "Restore",
       trash_restore_all: "Restore all", trash_purge: "Delete permanently",
       trash_hint: "Deleted items can be restored to the queue or removed permanently. Files on disk are kept.",
+      trash_title: "Trash",
       trash_empty: "Trash is empty", trash_cascade_yt: "removed with YouTube",
+      trash_empty_hint: "Deleted posts land here — restore them to the queue or remove them permanently.",
       trash_detached: "detached from platform",
       trash_shown: "showing %s of %s",
       confirm_purge: "Permanently delete the selected items? Files on disk are kept.",
@@ -592,6 +596,11 @@
   }
   function toastErr(e) {
     toast(`${t("error_prefix")}: ${apiErrorText(e && e.message)}`);
+  }
+  function versionLine() {
+    const v = state.appVersion ? "v" + state.appVersion : "";
+    const b = state.appBuild ? " · b" + state.appBuild : "";
+    return (v + b) || "";
   }
 
   function readKey() {
@@ -1993,7 +2002,8 @@
       content().innerHTML = `<div class="view-enter">${failedHtml(d && d.failed)}</div>`;
     }
     else if (state.view === "help") {
-      content().innerHTML = `<div class="view-enter">${helpHtml()}</div>`;
+      content().innerHTML = `<div class="view-enter">${helpHtml()}
+        <div class="app-ver">Orchestrator ${esc(versionLine())}</div></div>`;
     }
     else if (state.view === "settings" || state.view === "schedule") renderSettings(d);
     else if (state.view === "tail") renderTail(d);
@@ -2204,6 +2214,7 @@
 
   function renderTrash(d) {
     const items = (d && d.items) || [];
+    const total = (d && d.total) || items.length;
     const sel = state.trashSelected || {};
     const select = !!state.trashSelect;
     const keys = Object.keys(sel).filter((k) => sel[k]);
@@ -2217,54 +2228,74 @@
           .format(new Date(ts));
       } catch (_) { return ""; }
     };
+    const platLabel = (p) => {
+      const x = String(p || "");
+      return x ? x.charAt(0).toUpperCase() + x.slice(1) : "";
+    };
     const groups = [];
     for (const it of items) {
       const gk = `${it.entity_type}|${it.entity_id}`;
       let g = groups.find((x) => x.key === gk);
-      if (!g) { g = { key: gk, type: it.entity_type, id: it.entity_id, title: it.title, items: [] }; groups.push(g); }
+      if (!g) {
+        g = { key: gk, type: it.entity_type, id: it.entity_id, title: it.title, items: [] };
+        groups.push(g);
+      }
       g.items.push(it);
     }
-    const toolbar = `<div class="q-toolbar">
-        <button class="btn secondary" data-act="trash-restore-all" ${items.length ? "" : "disabled"}>${t("trash_restore_all")}</button>
-        <button class="btn ${select ? "primary" : "secondary"} q-sel-btn" data-act="trash-select" ${items.length ? "" : "disabled"}>${select ? t("queue_done") : t("queue_select")}</button>
+    const more = total > items.length
+      ? `<div class="hint">${t("trash_shown").replace("%s", items.length).replace("%s", total)}</div>`
+      : "";
+    const head = `<div class="panel trash-head">
+        <div class="panel-head"><h3>${t("trash_title")}</h3><span class="badge">${total}</span></div>
+        <div class="hint">${t("trash_hint")}</div>
+        ${more}
+        ${items.length ? `<div class="trash-actions">
+          <button class="btn secondary" data-act="trash-select">${select ? t("queue_done") : t("queue_select")}</button>
+          ${select ? "" : `<button class="btn secondary" data-act="trash-restore-all">${t("trash_restore_all")}</button>`}
+        </div>` : ""}
       </div>`;
-    const bulk = !select ? "" : `<div class="bulk-bar">
-        <span class="meta"><b>${keys.length}</b> ${t("trash_selected")}</span>
-        <button class="btn secondary" data-act="trash-check-all">${t("queue_all")}</button>
-        <button class="btn primary" data-act="trash-restore" ${keys.length ? "" : "disabled"}>${t("trash_restore")}</button>
-        <button class="btn danger" data-act="trash-purge" ${keys.length ? "" : "disabled"}>${t("trash_purge")}</button>
-      </div>`;
-    const kindOf = (t2) => entityLabel(t2);
     const body = groups.map((g) => {
       const rows = g.items.map((it) => {
         const k = it.key;
         const on = !!sel[k];
         const check = !select ? "" : `<button class="q-check${on ? " on" : ""}" data-act="trash-check"
             data-key="${esc(k)}" aria-pressed="${on}" aria-label="${t("queue_select")}">${on ? icon("check", 13) : ""}</button>`;
-        const casc = it.cascade_from === "youtube"
-          ? ` · <span class="badge">${t("trash_cascade_yt")}</span>` : "";
-        const detached = it.deleted_reason === "detached"
-          ? ` · <span class="badge info">${t("trash_detached")}</span>` : "";
+        const badges = [
+          it.deleted_reason === "detached" ? `<span class="badge info">${t("trash_detached")}</span>` : "",
+          it.cascade_from === "youtube" ? `<span class="badge">${t("trash_cascade_yt")}</span>` : "",
+        ].filter(Boolean).join(" ");
         const deleted = fmt(it.deleted_at);
-        const metaLine = esc(it.platform) + (deleted ? ` · ${esc(deleted)}` : "") + casc + detached;
-        return `<div class="item${on ? " picked" : ""}${select ? " with-check" : ""}">
+        return `<div class="item trash-row${on ? " picked" : ""}${select ? " with-check" : ""}">
           ${check}
           <span class="q-plat big">${pIcon(it.platform)}</span>
           <div class="item__main">
-            <div class="item__title">${esc(g.title || (kindOf(g.type) + " #" + g.id))}</div>
-            <div class="item__meta">${metaLine}</div>
+            <div class="item__title">${esc(platLabel(it.platform))}</div>
+            ${deleted ? `<div class="item__meta">${esc(deleted)}</div>` : ""}
+            ${badges ? `<div class="item__meta">${badges}</div>` : ""}
           </div>
         </div>`;
       }).join("");
-      return `<div class="panel"><div class="panel-head"><h3>${kindOf(g.type)} #${g.id}</h3>
-        <span class="badge">${g.items.length}</span></div>${rows}</div>`;
+      const title = String(g.title || "").trim();
+      return `<section class="trash-group">
+        <header class="trash-group__head">
+          <span class="trash-group__kind">${esc(entityLabel(g.type))} #${g.id}</span>
+          ${title ? `<span class="trash-group__title">${esc(title)}</span>` : ""}
+        </header>
+        <div class="panel trash-group__body">${rows}</div>
+      </section>`;
     }).join("");
-    const more = (d && d.total > items.length)
-      ? `<div class="hint">${t("trash_shown").replace("%s", items.length).replace("%s", d.total)}</div>` : "";
-    content().innerHTML = `<div class="view-enter">${toolbar}${bulk}
-      <div class="hint">${t("trash_hint")}</div>
-      ${more}
-      ${body || `<div class="empty">${t("trash_empty")}</div>`}</div>`;
+    const empty = `<div class="empty-state">
+        <span class="empty-state__ico">${icon("trash", 28)}</span>
+        <div class="empty-state__title">${t("trash_empty")}</div>
+        <div class="empty-state__hint">${t("trash_empty_hint")}</div>
+      </div>`;
+    const bulk = !select ? "" : `<div class="bulk-bar trash-bulk">
+        <span class="meta"><b>${keys.length}</b> ${t("trash_selected")}</span>
+        <button class="btn secondary sm" data-act="trash-check-all">${t("queue_all")}</button>
+        <button class="btn primary sm" data-act="trash-restore" ${keys.length ? "" : "disabled"}>${t("trash_restore")}</button>
+        <button class="btn danger sm" data-act="trash-purge" ${keys.length ? "" : "disabled"}>${t("trash_purge")}</button>
+      </div>`;
+    content().innerHTML = `<div class="view-enter">${head}${body || empty}${bulk}</div>`;
   }
 
   function openMoreSheet() {
@@ -2288,6 +2319,7 @@
         <button class="lang-btn${state.lang === "ru" ? " active" : ""}" data-lang="ru">RU</button>
         <button class="lang-btn${state.lang === "en" ? " active" : ""}" data-lang="en">EN</button>
       </div>
+      <div class="sheet-ver">Orchestrator ${esc(versionLine())}</div>
     </div>`;
     const _useBack = showNativeBack(() => closeMoreSheet());
     ov.dataset.nativeBack = _useBack ? "1" : "";
@@ -2980,7 +3012,11 @@
       $("user-info").textContent =
         [state.user.first_name, state.user.username ? "@" + state.user.username : ""].filter(Boolean).join(" ");
     }
-    api("/version").then((v) => { $("ver").textContent = "v" + (v.version || "?"); }).catch(() => {});
+    api("/version").then((v) => {
+      state.appVersion = v.version || "";
+      state.appBuild = v.build || "";
+      $("ver").textContent = versionLine() || "v?";
+    }).catch(() => {});
 
     $("lang").querySelectorAll("button").forEach((b) =>
       b.classList.toggle("active", b.dataset.lang === state.lang));

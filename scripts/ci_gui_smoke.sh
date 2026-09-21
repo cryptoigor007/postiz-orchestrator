@@ -10,6 +10,9 @@ export WEBAPP_DEV=1
 export ORCH_HTTP_BIND=127.0.0.1
 export WEBAPP_ACCESS_KEY="${WEBAPP_ACCESS_KEY:-ci-test-key}"
 ROOT="$(pwd)"
+# N4: клиент не вызывает /browse при пустых корнях — smoke-серверу нужен реальный корень,
+# иначе экран «Видео» пустой и поток «добавить папку» не проверить.
+export WEBAPP_BROWSE_ROOT="${WEBAPP_BROWSE_ROOT:-$ROOT}"
 
 "$PY" - <<'PY' &
 import sys, time

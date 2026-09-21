@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_webapp_build_id():
-    assert WEBAPP_BUILD == "812"
+    # только цифры (path-safe) и не пусто; конкретное значение меняется при сборках
+    assert WEBAPP_BUILD.isdigit() and len(WEBAPP_BUILD) >= 2
 
 
 def test_cached_size(tmp_path):

@@ -250,6 +250,14 @@ class Watcher:
 
     def _walk(self, d: Path, depth: int, max_depth: int, stats: dict[str, int],
               mode: str = "auto") -> None:
+        # устойчивость: одна недоступная папка не должна ронять весь цикл
+        try:
+            self._walk_inner(d, depth, max_depth, stats, mode)
+        except OSError:
+            logger.warning("Папка недоступна, пропускаю: %s", d)
+
+    def _walk_inner(self, d: Path, depth: int, max_depth: int, stats: dict[str, int],
+                    mode: str = "auto") -> None:
         if depth > max_depth:
             return
         if self._is_episode(d):

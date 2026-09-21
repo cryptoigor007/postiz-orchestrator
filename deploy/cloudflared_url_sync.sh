@@ -6,6 +6,10 @@ LOG=/var/log/cloudflared-url-sync.log
 TOKEN=$(grep -m1 "^TELEGRAM_BOT_TOKEN=" "$ENV" 2>/dev/null | cut -d= -f2-)
 KEY=$(grep -m1 "^WEBAPP_ACCESS_KEY=" "$ENV" 2>/dev/null | cut -d= -f2-)
 URL=$(journalctl -u cloudflared-webapp --no-pager 2>/dev/null | grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" | tail -1)
+if [ -z "$URL" ]; then
+  # журнал мог быть очищен (SystemMaxUse) — берём базовый URL из файла состояния
+  URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" "$STATE" 2>/dev/null | tail -1)
+fi
 BUILD=$(/opt/orchestrator/venv/bin/python -c "import sys; sys.path.insert(0,\"/opt/orchestrator/src\"); from orchestrator.webapp_api import WEBAPP_BUILD; print(WEBAPP_BUILD)" 2>/dev/null)
 if [ -z "$URL" ]; then echo "$(date -Is) no url yet" >> "$LOG"; exit 0; fi
 # 10.2: do NOT put access key in URL (query or path). Panel uses header/cookie after open.

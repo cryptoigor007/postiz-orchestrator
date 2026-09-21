@@ -345,3 +345,22 @@ def test_watcher_accepts_old_files(env):
         w.scan()
     assert db.fetchone(
         "SELECT COUNT(*) AS c FROM shorts WHERE folder_path LIKE '%short_010%'")["c"] == 1
+
+
+def test_watcher_survives_permission_denied_dir(env):
+    """Недоступная папка в дереве не должна ронять весь скан (PermissionError)."""
+    import os
+    import stat
+
+    db, cfg, clock, root, series = env
+    bad = series / "no_access"
+    bad.mkdir()
+    (bad / "vertical").mkdir()
+    os.chmod(bad, 0)
+    try:
+        w = Watcher(db, cfg, clock, [str(root)])
+        for _ in range(2):
+            w.scan()  # не должно бросать
+    finally:
+        os.chmod(bad, stat.S_IRWXU)
+    assert True

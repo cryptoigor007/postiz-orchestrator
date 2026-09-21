@@ -3,7 +3,7 @@
 > Прочитай этот файл первым. Он даёт полную картину: что за система, что сделано,
 > что осталось, где что лежит и как это эксплуатировать.
 
-Дата: 2026-09-21. Версия кода: `8.4.13`, UI-сборка **b830**, тестов: **355**.
+Дата: 2026-09-21. Версия кода: `8.4.14`, UI-сборка **b831**, тестов: **361**.
 
 ---
 
@@ -13,7 +13,7 @@
 
 ```bash
 cd /Users/dreamstore/Downloads/orchestrator
-git pull && ./scripts/check.sh                      # 355 тестов, линт, XSS/CSP-линтер
+git pull && ./scripts/check.sh                      # 361 тест, линт, XSS/CSP-линтер
 ssh root@100.95.225.71 'systemctl is-active orchestrator.service token-broker.service 2>/dev/null; echo ---; curl -s http://127.0.0.1:8080/health'
 ./scripts/runvm.sh 'systemctl is-active token-broker.service'   # хелпер к VM (см. §3)
 ```
@@ -157,7 +157,7 @@ flowchart TD
 ```bash
 # локально (Mac)
 cd /Users/dreamstore/Downloads/orchestrator
-./scripts/check.sh                 # lint + compile + node + xss/csp + 355 тестов
+./scripts/check.sh                 # lint + compile + node + xss/csp + 361 тест
 ./scripts/deploy.sh                # безопасный деплой на pve + рестарт + синк кнопки
 
 # на pve

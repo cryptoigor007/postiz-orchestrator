@@ -190,10 +190,19 @@ def _is_image_bytes(blob: bytes) -> bool:
         return True
     return False
 
+_YT_ID_RE = re.compile(r"(?:v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{6,})")
+
+
+def _youtube_id_from_url(url: str) -> str:
+    """N1: id видео из release_url (watch?v=…, youtu.be/…, shorts/…)."""
+    m = _YT_ID_RE.search(url or "")
+    return m.group(1) if m else ""
+
+
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "830"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "831"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -407,13 +416,23 @@ class WebAppAPI:
                 )
                 return 200, {"ok": True, "tail": enable}, "application/json"
             if method == "POST" and route == "force_link":
-                ok = self.comps["link_upd"].force_update(
-                    int(data["entity_id"]),
-                    str(data["platform"]),
-                    str(data["url"]),
-                )
+                try:
+                    fid = int(data.get("entity_id") or 0)
+                except Exception:
+                    fid = 0
+                fplat = str(data.get("platform") or "").strip()
+                furl = str(data.get("url") or "").strip()
+                link_upd = self.comps.get("link_upd")
+                if link_upd is None:
+                    return 503, {"error": "link_updater unavailable"}, "application/json"
+                if not fid or not fplat or not furl:
+                    return 400, {"error": "entity_type/entity_id/platform/url required"}, \
+                        "application/json"
+                if not re.match(r"^https?://", furl, re.I):
+                    return 400, {"error": "url must be http(s)"}, "application/json"
+                ok = link_upd.force_update(fid, fplat, furl)
                 return (200, {"ok": True}, "application/json") if ok else (
-                    400, {"error": "failed"}, "application/json"
+                    400, {"error": "force_link_failed"}, "application/json"
                 )
             if method == "GET" and route == "job":
                 jobs = self.comps.get("jobs")
@@ -802,6 +821,57 @@ class WebAppAPI:
                 return 200, {"ok": True, "removed": removed, "blocked": [],
                              "cascade": (["telegram"] if platform == "youtube" else []),
                              "dependents": dependents}, "application/json"
+            if method == "POST" and route == "queue/detach":
+                etype = str(data.get("entity_type") or "").strip()
+                platform = str(data.get("platform") or "").strip()
+                try:
+                    eid = int(data.get("entity_id") or 0)
+                except Exception:
+                    eid = 0
+                if etype not in ("long_video", "short") or not eid or not platform:
+                    return 400, {"error": "entity_type/entity_id/platform required"}, \
+                        "application/json"
+                row = self.db.fetchone(
+                    "SELECT status, postiz_post_id, release_url FROM entity_platform_status "
+                    "WHERE entity_type=? AND entity_id=? AND platform=?", (etype, eid, platform))
+                if not row:
+                    return 404, {"error": "not found"}, "application/json"
+                if (row["status"] or "") != "published":
+                    return 400, {"error": "not_published"}, "application/json"
+                # 1) снять с платформы: Telegram — через Postiz, остальные — движком
+                if platform == "telegram":
+                    pid = row.get("postiz_post_id")
+                    if not pid:
+                        return 400, {"error": "no_postiz_id"}, "application/json"
+                    postiz = self.comps.get("postiz")
+                    if postiz is None:
+                        return 503, {"error": "postiz unavailable"}, "application/json"
+                    try:
+                        postiz.delete_post(str(pid))
+                    except Exception:
+                        logger.warning("queue detach: telegram %s не снят", pid, exc_info=True)
+                        return 502, {"error": "detach_failed"}, "application/json"
+                else:
+                    sources = self.comps.get("manual_sources") or {}
+                    eng = sources.get(platform)
+                    vid = _youtube_id_from_url(str(row.get("release_url") or ""))
+                    if eng is None or not hasattr(eng, "delete") or not vid:
+                        return 400, {"error": "detach_unavailable"}, "application/json"
+                    try:
+                        eng.delete(vid)
+                    except Exception:
+                        logger.warning("queue detach: %s %s не снят", platform, vid, exc_info=True)
+                        return 502, {"error": "detach_failed"}, "application/json"
+                # 2) в корзину (восстановимо; файлы не трогаем)
+                now = self._now_iso()
+                self.db.execute(
+                    "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL, "
+                    "release_url=NULL, deleted_at=?, deleted_reason='detached', "
+                    "cascade_from=NULL, last_error=NULL "
+                    "WHERE entity_type=? AND entity_id=? AND platform=?",
+                    (now, etype, eid, platform))
+                self.db.log(etype, eid, platform, "queue_detach", platform)
+                return 200, {"ok": True, "detached": 1}, "application/json"
             if method == "POST" and route == "scheduling_mode":
                 mode = str(data.get("mode") or "").strip().lower()
                 if mode not in ("auto", "manual"):
@@ -818,7 +888,7 @@ class WebAppAPI:
             if method == "GET" and route == "browse":
                 roots = self._browse_roots()
                 if not roots:
-                    return 403, {"error": "no browse roots configured (WEBAPP_BROWSE_ROOT)"}, "application/json"
+                    return 403, {"error": "no browse roots configured"}, "application/json"
                 metas = [self._root_meta(r) for r in roots]
                 available = [Path(m["path"]) for m in metas if m["available"]]
                 root = available[0] if available else roots[0]

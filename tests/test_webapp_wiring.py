@@ -107,3 +107,14 @@ def test_audit_fixes_8_4_11_wiring():
     html = (APP_JS.parent / "index.html").read_text(encoding="utf-8")
     assert 'rel="icon"' in html
 
+
+
+def test_n1_n2_n3_wiring():
+    """N1/N2/N3: снятие с платформы в окне, локализация ошибок, дружелюбный Media."""
+    js = _js()
+    assert '"/queue/detach"' in js            # N1: вызов снятия
+    assert 'data-dd="detach"' in js           # N1: чекбокс в окне
+    assert "function apiErrorText(" in js and "function toastErr(" in js  # N2
+    assert 'error_prefix")}: ${e.message}' not in js                      # N2: сырых тостов нет
+    assert "state.browseError" in js          # N3
+    assert "no browse roots configured (WEBAPP_BROWSE_ROOT)" not in js

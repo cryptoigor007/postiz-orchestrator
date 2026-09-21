@@ -208,3 +208,70 @@ def test_queue_title_localized_by_lang(env):
     assert ru["items"][0]["title"] == "Фильм: Мой фильм"
     code, en, _ = api.handle("GET", "/webapp/api/queue?lang=en", HEADERS, b"")
     assert en["items"][0]["title"] == "Film: Мой фильм"
+
+
+def test_detach_telegram_moves_to_trash(env):
+    """N1: опубликованный Telegram снимается через Postiz и уходит в корзину."""
+    api, db, clock, cfg = env
+    postiz = api.comps["postiz"]
+    post = postiz.create_post("telegram", None, {"text": "x"}, None)  # без расписания → published
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_post_id, release_url) VALUES ('long_video', 1, 'telegram', 'published', ?, "
+        "'https://t.me/x/1')", (post.id,))
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/detach", HEADERS,
+        json.dumps({"entity_type": "long_video", "entity_id": 1, "platform": "telegram"}).encode())
+    assert code == 200 and payload["detached"] == 1
+    assert post.id not in postiz.posts, "пост должен быть снят из Postiz"
+    row = _row(db, "long_video", 1, "telegram")
+    assert row["status"] == "skipped" and row["deleted_at"]
+    full = db.fetchone(
+        "SELECT postiz_post_id, release_url FROM entity_platform_status "
+        "WHERE entity_type='long_video' AND entity_id=1 AND platform='telegram'")
+    assert full["postiz_post_id"] is None and full["release_url"] is None
+
+
+def test_detach_youtube_without_engine_is_400(env):
+    """N1: без движка/ссылки YouTube-снятие честно отказывает и не меняет строку."""
+    api, db, clock, cfg = env
+    db.execute(
+        "INSERT INTO entity_platform_status (entity_type, entity_id, platform, status, "
+        "postiz_post_id, release_url) VALUES ('short', 7, 'youtube', 'published', 'p1', "
+        "'https://www.youtube.com/watch?v=abc123XYZ')")
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/detach", HEADERS,
+        json.dumps({"entity_type": "short", "entity_id": 7, "platform": "youtube"}).encode())
+    assert code == 400 and payload["error"] == "detach_unavailable"
+    assert _row(db, "short", 7, "youtube")["status"] == "published"
+
+
+def test_detach_rejects_not_published(env):
+    api, db, clock, cfg = env
+    db.execute("INSERT INTO entity_platform_status (entity_type, entity_id, platform, status) "
+               "VALUES ('short', 9, 'telegram', 'scheduled')")
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/queue/detach", HEADERS,
+        json.dumps({"entity_type": "short", "entity_id": 9, "platform": "telegram"}).encode())
+    assert code == 400 and payload["error"] == "not_published"
+
+
+def test_force_link_bad_input_returns_specific_400(env):
+    """N2: force_link отдаёт внятные коды вместо 'failed'/500."""
+    api, db, clock, cfg = env
+    code, payload, _ = api.handle("POST", "/webapp/api/force_link", HEADERS,
+                                  json.dumps({}).encode())
+    assert code == 400 and payload["error"] == "entity_type/entity_id/platform/url required"
+    code, payload, _ = api.handle(
+        "POST", "/webapp/api/force_link", HEADERS,
+        json.dumps({"entity_id": 1, "platform": "youtube", "url": "ftp://x"}).encode())
+    assert code == 400 and payload["error"] == "url must be http(s)"
+
+
+def test_browse_error_does_not_leak_env_name(env, monkeypatch):
+    """N3: наружу не светим имя переменной окружения."""
+    api, db, clock, cfg = env
+    monkeypatch.delenv("WEBAPP_BROWSE_ROOT", raising=False)
+    code, payload, _ = api.handle("GET", "/webapp/api/browse", HEADERS, b"")
+    assert code == 403
+    assert payload["error"] == "no browse roots configured"

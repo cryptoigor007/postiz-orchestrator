@@ -56,6 +56,19 @@
       err_postiz_error: "ошибка на стороне Postiz",
       err_missing_in_postiz: "пост пропал из Postiz",
       err_already_removed: "уже удалено",
+      e_no_media: "нет медиа для этой сущности/платформы",
+      e_failed: "не удалось — проверьте данные",
+      e_not_published: "пост ещё не опубликован",
+      e_no_postiz_id: "нет ID поста в Postiz",
+      e_detach_unavailable: "снять нельзя: нет движка или ссылки на видео",
+      e_detach_failed: "не удалось снять с платформы",
+      e_no_roots: "корни обзора не настроены — обратитесь к администратору",
+      e_args: "заполните все поля",
+      e_too_large: "слишком большой запрос",
+      e_force_link_failed: "не удалось сохранить ссылку",
+      e_url_http: "ссылка должна начинаться с http(s)",
+      del_detach: "Снять опубликованное с платформы",
+      del_detach_note: "Необратимо: пост будет удалён с платформы.",
       title_trash: "Корзина", trash_selected: "выбрано", trash_restore: "Восстановить",
       trash_restore_all: "Восстановить всё", trash_purge: "Удалить навсегда",
       trash_hint: "Удалённое можно вернуть в очередь или убрать окончательно. Файлы на диске не трогаем.",
@@ -256,6 +269,19 @@
       err_postiz_error: "Postiz-side error",
       err_missing_in_postiz: "post disappeared from Postiz",
       err_already_removed: "already removed",
+      e_no_media: "no media for this entity/platform",
+      e_failed: "failed — check the input",
+      e_not_published: "the post is not published yet",
+      e_no_postiz_id: "no Postiz post id",
+      e_detach_unavailable: "cannot detach: no engine or video link",
+      e_detach_failed: "detach from the platform failed",
+      e_no_roots: "browse roots are not configured — ask the administrator",
+      e_args: "fill in all fields",
+      e_too_large: "request is too large",
+      e_force_link_failed: "could not save the link",
+      e_url_http: "the link must start with http(s)",
+      del_detach: "Detach published from the platform",
+      del_detach_note: "Irreversible: the post will be removed from the platform.",
       title_trash: "Trash", trash_selected: "selected", trash_restore: "Restore",
       trash_restore_all: "Restore all", trash_purge: "Delete permanently",
       trash_hint: "Deleted items can be restored to the queue or removed permanently. Files on disk are kept.",
@@ -542,6 +568,29 @@
       : (n % 10 === 1 ? "one" : (n % 10 >= 2 && n % 10 <= 4 ? "few" : "many"));
     return `${n} ${t("post_" + form)}`;
   }
+  // N2: серверные коды ошибок -> человекочитаемый локализованный текст
+  function apiErrorText(raw) {
+    const msg = String(raw || "").trim();
+    const dict = I18N[state.lang] || {};
+    const keys = {
+      "no media for entity/platform": "e_no_media",
+      "failed": "e_failed",
+      "not_published": "e_not_published",
+      "no_postiz_id": "e_no_postiz_id",
+      "detach_unavailable": "e_detach_unavailable",
+      "detach_failed": "e_detach_failed",
+      "no browse roots configured": "e_no_roots",
+      "entity_type/entity_id/platform/url required": "e_args",
+      "url must be http(s)": "e_url_http",
+      "force_link_failed": "e_force_link_failed",
+      "request body too large (max 50MB)": "e_too_large",
+    };
+    const k = keys[msg];
+    return (k && dict[k]) || msg || t("error_prefix");
+  }
+  function toastErr(e) {
+    toast(`${t("error_prefix")}: ${apiErrorText(e && e.message)}`);
+  }
 
   function readKey() {
     const q = new URLSearchParams(location.search).get("key");
@@ -777,7 +826,7 @@
             apply(r.path);
           } catch (err) {
             unbusy();
-            toast(`${t("error_prefix")}: ${esc(err.message)}`);
+            toastErr(err);
           }
         };
         reader.readAsDataURL(f);
@@ -796,7 +845,7 @@
           apply(r.path);
         } catch (err) {
           unbusy();
-          toast(`${t("error_prefix")}: ${esc(err.message)}`);
+          toastErr(err);
         }
       }
     });
@@ -916,7 +965,14 @@
       if (v === "status") data = await api("/status");
       else if (v === "folders") {
         data = await api("/roots");
-        if (!state.browse) state.browse = await api("/browse");
+        state.browseError = "";
+        if (!state.browse) {
+          try { state.browse = await api("/browse"); }
+          catch (e) {
+            state.browse = { path: "", parent: null, dirs: [], root: "", roots: [] };
+            state.browseError = apiErrorText(e.message);
+          }
+        }
       }
       else if (v === "calendar") data = await api("/calendar");
       else if (v === "queue") data = await api("/queue");
@@ -1046,6 +1102,8 @@
         }).join("")}</div>`
       : "";
     const warnRow = b.warning ? `<div class="row"><span class="meta warn-text">${icon("warn", 14)} ${esc(b.warning)}</span></div>` : "";
+    const browseWarn = state.browseError
+      ? `<div class="row"><span class="meta warn-text">${icon("warn", 14)} ${esc(state.browseError)}</span></div>` : "";
     const sc = state.scan;
     const st = sc ? (sc.stats || {}) : null;
     const tot = sc ? (sc.totals || {}) : {};
@@ -1094,7 +1152,7 @@
         ${rsel}
         <div class="row"><div class="title mono fs-12 wrap-any">${esc(b.path || "")}</div></div>
         ${searchBlock}
-        ${warnRow}
+        ${warnRow}${browseWarn}
         <div class="btn-grid">
           <button class="btn secondary" data-act="folder-up" data-p="${esc(b.parent || "")}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
           <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="series">${t("add_series")}</button>
@@ -1118,7 +1176,7 @@
       const d = await api(`/browse/search?q=${encodeURIComponent(q)}${root ? `&root=${encodeURIComponent(root)}` : ""}`);
       state.folderSearch = { q, items: d.items || [] };
     } catch (e) {
-      toast(`${t("error_prefix")}: ${esc(e.message)}`);
+      toastErr(e);
     }
     unbusy();
     renderFolders(state.data || {});
@@ -2006,6 +2064,7 @@
     let shortsN = 0;
     let scopeAll = false;
     let alsoYt = false;
+    let detach = false;
     let loaded = false;
 
     const ov = document.createElement("div");
@@ -2037,6 +2096,7 @@
       const ch = chosen();
       const plats = Array.from(new Set(ch.map((x) => x.platform)));
       const cnt = ch.length;
+      const hasPub = ch.some((x) => x.status === "published");
       const scopeBlock = shortsN ? `
         <div class="field"><span class="field__label">${t("del_scope")}</span>
           <div class="seg" role="group">
@@ -2055,10 +2115,13 @@
         <div class="field"><span class="field__label">${t("del_will_delete")}</span>
           <div class="row row-center-8">${platsHtml || `<span class="meta">${t("none")}</span>`}
             <span class="meta">${postsLabel(cnt)}</span></div></div>
-        ${ch.some((x) => x.status === "published") ? `<div class="hint danger-text">${t("del_blocked")}</div>` : ""}
+        ${hasPub && !detach ? `<div class="hint danger-text">${t("del_blocked")}</div>` : ""}
+        ${hasPub ? `<label class="field"><span class="field__label">${t("del_detach")}</span>
+             <input type="checkbox" data-dd="detach" ${detach ? "checked" : ""}/></label>
+           <div class="hint danger-text">${t("del_detach_note")}</div>` : ""}
         <div class="btn-grid">
           <button class="btn secondary" data-dd="cancel">${t("cancel")}</button>
-          <button class="btn danger" data-dd="ok" ${cnt && !ch.some((x) => x.status === "published") ? "" : "disabled"}>${
+          <button class="btn danger" data-dd="ok" ${cnt && (!hasPub || detach) ? "" : "disabled"}>${
             trigger === "telegram" ? (alsoYt ? t("del_all_btn") : t("del_tg_btn")) : t("del_confirm")}</button>
         </div>
       </div>`;
@@ -2075,17 +2138,23 @@
 
     async function submit() {
       const ch = chosen();
-      if (!ch.length || ch.some((x) => x.status === "published")) return;
+      const pubs = ch.filter((x) => x.status === "published");
+      if (!ch.length || (pubs.length && !detach)) return;
       close();
       busy(t("working"));
       try {
+        // N1: сначала снимаем опубликованное с платформы, затем удаляем набор
+        for (const p of pubs) {
+          await api("/queue/detach", { method: "POST", body: JSON.stringify({
+            entity_type: p.entity_type, entity_id: p.entity_id, platform: p.platform }) });
+        }
         const r = await api("/queue/remove", { method: "POST", body: JSON.stringify({
           entity_type: etype, entity_id: eid, platform: trigger,
           with_shorts: scopeAll, also_youtube: alsoYt }) });
         if (r && r.blocked && r.blocked.length) toast(t("cant_delete_published"));
         else toast(`${t("queue_removed")}: ${r.removed || 0}`);
       } catch (e) {
-        toast(`${t("error_prefix")}: ${e.message}`);
+        toastErr(e);
       } finally {
         unbusy();
       }
@@ -2104,8 +2173,10 @@
       // yt-чекбокс обрабатываем в change, чтобы не было двойного переключения
     });
     ov.addEventListener("change", (e) => {
-      const b = e.target.closest("[data-dd='yt']");
-      if (b) { alsoYt = !!e.target.checked; paint(); }
+      const b = e.target.closest("[data-dd]");
+      if (!b) return;
+      if (b.dataset.dd === "yt") { alsoYt = !!e.target.checked; paint(); }
+      else if (b.dataset.dd === "detach") { detach = !!e.target.checked; paint(); }
     });
 
     paint();
@@ -2118,7 +2189,7 @@
         loaded = true;
         paint();
       })
-      .catch((e) => { close(); toast(`${t("error_prefix")}: ${e.message}`); });
+      .catch((e) => { close(); toastErr(e); });
   }
 
   function renderTrash(d) {
@@ -2448,7 +2519,7 @@
           const r = await api("/queue/cleanup_orphans", { method: "POST", body: "{}" });
           unbusy();
           toast(`${t("cleaned")}: ${r.deleted || 0}`);
-        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${esc(e.message)}`); }
+        } catch (e) { unbusy(); toastErr(e); }
         return load();
       }
       if (act === "queue-restore-all") {
@@ -2457,7 +2528,7 @@
           const r = await api("/queue/restore", { method: "POST", body: JSON.stringify({ all: true }) });
           unbusy();
           toast(`${t("restored")}: ${r.restored || 0}`);
-        } catch (e) { unbusy(); toast(`${t("error_prefix")}: ${esc(e.message)}`); }
+        } catch (e) { unbusy(); toastErr(e); }
         return load();
       }
       if (act === "queue-remove-everywhere") {
@@ -2557,7 +2628,7 @@
             }),
           });
         } catch (e) {
-          toast(`${t("error_prefix")}: ${e.message}`);
+          toastErr(e);
           return;
         } finally {
           unbusy();  // P1-10: при ошибке оверлей не должен оставаться навсегда
@@ -2600,7 +2671,7 @@
           const body = act === "trash-restore-all" ? { all: true } : { ids };
           const r = await api("/trash/restore", { method: "POST", body: JSON.stringify(body) });
           toast(`${t("restored")}: ${r.restored || 0}`);
-        } catch (e) { toast(`${t("error_prefix")}: ${e.message}`); }
+        } catch (e) { toastErr(e); }
         finally { unbusy(); }
         state.trashSelected = {};
         return load();
@@ -2613,7 +2684,7 @@
         try {
           const r = await api("/trash/purge", { method: "POST", body: JSON.stringify({ ids }) });
           toast(`${t("trash_purge")}: ${r.purged || 0}`);
-        } catch (e) { toast(`${t("error_prefix")}: ${e.message}`); }
+        } catch (e) { toastErr(e); }
         finally { unbusy(); }
         state.trashSelected = {};
         return load();
@@ -2630,7 +2701,7 @@
           await api("/schedule", { method: "POST", body: JSON.stringify({ async: true }) });
         } catch (e) {
           stopJob();
-          toast(`${t("error_prefix")}: ${esc(e.message)}`);
+          toastErr(e);
         }
         state.scan = null;
         return;
@@ -2658,7 +2729,7 @@
           await api("/schedule", { method: "POST", body: JSON.stringify(body) });
         } catch (e) {
           stopJob();
-          toast(`${t("error_prefix")}: ${esc(e.message)}`);
+          toastErr(e);
         }
         state.scan = null;
         return;
@@ -2677,7 +2748,7 @@
             }),
           });
         } catch (e) {
-          toast(`${t("error_prefix")}: ${e.message}`);
+          toastErr(e);
           return;
         } finally {
           unbusy();

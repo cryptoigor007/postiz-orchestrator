@@ -102,7 +102,7 @@ html, body {
 .main { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; display: flex; flex-direction: column; background: var(--bg); }
 .topbar { display: flex; align-items: center; justify-content: center; gap: 12px;
   padding: calc(12px + var(--sa-top) + var(--chrome-top)) calc(22px + var(--sa-right)) 10px calc(22px + var(--sa-left)); }
-.topbar-center { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.topbar-center { position: relative; display: inline-flex; align-items: center; min-width: 0; }
 .topbar-center h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
 .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -213,8 +213,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .topbar h2 { font-size: 22px; letter-spacing: -0.02em; }
   /* Полоса кнопок Telegram (✕/⋮) — в правом верхнем углу: там ничего не размещаем.
      Заголовок и иконка обновления — одной центрированной группой по центру экрана. */
-  .topbar-center { gap: 0; }
-  .topbar h2 { text-align: center; }
+  /* заголовок — ровно по центру экрана; иконка рядом, не сдвигает его */
   .btn { height: var(--btn-h); min-height: var(--btn-h); }
   .row { padding: 10px 14px; }
   .form-row { gap: var(--btn-gap); }
@@ -337,7 +336,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out), opacity var(--dur-ui) var(--ease-out);
 }
 .icon-ghost .ico, .icon-ghost .ico svg { width: 22px; height: 22px; display: block; }
-.icon-ghost:active { transform: scale(0.9); background: rgba(120,120,128,0.14); }
+/* рядом с названием: иконка позиционируется от правого края заголовка и не сдвигает его центр */
+.topbar-center .icon-ghost { position: absolute; left: 100%; top: 50%; margin-left: 2px; transform: translateY(-50%); }
+.icon-ghost:active { transform: translateY(-50%) scale(0.9); background: rgba(120,120,128,0.14); }
+.topbar-center .icon-ghost:focus-visible { transform: translateY(-50%); }
 .icon-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .icon-ghost.spin-once .ico { animation: ghostSpin 620ms var(--ease-out); }
 @keyframes ghostSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }

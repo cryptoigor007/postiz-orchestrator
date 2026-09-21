@@ -22,6 +22,17 @@ class Metrics:
             "last_cycle_at": None,
             "last_error": None,
         }
+        # рестарт не должен терять счётчики: подхватываем прошлый файл (новые значения — поверх)
+        if self.path and self.path.is_file():
+            try:
+                prev = json.loads(self.path.read_text())
+                if isinstance(prev, dict):
+                    for k, v in prev.items():
+                        if k in ("started_at", "last_cycle_at", "last_error"):
+                            continue
+                        self.data[k] = v
+            except Exception:
+                logger.debug("metrics load failed (start fresh)", exc_info=True)
 
     def incr(self, key: str, n: int = 1) -> None:
         self.data[key] = int(self.data.get(key) or 0) + n

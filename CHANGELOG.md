@@ -1,5 +1,14 @@
 # Changelog
 
+## 8.3.2 — Метрики переживают рестарт
+
+### Fixed
+- `Metrics` читает прошлый `metrics.json` при старте: счётчики (cycles, test_*, errors…) больше
+  не обнуляются рестартом сервиса; `started_at`/`last_cycle_at` — новые
+
+### Tests
+- +1 (323): персистентность метрик через рестарт
+- version 8.3.2 (WEBAPP_BUILD=820)
 ## 8.3.1 — Security/ops residual closure (A–F) 
     
 ### Security

@@ -139,3 +139,21 @@ def test_content_length_cap_rejects_big_body(monkeypatch):
         c.close()
     finally:
         srv.shutdown()
+
+
+def test_metrics_survive_restart(tmp_path):
+    """Счётчики метрик не теряются при рестарте (читаем прошлый файл)."""
+    from orchestrator.metrics import Metrics
+
+    path = tmp_path / "metrics.json"
+    m1 = Metrics(path)
+    m1.incr("cycles", 3)
+    m1.incr("test_cancelled", 2)
+    m1.flush()
+    m2 = Metrics(path)
+    assert m2.data["cycles"] == 3
+    assert m2.data["test_cancelled"] == 2
+    m2.incr("cycles", 1)
+    m2.flush()
+    m3 = Metrics(path)
+    assert m3.data["cycles"] == 4 and m3.data["test_cancelled"] == 2

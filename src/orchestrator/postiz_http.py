@@ -105,15 +105,33 @@ class HttpPostizClient:
         self.path_upload = os.getenv("POSTIZ_PATH_UPLOAD", "/public/v1/upload")
         self.path_posts = os.getenv("POSTIZ_PATH_POSTS", "/public/v1/posts")
         if verify is None:
-            # 10.3: TLS verify ON by default; opt-out via POSTIZ_INSECURE_TLS=1 or POSTIZ_VERIFY_TLS=0
+            # A8: TLS verify ON by default. POSTIZ_VERIFY_TLS умеет:
+            #   "1/true/yes/on"  → проверка с системными CA
+            #   "/path/ca.pem"   → проверка с ЗАДАННЫМ CA (правильный путь для self-signed)
+            #   "0/false/no/off" → отключено (только локальная отладка, в бою запрещено)
             insecure = os.getenv("POSTIZ_INSECURE_TLS", "").strip().lower() in (
                 "1", "true", "yes", "on",
             )
-            explicit = os.getenv("POSTIZ_VERIFY_TLS", "").strip().lower()
-            if explicit in ("0", "false", "no", "off"):
+            explicit = os.getenv("POSTIZ_VERIFY_TLS", "").strip()
+            low = explicit.lower()
+            if low in ("0", "false", "no", "off"):
                 verify = False
-            elif explicit in ("1", "true", "yes", "on"):
+            elif low in ("1", "true", "yes", "on"):
                 verify = True
+            elif explicit and os.path.isfile(explicit):
+                # A8: pinned CA. Для self-signed leaf, который сам себе CA, OpenSSL требует
+                # VERIFY_X509_PARTIAL_CHAIN — иначе «self-signed certificate».
+                import ssl as _ssl
+
+                ctx = _ssl.create_default_context(cafile=explicit)
+                try:
+                    ctx.verify_flags |= _ssl.VERIFY_X509_PARTIAL_CHAIN
+                except AttributeError:  # старый Python
+                    logger.warning("VERIFY_X509_PARTIAL_CHAIN недоступен — pinned CA может не сработать")
+                verify = ctx  # httpx принимает SSLContext
+            elif explicit:
+                logger.warning("POSTIZ_VERIFY_TLS=%r не файл и не bool — использую системные CA", explicit)
+                verify = not insecure
             else:
                 verify = not insecure  # default secure
         self.verify_tls = verify

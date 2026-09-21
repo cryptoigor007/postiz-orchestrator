@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from .clock import Clock
 from .config import AppConfig, SafetyCfg
 from .db import Database
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_dt(s: str | None) -> datetime | None:
@@ -143,7 +146,7 @@ class SafetyChecker:
                     if d not in block["exception_days"]:
                         block["exception_days"] = list(block.get("exception_days") or []) + [d]
             except Exception:
-                pass
+                logger.debug("pause-state parse failed", exc_info=True)
             exc = {str(d) for d in (block or {}).get("exception_days") or []}
             if exc:
                 day = scheduled_for.astimezone(get_tz(self.cfg.timezone)).strftime("%Y-%m-%d")

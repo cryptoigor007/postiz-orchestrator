@@ -159,3 +159,20 @@ def test_roots_row_not_force_stretched():
     """Выбор корней не растягивается правилом full-width primary (иначе «синяя стена»)."""
     assert "roots-row" in JS and "roots-row" in CSS
     assert ".form-row:not(.roots-row)" in CSS
+
+
+def test_no_inline_styles_and_strict_csp():
+    """A2: ни одного style-атрибута; CSP без 'unsafe-inline' (script и style)."""
+
+    assert 'style="' not in JS, "в app.js остались инлайн-стили"
+    assert 'style="' not in HTML, "в index.html остались инлайн-стили"
+    api = (ROOT / "src" / "orchestrator" / "webapp_api.py").read_text(encoding="utf-8")
+    assert 'style="' not in api  # шаблоны страницы тоже без инлайна
+    csp_src = (ROOT / "src" / "orchestrator" / "http_server.py").read_text(encoding="utf-8")
+    csp_code = "\n".join(ln for ln in csp_src.splitlines() if not ln.strip().startswith("#"))
+    assert "unsafe-inline" not in csp_code, "CSP всё ещё содержит unsafe-inline"
+    assert "style-src 'self'" in csp_code and "nonce-" in csp_code
+    assert "Referrer-Policy" in csp_src
+    # утилиты, заменившие инлайн, есть в CSS
+    for cls in (".w-full", ".flex-1", ".wrap-any", ".pico-20", ".pbar-fill"):
+        assert cls in CSS, f"нет утилиты {cls}"

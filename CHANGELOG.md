@@ -1,5 +1,30 @@
 # Changelog
 
+## 8.3.1 — Security/ops residual closure (A–F) 
+    
+### Security
+- **A1**: учётка Postiz UI убрана из git; пароль **сменён** (bcrypt), старый отвергается
+- **A2**: строгий CSP без `'unsafe-inline'` вообще — инлайн-стили (26 шт.) заменены утилит-классами,
+  динамика через CSSOM; script+style подписаны per-request nonce
+- **A8**: TLS-проверка к Postiz **включена** через pinned CA (`POSTIZ_VERIFY_TLS=/etc/orchestrator/postiz-ca.pem`,
+  поддержка `VERIFY_X509_PARTIAL_CHAIN` для self-signed); `=0` больше не используется
+- **A4**: ключ не попадает в логи (`key=***`), `Referrer-Policy: no-referrer`
+- **A3**: `scripts/check_xss.py` (esc-инварианты, запрет inline-стилей, строгий CSP, build-id) — в `check.sh` и CI
+- **A5**: предупреждение при `test_publish.enabled` с пустым `prod_integration_ids`
+
+### Reliability / UX
+- **D11**: авто-бэкап БД перед миграциями схемы (`backups/pre_migration_*.sqlite`)
+- **D2**: предпроверка Telegram media >50 МБ (понятная ошибка до создания поста)
+- **D12**: ошибки массовых операций очереди больше не глотаются (тост «Ошибок: N» + console.warn)
+- **D14**: понятное сообщение при устаревшей сессии (401)
+- **B6**: нет FOUC — подписи локализуются до показа приложения
+- **F1**: молчаливые `except Exception: pass` → логирование (debug)
+
+### Docs / CI
+- `docs/RESIDUAL.md` — единый список остатков и ops-задач (A–F)
+- HANDOFF/README/AGENTS/POSTIZ_LIVE синхронизированы (версия, тесты, backup, TLS)
+- CI: XSS/CSP-линтер + GUI smoke (jsdom через `scripts/ci_gui_smoke.sh`)
+- version 8.3.1 / WEBAPP_BUILD=820
 ## 8.3.0 — WebApp UI/UX: iPhone-first (Telegram Mini App) + Emil Kowalski
 
 ### Added

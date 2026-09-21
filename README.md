@@ -3,7 +3,7 @@
 Пайплайн публикаций: **VideoMaker + ShortsMaker → Postiz → соцсети**, с веб-панелью (Telegram
 WebApp), Telegram-ботом, MCP-интеграцией для ИИ и модулем распознавания ручных загрузок.
 
-Версия: `8.3.0` (b819).
+Версия: `8.3.1` (b820).
 
 > Передача контекста между сессиями — `docs/HANDOFF.md` (читать первым).
 
@@ -52,7 +52,7 @@ src/orchestrator/
   link_updater.py    подстановка ссылки на длинное видео в шортсы
   tail.py            режим «хвоста» серии
   overflow.py        перенос лишних шортсов в shorts_overflow
-  backup.py          бэкап SQLite (VACUUM INTO)
+  backup.py          бэкап SQLite (Connection.backup; sqlite_backup)
   metrics.py         счётчики рантайма
   manual_uploads.py  распознавание/сопоставление ручных загрузок
   manual_sources.py  фабрика движков-источников (по платформам)
@@ -120,7 +120,7 @@ ShortsMaker: корень с именем `shortsmaker*` (или маркер `.
    (`link_updater`), работает «хвост» (`tail`).
 3. **recon** (раз в `reconciliation_interval_hours`, 24ч): сверка «наши ↔ Postiz»
    (пропавшие/сироты).
-4. **backup** (`interval_hours`, 6ч): `VACUUM INTO` в `backups/`, хранение `keep_days`.
+4. **backup** (`interval_hours`, 6ч): `sqlite3 Connection.backup` в `backups/`, хранение `keep_days`; перед миграциями схемы — автобэкап `pre_migration_*.sqlite` (D11).
 5. **manual scan** (`schedule_scan: daily`): поиск ручных загрузок в соцсетях (§7).
 
 Публикация (`publisher.py`): идемпотентно (ключ `entity_type:entity_id:platform:время`),
@@ -152,7 +152,7 @@ upload медиа → create post в Postiz, запись статуса, jitter
 | `POSTIZ_API_TOKEN` | API-ключ организации (raw `Authorization`) |
 | `POSTIZ_AUTH_STYLE=raw` | без Bearer |
 | `POSTIZ_PATH_UPLOAD`, `POSTIZ_PATH_POSTS` | пути публичного API |
-| `POSTIZ_VERIFY_TLS=0` | отключить проверку сертификата (self-signed) |
+| `POSTIZ_VERIFY_TLS` | **по умолчанию проверка ВКЛ**; `=0` — только для локальной отладки (self-signed), в бою не использовать |
 | `TELEGRAM_BOT_TOKEN` | publisher-бот |
 | `TELEGRAM_MODE=poll\|off` | long-poll команд (off мешает конфликтам getUpdates) |
 | `WEBAPP_PUBLIC_URL` | публичный URL панели |
@@ -340,7 +340,7 @@ PYTHONPATH=src ./venv/bin/python -m pytest tests/ -q
   `cloudflared-url-sync`); при смене сборки меняется путь `/webapp/b/NN/`.
 - **`token broker: no token for youtube`** — в Postiz не подключён YouTube-канал.
 - **`HTTP Error 403` от брокера** — IP не в allowlist (`BROKER_ALLOW_IPS`).
-- **TLS ошибки к Postiz** — оставить `POSTIZ_VERIFY_TLS=0` (self-signed).
+- **TLS ошибки к Postiz** — правильный путь: доверенный сертификат/CA; `POSTIZ_VERIFY_TLS=0` — только временно и локально (A8).
 - **Скан ручных:** `telegram: skipped` — у Postiz-движка нет листинга (это нормально).
 
 ---

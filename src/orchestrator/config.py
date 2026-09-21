@@ -116,6 +116,11 @@ class AppConfig(BaseModel):
     safety: SafetyCfg = Field(default_factory=SafetyCfg)
     telegram: TelegramCfg = Field(default_factory=TelegramCfg)
     media: MediaCfg = Field(default_factory=MediaCfg)
+    # reserved (не используется в коде, только для будущих фич):
+    #   placement_default (D8) — экран выбора плейсмента не реализован;
+    #   audio_profile (D9) — профиль звука зарезервирован.
+    # manual_uploads.platforms=[] (F4) — скан всех поддерживаемых источников;
+    #   непустой список ограничивает скан перечисленными платформами.
     manual_uploads: ManualUploadsCfg = Field(default_factory=ManualUploadsCfg)
     backup: BackupCfg = Field(default_factory=BackupCfg)
     engines: dict[str, str] = Field(default_factory=dict)

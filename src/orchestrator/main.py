@@ -158,6 +158,15 @@ def main(argv: list[str] | None = None) -> int:
     cfg = comps["cfg"]
 
 
+    # A5: тест-контур включён, но боевые integration_id не помечены — предупреждаем явно
+    _tp = getattr(cfg, "test_publish", None)
+    if _tp is not None and getattr(_tp, "enabled", False) and not (getattr(_tp, "prod_integration_ids", None) or []):
+        logging.getLogger(__name__).warning(
+            "test_publish.enabled=true, но prod_integration_ids пуст: тест разрешён только для "
+            "test_integration_ids=%s (fail-closed). При переходе на боевые каналы — заполните prod ids.",
+            list(getattr(_tp, "test_integration_ids", []) or []),
+        )
+
     from .metrics import Metrics as _Metrics
 
     metrics = comps.get("metrics") or _Metrics(Path(args.db).resolve().parent / "metrics.json")

@@ -50,19 +50,21 @@ def start_http_server(
             else:
                 self.send_header("Cache-Control", "no-store")
             if "html" in (ctype or ""):
-                # script-src без 'unsafe-inline': инлайн-скрипты панели подписаны per-request
-                # nonce (см. WebAppAPI._compose_index); внешний Telegram SDK — явный origin.
-                # style-src 'unsafe-inline' оставлен осознанно: в UI есть style-атрибуты (косметика).
+                # A2: строгий CSP — ни script, ни style не используют 'unsafe-inline'.
+                # Инлайн-блоки панели (скомпилированные CSS/JS) подписаны per-request nonce;
+                # динамика в UI ставится через CSSOM (element.style.* / setProperty) — CSP её не блокирует.
                 nonce = getattr(_webapp_nonce, "value", "") or ""
                 src = "script-src 'self' https://telegram.org"
+                sty = "style-src 'self'"
                 if nonce:
                     src += f" 'nonce-{nonce}'"
+                    sty += f" 'nonce-{nonce}'"
                 self.send_header(
                     "Content-Security-Policy",
-                    f"default-src 'self'; {src}; "
-                    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-                    "connect-src 'self'; object-src 'none'; base-uri 'none'",
+                    f"default-src 'self'; {src}; {sty}; img-src 'self' data: blob:; "
+                    "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
                 )
+                self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(body)
 

@@ -3,7 +3,7 @@
 > Прочитай этот файл первым. Он даёт полную картину: что за система, что сделано,
 > что осталось, где что лежит и как это эксплуатировать.
 
-Дата: 2026-09-21. Версия кода: `8.3.0`, UI-сборка **b819**, тестов: **319**.
+Дата: 2026-09-21. Версия кода: `8.3.1`, UI-сборка **b820**, тестов: **322**.
 
 ---
 
@@ -13,7 +13,7 @@
 
 ```bash
 cd /Users/dreamstore/Downloads/orchestrator
-git pull && ./scripts/check.sh                      # 151 тест, линт
+git pull && ./scripts/check.sh                      # 322 теста, линт, XSS/CSP-линтер
 ssh root@100.95.225.71 'systemctl is-active orchestrator.service token-broker.service 2>/dev/null; echo ---; curl -s http://127.0.0.1:8080/health'
 ./scripts/runvm.sh 'systemctl is-active token-broker.service'   # хелпер к VM (см. §3)
 ```
@@ -23,11 +23,14 @@ ssh root@100.95.225.71 'systemctl is-active orchestrator.service token-broker.se
 
 ---
 
-## 0.2 Оперативная сводка (2026-09-19, вечер)
-- Сервер доступен по Wi-Fi **192.168.100.40** (USB-сетевой адаптер выдернут пользователем → у Postiz-VM нет
-  интернета; **публикации не уйдут, пока адаптер не вернут**). Батарея ноутбука садится — нужна зарядка.
-- SSD физически подключён к серверу, смонтирован ro в `/mnt/ssd_src` (utf8). Копирование на сервер
-  приостановлено на 80 ГБ / ~292 ГБ: продолжение — `systemd-run --unit=ssd-backup bash /root/ssd_backup.sh`.
+## 0.2 Оперативная сводка (обновлено 2026-09-21, вечер)
+- Сеть: LAN-primary (vmbr0, metric 100) + Wi-Fi-backup (wlp2s0, metric 600); `lan-default.sh` — единственный
+  владелец маршрута; VM Postiz имеет NAT (`vm-nat.service`) и интернет. Инцидент «войны маршрутов» 20.09 закрыт.
+- SSD: побайтовая сверка копии (rsync -c) — на паузе, нужен физически подключённый SSD к Mac
+  (скрипт `scripts/ssd_copy_verify.sh`); серверная копия сверена ранее (150 027 файлов, 0 расхождений).
+- Версия на сервере: **8.3.1 / b820**, сервис active, счётчики 39/39/4.
+- TLS к Postiz: **verify включён** через pinned CA `/etc/orchestrator/postiz-ca.pem` (A8).
+- Актуальные остатки/ops: **`docs/RESIDUAL.md`** (единственный список).
 - В панели: обзор SSD (`WEBAPP_BROWSE_ROOT=/mnt/ssd_src,/mnt/video`), root может быть контейнером или серией.
 - Watcher читает метаданные серий/шортсов (package_title, short_*_title.txt и т.д.) — посты с нормальными
   заголовками. Дальше: переформатировать SSD и вернуть данные (обсудить ФС).
@@ -88,7 +91,7 @@ flowchart TD
 | Оркестратор | `/opt/orchestrator` на `pve`, пользователь `orchestrator` (systemd) |
 | Compose Postiz | `/home/postiz/postiz/docker-compose.yml` (бэкапы `.bak.*`) |
 | Postiz UI | https://192-168-100-60.sslip.io (nginx 443, самоподписанный) |
-| Админ Postiz | `ko_geniy@mail.ru` / `00000000` |
+| Админ Postiz | `ko_geniy@mail.ru` — пароль **не в git**: `VM:/home/postiz/postiz_admin_new_password.txt` (0600) или `pve:/root/postiz_admin_new_password.txt`; старый пароль отозван 2026-09-21 |
 | Webapp | cloudflared quick-tunnel, текущий URL в `/var/lib/cloudflared-webapp.url` |
 | Репозиторий | `git@github.com:cryptoigor007/postiz-orchestrator.git` (private, ветка `master`) |
 | Mac-путь | `/Users/dreamstore/Downloads/orchestrator` |
@@ -154,7 +157,7 @@ flowchart TD
 ```bash
 # локально (Mac)
 cd /Users/dreamstore/Downloads/orchestrator
-./scripts/check.sh                 # lint + compile + node + 151 тест
+./scripts/check.sh                 # lint + compile + node + xss/csp + 322 теста
 ./scripts/deploy.sh                # безопасный деплой на pve + рестарт + синк кнопки
 
 # на pve

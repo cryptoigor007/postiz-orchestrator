@@ -282,6 +282,36 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .sheet-item .chev { margin-left: auto; color: var(--text-3); }
 .sheet-lang { display: flex; gap: 8px; padding: 12px 16px 4px; }
 
+/* ===== Утилиты (замена инлайн-стилей: строгий CSP style-src 'self') ===== */
+.w-full { width: 100%; }
+.w-86 { width: 86px; }
+.w-120 { width: 120px; }
+.min-0 { min-width: 0; }
+.min-130 { min-width: 130px; }
+.min-140 { min-width: 140px; }
+.min-180 { min-width: 180px; }
+.flex-1 { flex: 1 1 auto; }
+.flex-2-right { flex: 2 1 auto; text-align: right; }
+.wrap-any { word-break: break-all; overflow-wrap: anywhere; }
+.fs-11 { font-size: 11px; }
+.fs-12 { font-size: 12px; }
+.mr-6 { margin-right: 6px; }
+.pt-8 { padding-top: 8px; }
+.pb-12 { padding-bottom: 12px; }
+.row-plain { border: 0; padding: 0 0 10px; }
+.row-center-8 { align-items: center; gap: 8px; }
+.pbar-fill { width: 0; }
+/* Размеры иконок классами (icon(name, size)) */
+.pico-12, .pico-12 svg { width: 12px; height: 12px; }
+.pico-13, .pico-13 svg { width: 13px; height: 13px; }
+.pico-14, .pico-14 svg { width: 14px; height: 14px; }
+.pico-15, .pico-15 svg { width: 15px; height: 15px; }
+.pico-16, .pico-16 svg { width: 16px; height: 16px; }
+.pico-18, .pico-18 svg { width: 18px; height: 18px; }
+.pico-20, .pico-20 svg { width: 20px; height: 20px; }
+.pico-22, .pico-22 svg { width: 22px; height: 22px; }
+.pico-26, .pico-26 svg { width: 26px; height: 26px; }
+
 [hidden] { display: none !important; }
 
 /* Значки соцсетей */

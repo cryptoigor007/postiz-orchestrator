@@ -16,6 +16,8 @@
       cover_no_images: "Картинок нет", cover_up: "↑ Вверх", cover_loading: "Загрузка…",
       cover_added: "Обложка выбрана", cover_upload: "Загрузить с устройства",
       request_timeout: "Сервер не ответил (таймаут). Проверь связь и повтори.",
+      session_stale: "Сессия устарела — открой панель заново из бота.",
+      t_bulk_failed: "Ошибок: %s",
       cant_delete_published: "Нельзя удалить: уже опубликовано",
       already_removed: "Уже удалено ранее", retrying: "Повторяю…",
       cover_fetch: "Скачать", cover_url_hint: "Вставьте ссылку на картинку (http/https)",
@@ -174,6 +176,8 @@
       cover_no_images: "No images", cover_up: "↑ Up", cover_loading: "Loading…",
       cover_added: "Cover selected", cover_upload: "Upload from device",
       request_timeout: "Server did not respond (timeout). Check connection and retry.",
+      session_stale: "Session expired — reopen the panel from the bot.",
+      t_bulk_failed: "Errors: %s",
       cant_delete_published: "Cannot delete: already published",
       already_removed: "Already removed", retrying: "Retrying…",
       cover_fetch: "Download", cover_url_hint: "Paste an image URL (http/https)",
@@ -372,7 +376,13 @@
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     const rest = { ...opts };
     delete rest.timeoutMs;
-    return fetch(`/webapp/api${path}`, { ...rest, headers, signal: ctrl.signal })
+    return fetch(`/webapp/api${path}`, { ...rest, headers, signal: ctrl.signal }).then((r) => {
+      if (r.status === 401 && !r.__notified) {
+        r.__notified = true;
+        try { toast(t("session_stale")); } catch (_) {}
+      }
+      return r;
+    })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || r.statusText || "error");
@@ -501,7 +511,7 @@
     function renderUrl() {
       root.querySelector("#cpBody").innerHTML = `
         <div class="cp-sec">${t("cover_tab_url")}</div>
-        <input type="url" id="cpUrl" placeholder="https://…" style="width:100%"/>
+        <input type="url" id="cpUrl" class="w-full" placeholder="https://…"/>
         <div class="form-row"><span class="meta">${t("cover_url_hint")}</span></div>
         <button class="btn primary" data-cp="fetch">${t("cover_fetch")}</button>`;
     }
@@ -603,7 +613,7 @@
     const el = _overlay();
     el.innerHTML = `<div class="busy-box">
       <div class="busy-row">${icon("spinner", 20)}<span id="job-title">${esc(title || t("working"))}</span></div>
-      <div class="pbar" id="job-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="pbar-fill" id="job-fill" style="width:0%"></div></div>
+      <div class="pbar" id="job-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="pbar-fill" id="job-fill"></div></div>
       <div class="busy-row busy-meta" aria-live="polite"><span id="job-count"></span><span id="job-eta"></span></div>
       <div class="form-row"><button class="btn danger" data-act="job-cancel">${t("cancel")}</button></div>
     </div>`;
@@ -740,9 +750,10 @@
     chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>',
     help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5"/><circle cx="12" cy="16.6" r="0.7" fill="currentColor" stroke="none"/></svg>',
   };
+  const ICON_SIZES = [12, 13, 14, 15, 16, 18, 20, 22, 26];
   function icon(name, size) {
-    const sz = size || 16;
-    return `<span class="pico" style="width:${sz}px;height:${sz}px">${SVG[name] || ""}</span>`;
+    const sz = ICON_SIZES.includes(+size) ? +size : 16;
+    return `<span class="pico pico-${sz}">${SVG[name] || ""}</span>`;
   }
 
   const PLATFORM_ICONS = {
@@ -773,7 +784,7 @@
       }<span class="meta">${t("limit")} ${p.daily_limit}</span></div>`)
       .join("");
     content().innerHTML = `<div class="view-enter">
-      <div class="form-row" style="padding:0 0 12px">
+      <div class="form-row pb-12">
         <button class="btn primary" data-goto="folders">${esc(t("status_cta_add"))}</button>
         <button class="btn secondary" data-goto="queue">${esc(t("status_cta_queue"))}</button>
       </div>
@@ -784,10 +795,10 @@
   }
 
   function renderFolders(d) {
-    const stepper = `<div class="row" style="border:0;padding:0 0 10px"><span class="meta">${esc(t("folders_stepper"))}</span></div>`;
+    const stepper = `<div class="row row-plain"><span class="meta">${esc(t("folders_stepper"))}</span></div>`;
     const items = d.items || (d.roots || []).map((x) => ({ path: x, kind: "auto" }));
     const roots = items
-      .map((it) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${esc(it.path)}</div>
+      .map((it) => `<div class="row"><div class="title mono flex-1 wrap-any">${esc(it.path)}</div>
         <span class="meta">${t("kind_label")}: ${t("kind_" + (it.kind || "auto"))}</span>
         <button class="btn secondary" data-act="folder-kind" data-p="${esc(it.path)}" title="${t("kind_label")}">${icon("swap", 14)}</button>
         <button class="btn danger" data-act="folder-remove" data-p="${esc(it.path)}">${t("remove")}</button></div>`)
@@ -832,11 +843,11 @@
     const sq = state.folderSearch || { q: "", items: null };
     const searchResults = sq.items === null ? "" : (sq.items.length
       ? `<div class="search-list">${sq.items.map((x) =>
-          `<div class="row"><div class="title" style="flex:1;min-width:0;word-break:break-all">${icon("folder", 15)} ${esc(x.name)}<div class="meta mono" style="font-size:11px">${esc(x.path)}</div></div>
+          `<div class="row"><div class="title flex-1 min-0 wrap-any">${icon("folder", 15)} ${esc(x.name)}<div class="meta mono fs-11">${esc(x.path)}</div></div>
             <button class="btn secondary" data-act="folder-open" data-p="${esc(x.path)}">${t("open")}</button>
             <button class="btn secondary" data-act="folder-add" data-p="${esc(x.path)}" data-kind="auto">${t("add_auto")}</button></div>`).join("")}</div>`
       : `<div class="empty">${t("search_none")}</div>`);
-    const searchBlock = `<div class="q-toolbar" style="padding:8px 0 0">
+    const searchBlock = `<div class="q-toolbar pt-8">
         <input id="folder-q" class="search-input" type="search" placeholder="${t("search_placeholder")}" value="${esc(sq.q || "")}"/>
         <button class="btn secondary" data-act="folder-search">${t("search")}</button>
       </div>${searchResults}`;
@@ -847,9 +858,9 @@
         ${roots || `<div class="empty">${t("folders_none")}</div>`}
       </div>
       <div class="panel">
-        <div class="panel-header">${t("browse")} · <span class="mono" style="font-size:12px">${esc(b.path || "")}</span></div>
+        <div class="panel-header">${t("browse")} · <span class="mono fs-12">${esc(b.path || "")}</span></div>
         ${rsel}
-        <div class="row"><div class="title mono" style="font-size:12px;word-break:break-all">${esc(b.path || "")}</div></div>
+        <div class="row"><div class="title mono fs-12 wrap-any">${esc(b.path || "")}</div></div>
         ${searchBlock}
         ${warnRow}
         <div class="form-row">
@@ -921,6 +932,7 @@
     busy(prog(1));
     let done = 0;
     let cascaded = 0;
+    let failed = 0;
     const deps = [];
     for (const it of uniq) {
       done++;
@@ -932,7 +944,10 @@
                                  platform: it.platform }) });
         if (r && r.cascade && r.cascade.length) cascaded++;
         if (r && r.dependent && r.dependent.includes("telegram")) deps.push(it);
-      } catch (_) { /* продолжаем по остальным */ }
+      } catch (e) {
+        failed++;
+        console.warn("queue remove failed", it.entity_type, it.entity_id, it.platform, e);
+      }
     }
     if (deps.length) {
       const ask2 = t("confirm_cascade_tg_bulk").replace("%s", deps.length);
@@ -946,13 +961,17 @@
             await api("/queue/remove", { method: "POST", body: JSON.stringify({
               entity_type: it.entity_type, entity_id: it.entity_id, platform: "telegram" }) });
             cascaded++;
-          } catch (_) {}
+          } catch (e) {
+            failed++;
+            console.warn("telegram cascade remove failed", it.entity_id, e);
+          }
         }
       }
     }
     unbusy();
     state.queueSelected = {};
-    toast(cascaded ? t("cascade_deleted") : `${t("queue_removed")}: ${uniq.length}`);
+    const base = cascaded ? t("cascade_deleted") : `${t("queue_removed")}: ${uniq.length}`;
+    toast(failed ? `${base} · ${t("t_bulk_failed").replace("%s", failed)}` : base);
     return load();
   }
 
@@ -964,6 +983,7 @@
     const prog = (n) => t("queue_bulk_prog").replace("%s", n).replace("%s", chosen.length);
     busy(prog(1));
     let done = 0;
+    let failed = 0;
     for (const it of chosen) {
       done++;
       const el = document.getElementById("busy");
@@ -975,12 +995,15 @@
           hashtags: tags, date: it.date || "", time: it.time || "",
           cover: it.cover_path || "",
         }) });
-      } catch (_) { /* продолжаем */ }
+      } catch (e) {
+        failed++;
+        console.warn("bulk tag edit failed", it.entity_type, it.entity_id, it.platform, e);
+      }
     }
     unbusy();
     state.queueBulkTags = null;
     state.queueSelected = {};
-    toast(t("t_saved"));
+    toast(failed ? `${t("t_saved")} · ${t("t_bulk_failed").replace("%s", failed)}` : t("t_saved"));
     return load();
   }
 
@@ -1047,16 +1070,16 @@
       const form = (edit && edit.key === key)
         ? `<div class="panel q-edit-panel">
              <div class="form-row"><label class="meta">${t("edit_title")}
-               <input id="qe-title" type="text" value="${esc(it.title_text || "")}" style="width:100%"/></label></div>
+               <input id="qe-title" type="text" value="${esc(it.title_text || "")}" class="w-full"/></label></div>
              <div class="form-row"><label class="meta">${t("edit_desc")}
-               <textarea id="qe-desc" rows="4" style="width:100%">${esc(it.description_text || "")}</textarea></label></div>
+               <textarea id="qe-desc" rows="4" class="w-full">${esc(it.description_text || "")}</textarea></label></div>
              <div class="form-row"><label class="meta">${t("edit_tags")}
-               <input id="qe-tags" type="text" value="${esc(it.hashtags_text || "")}" style="width:100%"/></label></div>
+               <input id="qe-tags" type="text" value="${esc(it.hashtags_text || "")}" class="w-full"/></label></div>
              <div class="form-row">
                <label class="meta">${t("edit_cover")}
                  <select id="qe-cover">
                    <option value="">${t("cover_none")}</option>
-                   ${(it.covers || []).map((c) => `<option value="${c}" ${c === it.cover_path ? "selected" : ""}>${c.split("/").pop()}</option>`).join("")}
+                   ${(it.covers || []).map((c) => `<option value="${esc(c)}" ${c === it.cover_path ? "selected" : ""}>${esc(c.split("/").pop())}</option>`).join("")}
                  </select>
                </label>
                <button class="btn secondary" data-act="cover-pick"
@@ -1193,8 +1216,8 @@
           <div class="form-row">
             <select id="tp-p">${((d.test.platforms || []).map((p) => `<option>${esc(p)}</option>`).join("")) || `<option>youtube</option>`}</select>
             <input id="tp-delay" type="number" min="${d.test.min_delay_minutes || 1}" max="${d.test.max_delay_minutes || 120}"
-              value="${d.test.default_delay_minutes || 1}" title="${t("test_delay")}" style="width:86px" />
-            <select id="tp-e" style="flex:1;min-width:180px" title="${t("test_entity")}">${testEntityOpts(d.queue)}</select>
+              value="${d.test.default_delay_minutes || 1}" title="${t("test_delay")}" class="w-86" />
+            <select id="tp-e" class="flex-1 min-180" title="${t("test_entity")}">${testEntityOpts(d.queue)}</select>
           </div>
           <div class="form-row">
             <button class="btn primary" data-act="test-schedule">${t("test_schedule")}</button>
@@ -1206,9 +1229,9 @@
       <div class="panel"><div class="panel-header">${t("force_link_title")}</div>
         <div class="row"><span class="meta">${t("fl_hint")}</span></div>
         <div class="form-row">
-          <input id="fl-id" type="number" placeholder="${t("fl_id_ph")}" style="width:120px" />
+          <input id="fl-id" type="number" placeholder="${t("fl_id_ph")}" class="w-120" />
           <select id="fl-p">${opts}</select>
-          <input id="fl-url" type="url" placeholder="https://..." style="flex:1;min-width:140px" />
+          <input id="fl-url" type="url" placeholder="https://..." class="flex-1 min-140" />
           <button class="btn primary" data-act="force-link">${t("save")}</button>
         </div>
       </div>`;
@@ -1233,7 +1256,7 @@
     if (!items.length) return "";
     const rows = items.map((r) => {
       const pid = String(r.details || "").split(" ")[0];
-      return `<div class="row" style="align-items:center;gap:8px">
+      return `<div class="row row-center-8">
         <span class="meta">${esc(r.platform)} · ${esc(r.entity_type)}#${esc(String(r.entity_id))} · ${esc(pid)}</span>
         <button class="btn secondary" data-act="test-cancel" data-pid="${esc(pid)}">${t("test_cancel")}</button>
       </div>`;
@@ -1299,7 +1322,7 @@
 
   function helpSection(titleKey, items) {
     const rows = items.map(([nameKey, descKey]) =>
-      `<div class="row"><div class="title">${t(nameKey)}</div><span class="meta" style="flex:2;text-align:right">${t(descKey)}</span></div>`
+      `<div class="row"><div class="title">${t(nameKey)}</div><span class="meta flex-2-right">${t(descKey)}</span></div>`
     ).join("");
     return `<div class="panel"><div class="panel-header">${t(titleKey)}</div>${rows}</div>`;
   }
@@ -1362,7 +1385,7 @@
   const DAY_KEYS = [["mon", "Пн"], ["tue", "Вт"], ["wed", "Ср"], ["thu", "Чт"], ["fri", "Пт"], ["sat", "Сб"], ["sun", "Вс"]];
   function dayChecksKind(scope, kind, selected) {
     return DAY_KEYS.map(([k, l]) =>
-      `<label class="chk" style="margin-right:6px"><input type="checkbox" data-day="${scope}|${kind}" value="${k}"${(selected || []).includes(k) ? " checked" : ""}/> ${l}</label>`
+      `<label class="chk mr-6"><input type="checkbox" data-day="${scope}|${kind}" value="${k}"${(selected || []).includes(k) ? " checked" : ""}/> ${l}</label>`
     ).join("");
   }
   function schedBlock(key, title, eff, block, withLimit) {
@@ -1379,13 +1402,13 @@
     const saTimes = (sa.times || effSa.times || []).join(", ");
     const limit = withLimit ? ((block && block.daily_limit) ?? ((eff && eff.daily_limit) ?? "")) : "";
     return `<div class="panel"><div class="panel-header">${title}</div>
-      <div class="row"><span class="meta" style="min-width:130px">${t("sched_long")}</span>
+      <div class="row"><span class="meta min-130">${t("sched_long")}</span>
         <div>${dayChecksKind(key, "long", longDays)} <input type="time" data-time="${key}|long" value="${longTime}"/></div></div>
-      <div class="row"><span class="meta" style="min-width:130px">${t("sched_thematic")}</span>
+      <div class="row"><span class="meta min-130">${t("sched_thematic")}</span>
         <div><input type="time" data-time="${key}|thematic" value="${thTime}"/></div></div>
-      <div class="row"><span class="meta" style="min-width:130px">${t("sched_standalone")}</span>
+      <div class="row"><span class="meta min-130">${t("sched_standalone")}</span>
         <div>${dayChecksKind(key, "standalone", saDays)} <input type="text" data-times="${key}|standalone" value="${saTimes}" placeholder="12:00, 18:00"/></div></div>
-      ${withLimit ? `<div class="row"><span class="meta" style="min-width:130px">${t("sched_limit")}</span>
+      ${withLimit ? `<div class="row"><span class="meta min-130">${t("sched_limit")}</span>
         <input type="number" min="0" max="50" data-limit="${key}" value="${limit}"/></div>` : ""}
       <div class="form-row">
         <button class="btn primary" data-act="sched-save" data-p="${key}">${t("sched_save")}</button>
@@ -1399,7 +1422,7 @@
       `<div class="row"><div class="title">${icon("users", 15)} ${esc(g.name)}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
         <button class="btn danger" data-act="group-remove" data-p="${esc(g.name)}">${t("group_remove")}</button></div>`).join("");
     const groupForm = `<div class="form-row"><input id="group-name" placeholder="${t("group_name")}" />
-      <span class="meta">${plats.map((p) => `<label class="chk" style="margin-right:6px"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
+      <span class="meta">${plats.map((p) => `<label class="chk mr-6"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
       <button class="btn secondary" data-act="group-add">${t("group_add")}</button></div>`;
     return `<div class="panel"><div class="panel-header">${t("groups_header")}</div>
       ${groupRows || `<div class="empty">${t("groups_none")}</div>`}${groupForm}</div>`;
@@ -2175,6 +2198,11 @@
     }
     if (dev && !state.initData) state.initData = "dev";
 
+    // B6: сначала локализуем навигацию/заголовки, потом показываем приложение (без FOUC)
+    updateNavLabels();
+    syncTabs();
+    $("btn-refresh").textContent = t("refresh");
+    $("title").textContent = titles()[state.view] || state.view;
     $("gate").hidden = true;
     $("app").hidden = false;
     if (state.user) {
@@ -2183,9 +2211,6 @@
     }
     api("/version").then((v) => { $("ver").textContent = "v" + (v.version || "?"); }).catch(() => {});
 
-    updateNavLabels();
-    syncTabs();
-    $("btn-refresh").textContent = t("refresh");
     $("lang").querySelectorAll("button").forEach((b) =>
       b.classList.toggle("active", b.dataset.lang === state.lang));
 

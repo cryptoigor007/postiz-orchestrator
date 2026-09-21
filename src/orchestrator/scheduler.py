@@ -49,7 +49,7 @@ class Scheduler:
             if platform in pm and pm[platform]:
                 return pm[platform]
         except Exception:
-            pass
+            logger.debug("scheduler parse failed", exc_info=True)
         if pcfg is not None:
             return row["wide_path"] if pcfg.video_variant == "wide" else row["vertical_path"]
         return row.get("video_path")

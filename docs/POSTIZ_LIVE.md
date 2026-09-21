@@ -1,7 +1,7 @@
 # Postiz live adapter (v7.3.1)
 
 ## Confirmed
-- BASE: https://192-168-100-60.sslip.io (self-signed cert → `POSTIZ_VERIFY_TLS=0`)
+- BASE: https://192-168-100-60.sslip.io (self-signed cert; для локальной отладки можно `POSTIZ_VERIFY_TLS=0  # только локальная отладка (A8: в бою verify ON)`, **в бою — только с доверенным сертификатом**, A8)
 - Auth: `Authorization: <api_key>` (raw, not Bearer) → `POSTIZ_AUTH_STYLE=raw`
 - Upload: POST /public/v1/upload (multipart field `file`) → media `{ id, path }`
 - Posts: POST/GET/DELETE /public/v1/posts

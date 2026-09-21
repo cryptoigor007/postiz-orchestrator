@@ -168,6 +168,20 @@ class Database:
             "SELECT value FROM system_state WHERE key='schema_version'"
         ).fetchone()
         current = int(row[0]) if row else 0
+        # D11: перед изменением схемы делаем файловый бэкап (миграции только вперёд)
+        if current and current < SCHEMA_VERSION:
+            try:
+                import shutil as _shutil
+                from pathlib import Path as _P
+
+                src = _P(self.path)
+                if src.is_file() and src.stat().st_size > 0:
+                    bdir = src.parent.parent / "backups"
+                    bdir.mkdir(parents=True, exist_ok=True)
+                    dst = bdir / f"pre_migration_v{current}_to_v{SCHEMA_VERSION}_{_utc_now().replace(':', '').replace('-', '')}.sqlite"
+                    _shutil.copy2(src, dst)
+            except Exception:
+                pass  # бэкап best-effort, миграцию не блокируем
         if current < 8:
             conn.executescript("""
                 CREATE INDEX IF NOT EXISTS idx_eps_platform_sched

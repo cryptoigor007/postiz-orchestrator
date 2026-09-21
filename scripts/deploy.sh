@@ -23,7 +23,7 @@ echo ">> host: $HOST"
 echo ">> rsync -> $HOST:$DEST"
 rsync -az --delete --no-owner --no-group \
   --exclude venv --exclude .git --exclude __pycache__ --exclude '.pytest_cache' \
-  --exclude data --exclude backups --exclude logs --exclude '.DS_Store' --exclude '.env' \
+  --exclude data --exclude backups --exclude logs --exclude certs --exclude '.DS_Store' --exclude '.env' \
   ./ "$HOST:$DEST/"
 
 echo ">> ownership + restart"

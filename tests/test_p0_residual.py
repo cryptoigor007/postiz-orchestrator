@@ -317,8 +317,8 @@ def test_csp_header_has_nonce_without_script_unsafe_inline(tmp_path):
             csp = r.headers.get("Content-Security-Policy") or ""
             html = r.read().decode()
         assert "script-src 'self' https://telegram.org 'nonce-" in csp
-        assert "'unsafe-inline'" not in csp.split("style-src")[0], "script-src не должен иметь unsafe-inline"
-        assert "style-src 'self' 'unsafe-inline'" in csp  # осознанно (style-атрибуты UI)
+        assert "'unsafe-inline'" not in csp, "CSP не должен содержать unsafe-inline (A2)"
+        assert "style-src 'self' 'nonce-" in csp  # строгий style-src с nonce
         n = csp.split("'nonce-")[1].split("'")[0]
         assert f'nonce="{n}"' in html, "nonce из заголовка должен совпадать с телом"
     finally:

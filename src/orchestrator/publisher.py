@@ -207,6 +207,18 @@ class Publisher:
         media = None
         if media_path:
             try:
+                # D2: Telegram Bot API не принимает файлы >50 МБ — ловим до создания поста
+                if platform == "telegram" and media_path:
+                    try:
+                        import os as _os
+                        _mb = _os.path.getsize(media_path) / (1024 * 1024)
+                    except OSError:
+                        _mb = 0
+                    if _mb > 50 and not int(getattr(self.cfg.media, "telegram_max_mb", 0) or 0):
+                        raise RuntimeError(
+                            f"telegram: файл {_mb:.0f} МБ > лимита Bot API 50 МБ "
+                            "(включите media.telegram_max_mb для сжатия или используйте link-режим)"
+                        )
                 media = make_media(media_path, platform, self.cfg, self.postiz, self.broker)
             except Exception as e:
                 self.db.execute(
@@ -259,7 +271,7 @@ class Publisher:
                     self.db.log(entity_type, entity_id, platform, "orphan_media", ",".join(str(x) for x in orphans))
                     logger.warning("Orphan media after create fail: %s", orphans)
             except Exception:
-                pass
+                logger.debug("orphan media log failed", exc_info=True)
             if last_err is not None:
                 raise last_err
             raise RuntimeError(err_msg)

@@ -697,3 +697,18 @@
   grid 2 колонки, overflow=[]) + скриншоты (status/шторка/видео/desktop); desktop-замер: tabbar none,
   sidebar flex, appW 980. Ложная тревога про «переполнение» — кламп окна headless Chrome (мин ~500px).
 - Тесты 310 → 321 (+11 статических UI), ruff 0, check.sh PASS, gui_check PASS (боевой, b819).
+
+## 2026-09-21 — 8.3.1: закрытие перечня A–F (security/ops residual)
+- A1: пароль Postiz UI вычищен из git и **сменён** (bcrypt cost 10; проверено: новый вход 200,
+  старый 400); новый — в root-only файлах на VM и pve.
+- A2: 26 инлайн-стилей → утилит-классы; CSP строгий (script+style nonce, без unsafe-inline);
+  живая проверка: панель b820 рендерится корректно (CDP-скриншот), GUI-проверка PASS.
+- A8: invece `POSTIZ_VERIFY_TLS=0` — pinned CA `/etc/orchestrator/postiz-ca.pem` + PARTIAL_CHAIN;
+  проверено: list_scheduled=44, 0 CERTIFICATE_VERIFY_FAILED у нового процесса. (Причина прошлой
+  неудачи: deploy --delete снёс `certs/`, и Python требует PARTIAL_CHAIN для self-signed leaf.)
+- A3: `scripts/check_xss.py` в check.sh и CI. A4: маскировка key в логах + Referrer-Policy.
+- A5: warning при пустом prod_integration_ids. D11: автобэкап перед миграцией.
+- D2: предпроверка TG>50МБ. D12: ошибки bulk в тосте. D14: тост «сессия устарела».
+- B1–B6: доки синхронизированы, FOUC убран, создан docs/RESIDUAL.md (единый список).
+- C2: 375×667 измерено (docScrollW=375, без переполнений). E4: CI + xss-линтер + jsdom-smoke.
+- Тесты 322, ruff 0, check.sh PASS, gui-smoke PASS (локально), деплой b820 ок.

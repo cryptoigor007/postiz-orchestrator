@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "819"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "820"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -272,9 +272,11 @@ class WebAppAPI:
         split = urlsplit(path)
         qpath = split.path
         query = dict(parse_qsl(split.query))
+        # A4: не светим ?key=… в логах (access log/журнал видит URL)
+        _safe_path = re.sub(r"(key=)[^&\s]+", r"\1***", path)
         logger.info(
             "WEBAPP_REQ %s %s ua=%s ip=%s",
-            method, path,
+            method, _safe_path,
             (headers.get("User-Agent") or headers.get("user-agent") or "")[:70],
             headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or "",
         )
@@ -287,7 +289,8 @@ class WebAppAPI:
             if method == "GET" and qpath == "/webapp/diag":
                 logger.warning(
                     "WEBAPP_DIAG href=%s tg=%s key=%s",
-                    query.get("u"), query.get("tg"), query.get("k"),
+                    re.sub(r"(key=)[^&\s]+", r"\1***", str(query.get("u") or "")),
+                    query.get("tg"), query.get("k"),
                 )
                 return 204, b"", "text/plain"
             if method == "GET":
@@ -1778,8 +1781,8 @@ class WebAppAPI:
     def _compose_index(self, key: str = "", nonce: str = "") -> bytes:
         """Self-contained page: inline CSS/JS so nothing can be cached separately.
 
-        CSP: инлайн-скрипты получают per-request nonce (script-src без 'unsafe-inline');
-        style-src по-прежнему 'unsafe-inline' — в UI используются style-атрибуты (косметика).
+        CSP (A2): и script, и style подписаны per-request nonce; 'unsafe-inline' не используется —
+        инлайн-стилей в разметке нет (утилитарные классы), динамика ставится через CSSOM.
         """
         try:
             html = (WEBAPP_DIR / "index.html").read_text(encoding="utf-8")

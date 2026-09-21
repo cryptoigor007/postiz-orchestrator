@@ -784,3 +784,15 @@
   восстановление `error`→`scheduled`.
 - +4 теста (328): `test_safety_block_releases_publishing_reserve`,
   `test_start_date_in_past_no_past_slots`, `tests/test_status_sync_recovery.py` (2), fix фабрики.
+
+## 2026-09-21 — 8.4.7: P1 UI по итогам аудита (мёртвые экраны и кнопки)
+- **P1-13** «Ошибки»/«Справка» открывали «Настройки»: `render()` сводил failed/help/settings/schedule
+  в `renderSettings`. Теперь отдельные ветки, `failedHtml()` снова вызывается.
+- **P1-11** «Остаток»: не было обработчика `backlog-answer` (клик молча уходил в `load()`);
+  добавлен вызов `POST /backlog/answer`, вернулось поле «с какой даты» и вкл/выкл распределения.
+- **P1-12** кнопка «Отмена» в прогрессе: делегат `[data-act]` был только на `#content`, оверлей — на
+  `body`; теперь оверлей сам делегирует действия.
+- **P1-10** `/queue/edit` при ошибке оставлял вечный busy-оверлей: `try/catch/finally { unbusy(); }`.
+- **P1-14** гонка `load()`: добавлен счётчик поколений `_loadGen` — поздний ответ прошлого экрана
+  больше не перезаписывает `state.data` и не перерисовывает текущий экран.
+- +5 тестов (333): `tests/test_webapp_wiring.py` + jsdom-smoke PASS; build 825→826.

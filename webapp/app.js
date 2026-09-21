@@ -533,6 +533,12 @@
       el.id = "busy";
       el.className = "busy-overlay";
       document.body.appendChild(el);
+      // P1-12: оверлей живёт на body, а делегат [data-act] — только на #content,
+      // поэтому кнопка «Отмена» в прогрессе была мертва.
+      el.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-act]");
+        if (btn) onAction(btn.dataset.act, btn);
+      });
     }
     return el;
   }
@@ -830,45 +836,51 @@
     help: t("title_help"), manual: t("title_manual"), settings: t("title_settings"),
   });
 
+  let _loadGen = 0;  // P1-14: поколение запроса — поздний ответ прошлого экрана игнорируем
+
   async function load() {
     const v = state.view;
+    const gen = ++_loadGen;
     content().innerHTML = `<div class="empty">${t("loading")}</div>`;
     try {
-      if (v === "status") state.data = await api("/status");
+      let data;
+      if (v === "status") data = await api("/status");
       else if (v === "folders") {
-        state.data = await api("/roots");
+        data = await api("/roots");
         if (!state.browse) state.browse = await api("/browse");
       }
-      else if (v === "calendar") state.data = await api("/calendar");
-      else if (v === "queue") state.data = await api("/queue");
-      else if (v === "platforms") state.data = await api("/platforms");
+      else if (v === "calendar") data = await api("/calendar");
+      else if (v === "queue") data = await api("/queue");
+      else if (v === "platforms") data = await api("/platforms");
       else if (v === "settings" || v === "failed" || v === "help" || v === "schedule") {
         const sched = await api("/schedule_settings");
         const failed = await api("/failed");
-        state.data = { sched, failed };
+        data = { sched, failed };
       }
       else if (v === "tail") {
         const tail = await api("/tail");
         const backlog = await api("/backlog");
-        state.data = { items: tail.items || [], backlog: backlog.platforms || [] };
+        data = { items: tail.items || [], backlog: backlog.platforms || [] };
       }
-      else if (v === "failed") state.data = await api("/failed");
       else if (v === "actions") {
         const status = await api("/status");
         let queue = { items: [] };
         let test = { enabled: false, recent: [] };
         try { queue = await api("/queue"); } catch (_) {}
         try { test = await api("/test/status"); } catch (_) {}
-        state.data = { ...status, queue, test };
+        data = { ...status, queue, test };
       }
-      else if (v === "metrics") state.data = await api("/metrics");
+      else if (v === "metrics") data = await api("/metrics");
       else if (v === "manual") {
         const plan = await api("/manual/plan");
         const uploads = await api("/manual/uploads");
-        state.data = { plan, items: uploads.items || [] };
+        data = { plan, items: uploads.items || [] };
       }
+      if (gen !== _loadGen) return;  // пришёл ответ устаревшего экрана — не перерисовываем
+      state.data = data;
       render();
     } catch (e) {
+      if (gen !== _loadGen) return;
       content().innerHTML = `<div class="empty">${t("error_prefix")}: ${esc(e.message)}</div>`;
     }
   }
@@ -1437,6 +1449,9 @@
       const slot = p.slot ? `<span class="mono">${esc(String(p.slot).slice(0, 16).replace("T", " "))}</span>` : "";
       const pname = String(p.platform || "");
       const title = pname ? pname.charAt(0).toUpperCase() + pname.slice(1) : "—";
+      const tailBtn = p.tail_mode
+        ? `<button class="btn secondary" data-act="tail-off" data-p="${esc(p.platform)}">${t("disable")}</button>`
+        : `<button class="btn secondary" data-act="tail-on" data-p="${esc(p.platform)}">${t("enable")}</button>`;
       return `<div class="item">
         <span class="q-plat big">${pIcon(p.platform)}</span>
         <div class="item__main">
@@ -1449,10 +1464,12 @@
         <button class="btn primary" data-act="backlog-answer" data-p="${esc(p.platform)}" data-a="distribute">${t("backlog_distribute")}</button>
         <button class="btn secondary" data-act="backlog-answer" data-p="${esc(p.platform)}" data-a="wait">${t("backlog_wait")}</button>
         <button class="btn secondary danger-text" data-act="backlog-answer" data-p="${esc(p.platform)}" data-a="skip">${t("backlog_skip")}</button>
-      </div>`;
+      </div>
+      <div class="btn-grid">${tailBtn}</div>`;
     }).join("");
     content().innerHTML = `<div class="panel"><div class="panel-head"><h3>${t("tail_title")}</h3></div>
       <div class="hint">${t("tail_explain")}</div>
+      ${rows ? dateRow : ""}
       ${rows || `<div class="empty">${t("no_data")}</div>`}</div>`;
   }
 
@@ -1843,7 +1860,13 @@
     else if (state.view === "calendar") renderCalendar(d);
     else if (state.view === "queue") renderQueue(d);
     else if (state.view === "platforms") renderPlatforms(d);
-    else if (state.view === "settings" || state.view === "failed" || state.view === "help" || state.view === "schedule") renderSettings(d);
+    else if (state.view === "failed") {
+      content().innerHTML = `<div class="view-enter">${failedHtml(d && d.failed)}</div>`;
+    }
+    else if (state.view === "help") {
+      content().innerHTML = `<div class="view-enter">${helpHtml()}</div>`;
+    }
+    else if (state.view === "settings" || state.view === "schedule") renderSettings(d);
     else if (state.view === "tail") renderTail(d);
     else if (state.view === "actions") renderActions(d);
     else if (state.view === "metrics") renderMetrics(d);
@@ -2282,21 +2305,28 @@
           return n ? n.value : "";
         };
         busy(t("working"));
-        const r = await api("/queue/edit", {
-          method: "POST",
-          body: JSON.stringify({
-            entity_type: el.dataset.et,
-            entity_id: Number(el.dataset.eid),
-            platform: el.dataset.p,
-            title: val("qe-title"),
-            description: val("qe-desc"),
-            hashtags: val("qe-tags"),
-            date: val("qe-date"),
-            time: val("qe-time"),
-            cover: val("qe-cover"),
-          }),
-        });
-        unbusy();
+        let r;
+        try {
+          r = await api("/queue/edit", {
+            method: "POST",
+            body: JSON.stringify({
+              entity_type: el.dataset.et,
+              entity_id: Number(el.dataset.eid),
+              platform: el.dataset.p,
+              title: val("qe-title"),
+              description: val("qe-desc"),
+              hashtags: val("qe-tags"),
+              date: val("qe-date"),
+              time: val("qe-time"),
+              cover: val("qe-cover"),
+            }),
+          });
+        } catch (e) {
+          toast(`${t("error_prefix")}: ${e.message}`);
+          return;
+        } finally {
+          unbusy();  // P1-10: при ошибке оверлей не должен оставаться навсегда
+        }
         state.queueEdit = null;
         toast(`${t("t_saved")}: ${r.updated || 0}/${r.recreated || 0}`);
         return load();
@@ -2412,6 +2442,27 @@
         }
         state.scan = null;
         return;
+      }
+      if (act === "backlog-answer") {
+        // P1-11: кнопки «Распределить/Ждать/Не публиковать» не имели обработчика.
+        const fromDate = ($("backlog-date") || {}).value || "";
+        busy(t("working"));
+        try {
+          await api("/backlog/answer", {
+            method: "POST",
+            body: JSON.stringify({
+              platform: el.dataset.p,
+              answer: el.dataset.a,
+              from_date: fromDate,
+            }),
+          });
+        } catch (e) {
+          toast(`${t("error_prefix")}: ${e.message}`);
+          return;
+        } finally {
+          unbusy();
+        }
+        return load();
       }
       if (act === "pause-all") {
         await api("/pause", { method: "POST", body: "{}" });

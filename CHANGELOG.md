@@ -1,5 +1,28 @@
 # Changelog
 
+## 8.4.9 — Удаление: направление каскада + мягкое удаление и API корзины
+
+### Added
+- **Схема v14**: `entity_platform_status.deleted_at/deleted_reason/cascade_from`,
+  `long_videos.shorts.scan_ignored` (миграция аддитивная, авто-бэкап уже есть).
+- **`queue/remove` переписан на `delete_plan`**: правила направления —
+  удаление **с YouTube автоматически** снимает Telegram (ready/scheduled/updating/published);
+  удаление **с Telegram** снимает YouTube только по `also_youtube`;
+  серия — по `with_shorts` (только серия / серия + шорты).
+- `plan_only: true` возвращает точный состав удаления (для интерактивного окна), БД не меняется.
+- **API корзины**: `GET /trash` (список `skipped` с датой/причиной/каскадом),
+  `POST /trash/restore` (`ids[]` или `all`), `POST /trash/purge` (окончательно, файлы не трогаем).
+- `queue/restore` сбрасывает и новые tombstone-поля.
+
+### Changed
+- «Удалить везде» больше **не hard delete**: строки уходят в корзину и восстановимы;
+  файлы на диске не удаляются, скан не resurrect'ит (запись сущности остаётся).
+- Текст подтверждения в панели приведён к правде («попадёт в корзину»).
+
+### Tests
+- +6 (343): направление каскада (TG-only / TG+YT), план без изменений, published-блок,
+  trash list/restore(ids/all)/purge. version 8.4.9 / b827
+
 ## 8.4.8 — P1/P2 безопасность и устойчивость (API, HTTP, брокер, deploy)
 
 ### Security / reliability

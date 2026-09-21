@@ -87,7 +87,8 @@ def test_migration_v13_moves_pending_to_backlog(tmp_path):
     assert st["pending_backlog_at"] == "2026-01-01T00:00:00+00:00"
     assert st["pending_series_end_question"] == 0
     ver = db2.fetchone("SELECT value FROM system_state WHERE key='schema_version'")["value"]
-    assert ver == "13"
+    from orchestrator.db import SCHEMA_VERSION
+    assert ver == str(SCHEMA_VERSION)
 
 
 # --- P0.10: backlog-слоты из effective (override) ---

@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "826"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "827"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -633,210 +633,169 @@ class WebAppAPI:
                         "AND entity_type=? AND entity_id=?", (etype, eid))
                     self.db.execute(
                         "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
-                        "last_error=NULL WHERE status='skipped' AND entity_type=? AND entity_id=?",
+                        "last_error=NULL, deleted_at=NULL, deleted_reason=NULL, cascade_from=NULL "
+                        "WHERE status='skipped' AND entity_type=? AND entity_id=?",
                         (etype, eid))
                 elif data.get("all"):
                     before = self.db.fetchone(
                         "SELECT COUNT(*) AS c FROM entity_platform_status WHERE status='skipped'")
                     self.db.execute(
                         "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
-                        "last_error=NULL WHERE status='skipped'")
+                        "last_error=NULL, deleted_at=NULL, deleted_reason=NULL, cascade_from=NULL "
+                        "WHERE status='skipped'")
                 else:
                     # P2-4: раньше невалидный entity_id (0/"abc") попадал в else и восстанавливал ВСЁ.
                     return 400, {"error": "entity_type/entity_id or all=true required"}, "application/json"
                 return 200, {"ok": True, "restored": (before or {}).get("c", 0)}, "application/json"
+            if method == "GET" and route == "trash":
+                # Корзина: всё, что помечено skipped (мягкое удаление), с группировкой на клиенте.
+                rows = self.db.fetchall(
+                    """
+                    SELECT eps.entity_type, eps.entity_id, eps.platform, eps.status,
+                           eps.deleted_at, eps.deleted_reason, eps.cascade_from,
+                           eps.postiz_scheduled_for,
+                           COALESCE(lv.title_text, lv.title, sh.title_text) AS title,
+                           sh.parent_video_id AS parent_id
+                    FROM entity_platform_status eps
+                    LEFT JOIN long_videos lv
+                           ON eps.entity_type='long_video' AND lv.id=eps.entity_id
+                    LEFT JOIN shorts sh
+                           ON eps.entity_type='short' AND sh.id=eps.entity_id
+                    WHERE eps.status='skipped'
+                    ORDER BY (eps.deleted_at IS NULL), eps.deleted_at DESC,
+                             eps.entity_type, eps.entity_id
+                    LIMIT 500
+                    """
+                )
+                items = []
+                for r in rows:
+                    kind = "Фильм" if r["entity_type"] == "long_video" else "Шортс"
+                    title = (r.get("title") or "").strip() or f'{kind} #{r["entity_id"]}'
+                    items.append({
+                        "key": f'{r["entity_type"]}|{r["entity_id"]}|{r["platform"]}',
+                        "entity_type": r["entity_type"],
+                        "entity_id": r["entity_id"],
+                        "platform": r["platform"],
+                        "title": title,
+                        "deleted_at": r["deleted_at"],
+                        "deleted_reason": r["deleted_reason"],
+                        "cascade_from": r["cascade_from"],
+                        "scheduled_for": r["postiz_scheduled_for"],
+                        "parent_id": r["parent_id"],
+                    })
+                return 200, {"items": items, "total": len(items)}, "application/json"
+            if method == "POST" and route in ("trash/restore", "trash/purge"):
+                ids = data.get("ids") or []
+                all_flag = bool(data.get("all"))
+                if all_flag:
+                    rows = self.db.fetchall(
+                        "SELECT entity_type, entity_id, platform FROM entity_platform_status "
+                        "WHERE status='skipped'")
+                elif isinstance(ids, list) and ids:
+                    rows = []
+                    for item in ids:
+                        parts = str(item).split("|")
+                        if len(parts) == 3 and parts[0] in ("long_video", "short"):
+                            try:
+                                rows.append({"entity_type": parts[0],
+                                             "entity_id": int(parts[1]),
+                                             "platform": parts[2]})
+                            except ValueError:
+                                continue
+                else:
+                    return 400, {"error": "ids or all=true required"}, "application/json"
+                n = 0
+                for r in rows:
+                    if route == "trash/restore":
+                        self.db.execute(
+                            "UPDATE entity_platform_status SET status='ready', postiz_post_id=NULL, "
+                            "last_error=NULL, deleted_at=NULL, deleted_reason=NULL, cascade_from=NULL "
+                            "WHERE entity_type=? AND entity_id=? AND platform=? AND status='skipped'",
+                            (r["entity_type"], r["entity_id"], r["platform"]))
+                    else:
+                        self.db.execute(
+                            "DELETE FROM entity_platform_status "
+                            "WHERE entity_type=? AND entity_id=? AND platform=? AND status='skipped'",
+                            (r["entity_type"], r["entity_id"], r["platform"]))
+                    n += 1
+                self.db.log("system", None, "",
+                            "trash_restore" if route == "trash/restore" else "trash_purge",
+                            f"n={n}")
+                key = "restored" if route == "trash/restore" else "purged"
+                return 200, {"ok": True, key: n}, "application/json"
             if method == "POST" and route == "queue/remove":
                 etype = str(data.get("entity_type") or "").strip()
-                keep_shorts = bool(data.get("keep_shorts"))
+                if etype not in ("long_video", "short"):
+                    return 400, {"error": "entity_type required"}, "application/json"
                 try:
                     eid = int(data.get("entity_id") or 0)
                 except Exception:
                     eid = 0
-                if etype not in ("long_video", "short") or not eid:
-                    return 400, {"error": "entity_type/entity_id required"}, "application/json"
-                if not self.db.fetchone(
-                        "SELECT 1 FROM entity_platform_status WHERE entity_type=? AND entity_id=? "
-                        "LIMIT 1", (etype, eid)):
-                    logger.info("queue remove: %s#%s уже удалено", etype, eid)
-                    return 200, {"ok": True, "removed": 0, "blocked": [],
-                                 "note": "already"}, "application/json"
+                if not eid:
+                    return 400, {"error": "entity_id required"}, "application/json"
                 platform = str(data.get("platform") or "").strip()
-                if platform:
-                    # Удаляем ТОЛЬКО эту платформу: Telegram не трогает YouTube и наоборот
-                    prows = self.db.fetchall(
-                        "SELECT status FROM entity_platform_status "
-                        "WHERE entity_type=? AND entity_id=? AND platform=?",
-                        (etype, eid, platform))
-                    if not prows:
-                        return 200, {"ok": True, "removed": 0, "blocked": [],
-                                     "note": "already"}, "application/json"
-                    if any((r["status"] or "") == "published" for r in prows):
-                        return 200, {"ok": True, "removed": 0,
-                                     "blocked": [f"{etype}#{eid}:{platform}"]}, "application/json"
-                    postiz0 = self.comps.get("postiz")
-                    if postiz0 is not None:
-                        from concurrent.futures import ThreadPoolExecutor
-                        pids0 = [str(r["postiz_post_id"]) for r in self.db.fetchall(
-                            "SELECT postiz_post_id FROM entity_platform_status "
-                            "WHERE entity_type=? AND entity_id=? AND platform=? AND postiz_post_id IS NOT NULL",
-                            (etype, eid, platform))]
-
-                        def _del(pid: str) -> None:
-                            try:
-                                if hasattr(postiz0, "delete_post"):
-                                    postiz0.delete_post(pid)
-                                elif hasattr(postiz0, "set_status"):
-                                    postiz0.set_status(pid, "draft")
-                            except Exception:
-                                logger.warning("queue remove: удаление поста %s не удалось", pid,
-                                               exc_info=True)
-
-                        if pids0:
-                            with ThreadPoolExecutor(max_workers=8) as ex:
-                                list(ex.map(_del, pids0))
-                    # мягкое удаление: строка помечается skipped, чтобы планировщик её не создавал
-                    # заново; «Вернуть удалённое» восстанавливает
+                if platform not in ("", "youtube", "telegram"):
+                    return 400, {"error": "platform must be youtube|telegram|empty"}, \
+                        "application/json"
+                # with_shorts: новое окно передаёт явно. Legacy: platform-scoped шорты не трогает;
+                # «везде» без keep_shorts — фильм + шорты.
+                if "with_shorts" in data:
+                    with_shorts = bool(data.get("with_shorts"))
+                elif platform:
+                    with_shorts = False
+                else:
+                    with_shorts = not bool(data.get("keep_shorts"))
+                also_youtube = bool(data.get("also_youtube"))
+                plan = self._delete_plan(etype, eid, platform, also_youtube, with_shorts)
+                if data.get("plan_only"):
+                    return 200, {
+                        "ok": True, "plan_only": True,
+                        "blocked": plan["blocked"],
+                        "count": len(plan["targets"]),
+                        "targets": [
+                            {"entity_type": et, "entity_id": ei, "platform": p, "status": st}
+                            for et, ei, p, st in plan["targets"]
+                        ],
+                    }, "application/json"
+                if not plan["targets"]:
+                    return 200, {"ok": True, "removed": 0, "blocked": [], "note": "already"}, \
+                        "application/json"
+                if plan["blocked"]:
+                    return 200, {"ok": True, "removed": 0, "blocked": plan["blocked"]}, \
+                        "application/json"
+                reason = str(data.get("reason") or ("platform" if platform else "everywhere"))
+                cascade_from = "youtube" if (
+                    platform == "youtube" or (platform == "telegram" and also_youtube)
+                ) else ""
+                self._kill_targets(plan["targets"])
+                now = self._now_iso()
+                removed = 0
+                for et, ei, p, _st in plan["targets"]:
                     self.db.execute(
-                        "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL "
-                        "WHERE entity_type=? AND entity_id=? AND platform=?", (etype, eid, platform))
-                    self.db.log(etype, eid, platform, "queue_delete", "platform_skipped")
-                    # зависимости: YouTube — источник премьеры для Telegram-ссылки
-                    cascade: list[str] = []
-                    dependent: list[str] = []
-                    if platform == "youtube":
-                        for r_ in self.db.fetchall(
-                                "SELECT status FROM entity_platform_status "
-                                "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
-                                (etype, eid)):
-                            st = (r_["status"] or "").lower()
-                            if st == "ready":
-                                # ссылка без премьеры бессмысленна — убираем сразу
-                                self.db.execute(
-                                    "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL "
-                                    "WHERE entity_type=? AND entity_id=? AND platform='telegram'",
-                                    (etype, eid))
-                                self.db.log(etype, eid, "telegram", "queue_delete", "cascade_youtube")
-                                cascade.append("telegram")
-                            elif st in ("scheduled", "updating"):
-                                dependent.append("telegram")  # спросим пользователя
-                    dependents = {}
-                    if etype == "long_video" and platform == "youtube":
-                        cnt = self.db.fetchone(
-                            "SELECT COUNT(DISTINCT s.id) AS c FROM shorts s "
-                            "JOIN entity_platform_status e ON e.entity_type='short' "
-                            "  AND e.entity_id=s.id "
-                            "WHERE s.parent_video_id=? AND e.status IN "
-                            "  ('ready','scheduled','updating')", (eid,))
-                        if cnt and cnt["c"]:
-                            dependents["shorts"] = cnt["c"]
-                    logger.info("queue remove: %s#%s %s -> removed=1 (только платформа, soft)"
-                                " cascade=%s dependent=%s", etype, eid, platform, cascade, dependent)
-                    return 200, {"ok": True, "removed": 1, "blocked": [],
-                                 "cascade": cascade, "dependent": dependent,
-                                 "dependents": dependents}, "application/json"
-                postiz = self.comps.get("postiz")
-
-                def _kill_posts(*targets: tuple) -> None:
-                    if postiz is None:
-                        return
-                    pids: list[str] = []
-                    for t, i, plat in targets:
-                        if plat:
-                            rows_ = self.db.fetchall(
-                                "SELECT postiz_post_id FROM entity_platform_status "
-                                "WHERE entity_type=? AND entity_id=? AND platform=?",
-                                (t, i, plat))
-                        else:
-                            rows_ = self.db.fetchall(
-                                "SELECT postiz_post_id FROM entity_platform_status "
-                                "WHERE entity_type=? AND entity_id=?", (t, i))
-                        for r in rows_:
-                            pid = r.get("postiz_post_id")
-                            if pid:
-                                pids.append(str(pid))
-                    if not pids:
-                        return
-                    from concurrent.futures import ThreadPoolExecutor
-
-                    def _one(pid: str) -> None:
-                        try:
-                            if hasattr(postiz, "delete_post"):
-                                postiz.delete_post(pid)
-                            elif hasattr(postiz, "set_status"):
-                                postiz.set_status(pid, "draft")
-                        except Exception:
-                            logger.warning("queue remove: удаление поста %s не удалось", pid,
-                                           exc_info=True)
-
-                    with ThreadPoolExecutor(max_workers=8) as ex:
-                        list(ex.map(_one, pids))
-
+                        "UPDATE entity_platform_status SET status='skipped', postiz_post_id=NULL, "
+                        "deleted_at=?, deleted_reason=?, cascade_from=? "
+                        "WHERE entity_type=? AND entity_id=? AND platform=?",
+                        (now, reason, cascade_from, et, ei, p))
+                    self.db.log(et, ei, p, "queue_delete", reason)
+                    removed += 1
                 guard = self.comps.get("guard")
                 if guard is not None and hasattr(guard, "invalidate"):
                     guard.invalidate()
-                removed = 0
-                blocked: list[str] = []
-                if etype == "long_video":
-                    shorts_ids = [r["id"] for r in self.db.fetchall(
-                        "SELECT id FROM shorts WHERE parent_video_id=?", (eid,))]
-                    rows = self.db.fetchall(
-                        "SELECT status FROM entity_platform_status "
-                        "WHERE entity_type='long_video' AND entity_id=?", (eid,))
-                    published = any((r["status"] or "") == "published" for r in rows)
-                    for sid in shorts_ids:
-                        srows = self.db.fetchall(
-                            "SELECT status FROM entity_platform_status "
-                            "WHERE entity_type='short' AND entity_id=?", (sid,))
-                        if any((r["status"] or "") == "published" for r in srows):
-                            published = True
-                    if published:
-                        blocked.append(f"long_video#{eid}")
-                    elif keep_shorts:
-                        # удаляем только фильм; шортсы остаются (отвязываем)
-                        _kill_posts(("long_video", eid, None))
-                        self.db.execute(
-                            "DELETE FROM entity_platform_status "
-                            "WHERE entity_type='long_video' AND entity_id=?", (eid,))
-                        self.db.execute(
-                            "UPDATE shorts SET parent_video_id=NULL WHERE parent_video_id=?",
-                            (eid,))
-                        self.db.execute("DELETE FROM long_videos WHERE id=?", (eid,))
-                        self.db.log("long_video", eid, "", "queue_delete", "keep_shorts")
-                        removed += 1
-                    else:
-                        _kill_posts(*[("short", sid, None) for sid in shorts_ids])
-                        for sid in shorts_ids:
-                            self.db.execute(
-                                "DELETE FROM entity_platform_status "
-                                "WHERE entity_type='short' AND entity_id=?", (sid,))
-                            self.db.execute("DELETE FROM shorts WHERE id=?", (sid,))
-                            self.db.log("short", sid, "", "queue_delete", "hard")
-                            removed += 1
-                        _kill_posts(("long_video", eid, None))
-                        self.db.execute(
-                            "DELETE FROM entity_platform_status "
-                            "WHERE entity_type='long_video' AND entity_id=?", (eid,))
-                        self.db.execute("DELETE FROM long_videos WHERE id=?", (eid,))
-                        self.db.log("long_video", eid, "", "queue_delete", "hard")
-                        removed += 1
-                else:
-                    rows = self.db.fetchall(
-                        "SELECT status FROM entity_platform_status "
-                        "WHERE entity_type='short' AND entity_id=?", (eid,))
-                    if any((r["status"] or "") == "published" for r in rows):
-                        blocked.append(f"short#{eid}")
-                    else:
-                        _kill_posts(("short", eid, None))
-                        self.db.execute(
-                            "DELETE FROM entity_platform_status "
-                            "WHERE entity_type='short' AND entity_id=?", (eid,))
-                        self.db.execute("DELETE FROM shorts WHERE id=?", (eid,))
-                        self.db.log("short", eid, "", "queue_delete", "hard")
-                        removed += 1
-                logger.info("queue remove: %s#%s removed=%s blocked=%s",
-                            etype, eid, removed, blocked)
-                return 200, {"ok": True, "removed": removed, "blocked": blocked}, \
-                    "application/json"
+                dependents: dict[str, int] = {}
+                if etype == "long_video" and not with_shorts:
+                    cnt = self.db.fetchone(
+                        "SELECT COUNT(DISTINCT s.id) AS c FROM shorts s "
+                        "JOIN entity_platform_status e ON e.entity_type='short' "
+                        "  AND e.entity_id=s.id "
+                        "WHERE s.parent_video_id=? AND e.status IN "
+                        "  ('ready','scheduled','updating')", (eid,))
+                    if cnt and cnt["c"]:
+                        dependents["shorts"] = int(cnt["c"])
+                logger.info("queue remove: %s#%s platform=%r -> trashed=%s blocked=%s",
+                            etype, eid, platform, removed, plan["blocked"])
+                return 200, {"ok": True, "removed": removed, "blocked": [],
+                             "cascade": (["telegram"] if platform == "youtube" else []),
+                             "dependents": dependents}, "application/json"
             if method == "POST" and route == "scheduling_mode":
                 mode = str(data.get("mode") or "").strip().lower()
                 if mode not in ("auto", "manual"):
@@ -1553,6 +1512,82 @@ class WebAppAPI:
             return True
         dq.append(now)
         return False
+
+    def _now_iso(self) -> str:
+        clk = self.comps.get("clock")
+        if clk is not None and hasattr(clk, "now"):
+            return clk.now().isoformat()
+        from datetime import UTC, datetime
+        return datetime.now(UTC).isoformat()
+
+    def _delete_plan(
+        self,
+        etype: str,
+        eid: int,
+        platform: str,
+        also_youtube: bool = False,
+        with_shorts: bool = False,
+    ) -> dict[str, Any]:
+        """Что будет удалено — без изменений в БД (для интерактивного окна).
+
+        Направление решает каскад: с YouTube Telegram уходит автоматически;
+        с Telegram YouTube — только по явному also_youtube.
+        """
+        entities: list[tuple[str, int]] = [(etype, eid)]
+        if etype == "long_video" and with_shorts:
+            for r in self.db.fetchall(
+                    "SELECT id FROM shorts WHERE parent_video_id=?", (eid,)):
+                entities.append(("short", int(r["id"])))
+        targets: list[tuple[str, int, str, str]] = []
+        seen: set[tuple[str, int, str]] = set()
+        for et, ei in entities:
+            rows = self.db.fetchall(
+                "SELECT platform, status FROM entity_platform_status "
+                "WHERE entity_type=? AND entity_id=?", (et, ei))
+            by_plat = {str(r["platform"]): (r["status"] or "") for r in rows}
+            if platform == "youtube":
+                wanted = ["youtube", "telegram"]
+            elif platform == "telegram":
+                wanted = ["telegram", "youtube"] if also_youtube else ["telegram"]
+            else:
+                wanted = list(by_plat.keys())
+            for p in wanted:
+                key = (et, ei, p)
+                if p in by_plat and key not in seen:
+                    seen.add(key)
+                    targets.append((et, ei, p, by_plat[p]))
+        blocked = [f"{et}#{ei}:{p}" for et, ei, p, st in targets if st == "published"]
+        return {"targets": targets, "blocked": blocked}
+
+    def _kill_targets(self, targets: list[tuple[str, int, str, str]]) -> None:
+        """Снять посты в Postiz (best-effort, параллельно). Ошибки — только в лог."""
+        postiz = self.comps.get("postiz")
+        if postiz is None:
+            return
+        pids: list[str] = []
+        for et, ei, p, _st in targets:
+            for r in self.db.fetchall(
+                    "SELECT postiz_post_id FROM entity_platform_status "
+                    "WHERE entity_type=? AND entity_id=? AND platform=? "
+                    "AND postiz_post_id IS NOT NULL", (et, ei, p)):
+                if r.get("postiz_post_id"):
+                    pids.append(str(r["postiz_post_id"]))
+        if not pids:
+            return
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _one(pid: str) -> None:
+            try:
+                if hasattr(postiz, "delete_post"):
+                    postiz.delete_post(pid)
+                elif hasattr(postiz, "set_status"):
+                    postiz.set_status(pid, "draft")
+            except Exception:
+                logger.warning("queue remove: удаление поста %s не удалось", pid,
+                               exc_info=True)
+
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            list(ex.map(_one, pids))
 
     def _browse_roots(self) -> list[Path]:
         """Configured browse roots only. Empty → deny all (no fallback to /)."""

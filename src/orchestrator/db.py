@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -23,6 +26,7 @@ CREATE TABLE IF NOT EXISTS long_videos (
     hashtags_text TEXT,
     platform_paths TEXT,
     cover_path TEXT,
+    scan_ignored INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
@@ -41,6 +45,7 @@ CREATE TABLE IF NOT EXISTS shorts (
     upload_text TEXT,
     meta_text TEXT,
     platform_paths TEXT,
+    scan_ignored INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
@@ -55,6 +60,9 @@ CREATE TABLE IF NOT EXISTS entity_platform_status (
     release_url TEXT,
     link_updated_at TEXT,
     last_error TEXT,
+    deleted_at TEXT,
+    deleted_reason TEXT,
+    cascade_from TEXT,
     PRIMARY KEY (entity_type, entity_id, platform)
 );
 
@@ -137,7 +145,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_confirmed
     WHERE match_status = 'confirmed';
 """
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 
@@ -236,6 +244,21 @@ class Database:
                 )
             except Exception:
                 pass
+        if current < 14:
+            # Корзина: мягкое удаление (tombstone) вместо безвозвратного DELETE.
+            # Файлы на диске не трогаем; scan_ignored защищает от повторной регистрации
+            # после «очистить корзину».
+            for stmt in (
+                "ALTER TABLE entity_platform_status ADD COLUMN deleted_at TEXT",
+                "ALTER TABLE entity_platform_status ADD COLUMN deleted_reason TEXT",
+                "ALTER TABLE entity_platform_status ADD COLUMN cascade_from TEXT",
+                "ALTER TABLE long_videos ADD COLUMN scan_ignored INTEGER DEFAULT 0",
+                "ALTER TABLE shorts ADD COLUMN scan_ignored INTEGER DEFAULT 0",
+            ):
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    logger.debug("migration v14: %s уже применено", stmt, exc_info=True)
         if current < SCHEMA_VERSION or current == 0:
             conn.execute(
                 "INSERT INTO system_state (key, value, updated_at) VALUES ('schema_version', ?, ?) "

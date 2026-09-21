@@ -420,8 +420,10 @@ def test_api_queue_remove(env, tmp_path):
     body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"]}).encode()
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
     assert code == 200 and payload["removed"] == 1
-    assert db.fetchone("SELECT * FROM entity_platform_status") is None
-    assert db.fetchone("SELECT * FROM long_videos") is None
+    row = db.fetchone("SELECT status, deleted_at FROM entity_platform_status")
+    assert row["status"] == "skipped" and row["deleted_at"]
+    # мягкое удаление: сущность остаётся (корзина), скан её не вернёт
+    assert db.fetchone("SELECT * FROM long_videos") is not None
 
 
 def test_api_queue_remove_cascade_to_shorts(env, tmp_path):
@@ -455,9 +457,11 @@ def test_api_queue_remove_cascade_to_shorts(env, tmp_path):
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
     assert code == 200
     assert payload["removed"] == 2  # фильм + его шортс
-    assert db.fetchone("SELECT * FROM entity_platform_status") is None
-    assert db.fetchone("SELECT * FROM long_videos") is None
-    assert db.fetchone("SELECT * FROM shorts") is None
+    rows = db.fetchall("SELECT status FROM entity_platform_status")
+    assert rows and all(r["status"] == "skipped" for r in rows)
+    # мягкое удаление: обе сущности остаются в базе (корзина)
+    assert db.fetchone("SELECT * FROM long_videos") is not None
+    assert db.fetchone("SELECT * FROM shorts") is not None
 
 
 def test_api_queue_remove_published_blocked(env, tmp_path):
@@ -583,12 +587,15 @@ def test_api_queue_remove_film_only_keeps_shorts(env, tmp_path):
         (lv["id"],),
     )
     body = json.dumps({"entity_type": "long_video", "entity_id": lv["id"],
-                       "keep_shorts": True}).encode()
+                       "with_shorts": False}).encode()
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers, body)
     assert code == 200 and payload["removed"] == 1
-    assert db.fetchone("SELECT * FROM long_videos") is None
+    # «только серия»: фильм в корзине, шортс остаётся привязанным и не тронут
+    film = db.fetchone("SELECT status FROM entity_platform_status "
+                       "WHERE entity_type='long_video' AND entity_id=?", (lv["id"],))
+    assert film["status"] == "skipped"
     sh = db.fetchone("SELECT parent_video_id FROM shorts")
-    assert sh is not None and sh["parent_video_id"] is None  # шортс остался, отвязан
+    assert sh is not None and sh["parent_video_id"] == lv["id"]
 
 
 def test_queue_restore_invalid_id_does_not_restore_all(env):

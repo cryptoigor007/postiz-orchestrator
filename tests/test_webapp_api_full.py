@@ -327,8 +327,8 @@ def test_remove_youtube_cascades_waiting_telegram(env):
     assert row["status"] == "skipped"
 
 
-def test_remove_youtube_asks_about_scheduled_telegram(env):
-    """Если Telegram-пост уже поставлен — он не удаляется автоматически (только флаг dependent)."""
+def test_remove_youtube_cascades_telegram_automatically(env):
+    """Правило: удаление с YouTube автоматически удаляет Telegram-пост (без вопроса)."""
     import json as _json
     api, db, clock, cfg = env
     headers = {"X-Telegram-Init-Data": "dev"}
@@ -342,10 +342,12 @@ def test_remove_youtube_asks_about_scheduled_telegram(env):
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers,
                                   _json.dumps({"entity_type": "short", "entity_id": sid,
                                                "platform": "youtube"}).encode())
-    assert payload["dependent"] == ["telegram"] and payload["cascade"] == []
-    row = db.fetchone("SELECT status FROM entity_platform_status "
-                      "WHERE entity_type='short' AND entity_id=? AND platform='telegram'", (sid,))
-    assert row["status"] == "scheduled"
+    assert payload["cascade"] == ["telegram"] and not payload.get("dependent")
+    rows = db.fetchall("SELECT platform, status, deleted_at FROM entity_platform_status "
+                       "WHERE entity_type='short' AND entity_id=?", (sid,))
+    assert {r["platform"]: r["status"] for r in rows} == {"youtube": "skipped",
+                                                          "telegram": "skipped"}
+    assert all(r["deleted_at"] for r in rows)
 
 
 def test_remove_youtube_platform_deletes_postiz_and_reports_shorts(env):
@@ -381,8 +383,10 @@ def test_remove_youtube_platform_deletes_postiz_and_reports_shorts(env):
     code, payload, _ = api.handle("POST", "/webapp/api/queue/remove", headers,
                                   _json.dumps({"entity_type": "long_video", "entity_id": fid}).encode())
     assert payload["removed"] >= 2
-    assert db.fetchone("SELECT id FROM long_videos WHERE id=?", (fid,)) is None
-    assert db.fetchone("SELECT id FROM shorts WHERE id=?", (sid,)) is None
+    assert db.fetchone("SELECT id FROM long_videos WHERE id=?", (fid,)) is not None
+    assert db.fetchone("SELECT id FROM shorts WHERE id=?", (sid,)) is not None
+    skipped = db.fetchall("SELECT entity_type FROM entity_platform_status WHERE status='skipped'")
+    assert {r["entity_type"] for r in skipped} == {"long_video", "short"}
 
 
 def test_cleanup_orphans_keeps_active_test_posts(env):

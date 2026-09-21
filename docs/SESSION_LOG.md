@@ -809,3 +809,18 @@
 - **P1-15** `deploy.sh`: `systemctl is-active --quiet` + `curl -sf /health` отдельными шагами —
   деплой теперь падает при не поднявшемся сервисе.
 - +4 теста (337), check.sh PASS.
+
+## 2026-09-21 — 8.4.9: удаление — направление каскада + мягкое удаление/корзина (бэкенд)
+- **Правила** (по ТЗ владельца): удаление **с YouTube** → Telegram той же сущности уходит
+  автоматически (без вопроса); удаление **с Telegram** → YouTube только по `also_youtube`;
+  серия → `with_shorts` (только серия / серия + шорты). `plan_only: true` отдаёт точный состав
+  для интерактивного окна, ничего не меняя.
+- **Ядро**: `_delete_plan()` (+`_kill_targets`, `_now_iso`) и переписанный `queue/remove`
+  (больше не hard delete — строки уходят в корзину).
+- **Схема v14**: `entity_platform_status.deleted_at/deleted_reason/cascade_from`,
+  `long_videos.shorts.scan_ignored`; миграция аддитивная, авто-бэкап перед миграцией уже есть.
+- **API корзины**: `GET /trash`, `POST /trash/restore {ids|all}`, `POST /trash/purge {ids|all}`;
+  `queue/restore` чистит и tombstone-поля.
+- Тексты панели приведены к правде («попадёт в корзину», файлы не трогаем).
+- +6 тестов (343): направление каскада, план без изменений, published-блок, trash restore/purge.
+- Дальше: UI — интерактивное окно удаления и экран «Корзина».

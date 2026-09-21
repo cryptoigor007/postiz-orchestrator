@@ -21,6 +21,15 @@
   --radius: 14px;
   --r-sm: 10px; --r-md: 14px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  /* Единая система кнопок (Emil Kowalski: одна высота, один ритм) */
+  --btn-h: 44px;
+  --btn-h-sm: 36px;
+  --btn-pad-x: 16px;
+  --btn-radius: 12px;
+  --btn-gap: 8px;
+  --btn-font: 15px;
+  --btn-font-sm: 13px;
+  --tabbar-h: 49px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -132,7 +141,8 @@ html, body {
 .pill.info { background: rgba(10,132,255,0.14); color: var(--accent); }
 .btn {
   all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-height: 30px; padding: 5px 12px; border-radius: 9px; font-size: 13px; font-weight: 600;
+  height: var(--btn-h); min-height: var(--btn-h); padding: 0 var(--btn-pad-x); border-radius: var(--btn-radius);
+  font-size: var(--btn-font); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
   transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
 }
@@ -174,22 +184,103 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .auth-gate h2 { margin-bottom: 8px; letter-spacing: -0.02em; }
 .auth-gate p { color: var(--text-2); font-size: 14px; max-width: 320px; line-height: 1.4; }
 @media (max-width: 640px) {
-  #app { flex-direction: column; }
-  /* ВАЖНО: отступ под вырез/статус-бар iPhone сохраняется (раньше терялся и всё перекрывалось) */
-  .sidebar { width: 100%; padding: calc(12px + env(safe-area-inset-top)) 8px 8px;
-    border-right: none; border-bottom: 1px solid var(--sep); }
-  .brand { display: none; } /* на телефоне не нужен: контент выше, ничего не перекрывается */
-  .nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 0 0 auto; width: 100%; }
-  .nav button { padding: 7px 8px; gap: 8px; font-size: 12px; min-height: 36px; min-width: 0; overflow: hidden; }
-  .nav button .ico { flex: 0 0 auto; }
-  .sidebar-footer { display: none; }
-  .content { padding: 6px 14px calc(24px + env(safe-area-inset-bottom)); }
-  .topbar { padding: 10px 14px 4px; } /* угол резервируется классом tg-fs выше */
-  .topbar h2 { font-size: 20px; }
-  .btn { min-height: 32px; padding: 6px 12px; }
+  /* Телефон: приложение на всю ширину/высоту Telegram, без «карточки по центру» */
+  #app {
+    flex-direction: column; width: 100%; max-width: none; margin: 0;
+    height: var(--wa-h, 100dvh); min-height: var(--wa-h, 100dvh);
+  }
+  .sidebar { display: none; }               /* mobile-навигация — нижний tabbar */
+  .nav, .sidebar-footer, .brand { display: none; }
+  .content {
+    padding: 6px 14px calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom));
+  }
+  .topbar { padding: calc(8px + env(safe-area-inset-top)) 14px 4px; }
+  .topbar h2 { font-size: 22px; letter-spacing: -0.02em; }
+  /* Резерв только под кнопку закрытия Telegram (правый верх), не на весь layout */
+  body.tg-fs .topbar { padding-right: calc(60px + env(safe-area-inset-right)); }
+  .btn { height: var(--btn-h); min-height: var(--btn-h); }
   .row { padding: 10px 14px; }
-  .form-row { gap: 8px; }
+  .form-row { gap: var(--btn-gap); }
+  /* primary на всю ширину — только когда он по сути единственный CTA в ряду
+     (ряд из 2 элементов: подпись/вторичное + primary). Ряды выбора корней и
+     мультикнопочные тулбары не растягиваем. */
+  .form-row:not(.roots-row):has(> .btn.primary):has(> :last-child:nth-child(2)) > .btn.primary { flex: 1 1 100%; }
+  .form-row .btn { min-width: 0; }
 }
+
+/* Чипы фильтров на телефоне: одна строка с горизонтальным скроллом (не «три этажа») */
+@media (max-width: 640px) {
+  .chips {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px; scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar { height: 0; }
+  .chip { flex: 0 0 auto; }
+}
+
+/* Очередь: единая высота контролов в строке (36px, не мешаем 36 и 44) */
+.q-row .icon-btn, .q-row .q-cover-btn, .q-row .q-cover, .q-row .q-cover-empty {
+  width: var(--btn-h-sm); height: var(--btn-h-sm);
+}
+.q-row .q-cover, .q-row .q-cover-empty { object-fit: cover; }
+.q-row .q-check { width: 30px; height: 30px; margin-top: 0; }
+
+/* Тост не должен прятаться за tabbar на телефоне */
+@media (max-width: 640px) {
+  .toast { bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom)); }
+}
+
+/* ===== Нижний tabbar (mobile) — 4 primary + «Ещё» ===== */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: stretch;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(160%) blur(20px); -webkit-backdrop-filter: saturate(160%) blur(20px);
+  border-top: 1px solid var(--sep);
+}
+.tabbar button {
+  all: unset; box-sizing: border-box; flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 5px 2px 3px; color: var(--text-2); cursor: pointer; overflow: hidden;
+  transition: transform var(--dur-press) var(--ease-out), color var(--dur-ui) var(--ease-out);
+}
+.tabbar button .ico, .tabbar button .ico svg { width: 23px; height: 23px; display: block; }
+.tabbar button .label { font-size: 10.5px; font-weight: 600; letter-spacing: -0.01em;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabbar button:active { transform: scale(0.94); }
+.tabbar button.active { color: var(--accent); }
+.tabbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 10px; }
+@media (min-width: 641px) { .tabbar { display: none !important; } }
+
+/* ===== Шторка «Ещё» / iOS-лист ===== */
+.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 80;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0 0 0; animation: fadeIn 160ms var(--ease-out); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.sheet {
+  width: 100%; max-width: 560px; background: var(--card); color: var(--text);
+  border-radius: 20px 20px 0 0; box-shadow: var(--shadow);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  animation: sheetUp 220ms var(--ease-out); max-height: 82vh; overflow: auto;
+}
+@keyframes sheetUp { from { transform: translateY(18px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sheet, .sheet-overlay { animation: none; } }
+.sheet-grab { width: 38px; height: 5px; border-radius: 999px; background: var(--sep); margin: 8px auto 2px; }
+.sheet-title { font-size: 15px; font-weight: 700; padding: 8px 16px 6px; letter-spacing: -0.01em; }
+.sheet-item {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 13px 16px; font-size: 16px; font-weight: 500; cursor: pointer;
+  border-bottom: 1px solid var(--sep);
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out);
+}
+.sheet-item:last-child { border-bottom: none; }
+.sheet-item:active { background: rgba(0,0,0,0.05); transform: scale(0.995); }
+@media (prefers-color-scheme: dark) { .sheet-item:active { background: rgba(255,255,255,0.07); } }
+.sheet-item .ico, .sheet-item .ico svg { width: 22px; height: 22px; display: block; color: var(--text-2); }
+.sheet-item .chev { margin-left: auto; color: var(--text-3); }
+.sheet-lang { display: flex; gap: 8px; padding: 12px 16px 4px; }
 
 [hidden] { display: none !important; }
 
@@ -246,8 +337,14 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* Доступность и размеры касания */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
-.btn { min-height: 34px; }
-.queue-col .btn { min-height: 30px; }
+/* Плотные области: одна согласованная высота 36px (не «пляшущие» кнопки) */
+.q-row .btn, .queue-col .btn, .status-btn, .q-status .status-btn,
+.panel-header .btn, .search-list .btn {
+  height: var(--btn-h-sm); min-height: var(--btn-h-sm); font-size: var(--btn-font-sm);
+  padding: 0 12px; border-radius: 10px;
+}
+.chip { min-height: var(--btn-h-sm); }
+.icon-btn { width: var(--btn-h); height: var(--btn-h); }
 
 /* macOS-штрихи: тап-хайлайт, скрытые скроллбары, инсет-разделители списков */
 html { -webkit-tap-highlight-color: transparent; }
@@ -375,11 +472,12 @@ body.tg-fs .cover-overlay { padding-top: calc(56px + env(safe-area-inset-top)); 
 .busy-box { padding: 16px 22px calc(16px + env(safe-area-inset-bottom)); }
 .busy-overlay { padding: env(safe-area-inset-top) 12px env(safe-area-inset-bottom); }
 
-/* Модалка выбора обложки — как iOS-лист: сверху, с «ручкой» и явным крестиком */
-.cover-overlay { align-items: flex-start; justify-content: center;
-  padding: calc(8px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom)); }
-.cover-panel { width: min(700px, 100%); max-height: calc(var(--wa-h, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px);
-  border-radius: 18px; animation: sheetIn 200ms var(--ease-out); }
+/* Модалка выбора обложки — iOS-лист снизу: «ручка», safe-area, ровные табы */
+.cover-overlay { align-items: flex-end; justify-content: center;
+  padding: 0; }
+.cover-panel { width: min(700px, 100%); max-height: calc(var(--wa-h, 100dvh) - env(safe-area-inset-top) - 16px);
+  border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom);
+  animation: sheetUp 220ms var(--ease-out); }
 @keyframes sheetIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .cover-panel { animation: none; } }
 .cover-grab { width: 38px; height: 5px; border-radius: 999px; background: var(--sep);
@@ -395,10 +493,8 @@ body.tg-fs .cover-overlay { padding-top: calc(56px + env(safe-area-inset-top)); 
 /* iOS: не даём Safari зумить при фокусе на поле (шрифт полей ≥16px) + удобные тапы */
 @media (max-width: 640px) {
   input[type="text"], input[type="search"], input[type="url"], input[type="date"],
-  input[type="time"], input[type="number"], textarea, select { font-size: 16px; }
-  .btn { min-height: 38px; }
-  .nav button { min-height: 36px; }
-  .chip { min-height: 34px; }
+  input[type="time"], input[type="number"], textarea, select { font-size: 16px; } /* анти-zoom Safari */
+  /* высоты кнопок заданы токенами выше — здесь не перетираем */
 }
 
 /* Базовые правила: изображения не переполняют, фокус видим */

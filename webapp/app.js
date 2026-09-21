@@ -11,8 +11,8 @@
       cover_pick: "Выбрать обложку…", cover_picker_title: "Выбор обложки",
       cover_tab_server: "Папки на сервере", cover_tab_device: "С устройства",
       cover_tab_url: "По ссылке", cover_choose: "Выбрать", cover_close: "Закрыть",
-      cover_tab_frames: "Из видео", cover_frames_hint: "Кадры из видео — выбери понравившийся",
-      cover_frames_regen: "Сгенерировать заново", cover_frames_btn: "Сделать кадры из видео",
+      cover_tab_frames: "Кадры", cover_frames_hint: "Кадры из видео — выбери понравившийся",
+      cover_frames_regen: "Ещё кадры", cover_frames_btn: "Сделать кадры из видео",
       cover_no_images: "Картинок нет", cover_up: "↑ Вверх", cover_loading: "Загрузка…",
       cover_added: "Обложка выбрана", cover_upload: "Загрузить с устройства",
       request_timeout: "Сервер не ответил (таймаут). Проверь связь и повтори.",
@@ -29,12 +29,12 @@
       confirm_delete_film: "Удалить фильм, все его шортсы и посты (включая базу)? После этого скан добавит его заново.",
       scan_none_new_hint: "Новых не найдено: всё уже в базе. Если хочешь добавить заново — удали из очереди (кнопка «Убрать» удаляет и из базы).",
       scan_empty_hint: "В этих папках видео не найдено. Проверь структуру: серия/vertical+wide, серия/shorts/short_001, или папка шортсов.",
-      scan_in_base: "В базе по этим папкам", scan_skipped: "удалённых", scan_restore_btn: "Вернуть удалённое и запустить", t_restored: "Возвращено",
+      scan_in_base: "В базе по этим папкам", scan_skipped: "удалённых", scan_restore_btn: "Вернуть и скан", t_restored: "Возвращено",
       folders_hint: "Как это работает: добавь папку (кнопки «+ Сериалы», «+ Шортсы», «+ Авто») → нажми «Сканировать» → появится панель «Найдено» и кнопка «Да, запустить» (или выбери дату). Система сама найдёт фильмы и шортсы и разложит их по расписанию.",
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
       edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
       queue_remove: "Убрать", queue_remove_series: "Убрать серию", queue_removed: "Убрано из очереди", edit_date: "Дата", edit_time: "Время", confirm_series: "Убрать фильм и ВСЕ его шортсы со всех платформ?",
-      mode_auto: "Авто-планирование: ВКЛ", mode_manual: "Авто-планирование: ВЫКЛ",
+      mode_auto: "Авто: вкл", mode_manual: "Авто: выкл",
       mode_hint: "ВКЛ — система сама раскладывает видео по слотам. ВЫКЛ — ждёт, пока ты нажмёшь «Запустить» или выберешь дату после сканирования.",
       settings_tab_sched: "Группы и расписание", settings_tab_errors: "Ошибки", settings_tab_help: "Справка",
       scan_found: "Найдено", scan_films: "фильмов", scan_shorts: "шортсов", scan_standalone: "самостоятельных шортсов",
@@ -53,8 +53,8 @@
       kind_label: "Тип", kind_auto: "Авто", kind_series: "Сериалы", kind_shorts: "Шортсы",
       add_series: "+ Сериалы", add_shorts: "+ Шортсы", add_auto: "+ Авто",
       t_kind_changed: "Тип папки обновлён", t_group_added: "Группа добавлена", t_group_removed: "Группа удалена",
-      nav_status: "Статус", nav_folders: "Папки", nav_calendar: "Календарь", nav_queue: "Очередь",
-      nav_platforms: "Платформы", nav_tail: "Остаток", nav_failed: "Ошибки", nav_metrics: "Метрики",
+      nav_status: "Обзор", nav_folders: "Видео", nav_calendar: "План", nav_queue: "Очередь",
+      nav_platforms: "Сети", nav_tail: "Остаток", nav_failed: "Ошибки", nav_metrics: "Стат.",
       nav_actions: "Действия", nav_help: "Справка",
       title_status: "Статус", title_folders: "Папки с видео", title_calendar: "Календарь",
       title_queue: "Очередь", title_platforms: "Платформы", title_tail: "Остаток шортсов серии",
@@ -65,9 +65,9 @@
       scan: "Сканировать", no_subfolders: "Нет подпапок", folders_to_scan: "Папки для сканирования",
       folders_none: "Папки не выбраны", browse: "Обзор папок",
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
-      backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
+      backlog_distribute: "Разложить", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", cleanup_orphans: "Убрать лишние посты из Postiz", confirm_cleanup_orphans: "Удалить из Postiz посты, которых нет в базе (лишние)? Живые публикации не трогаются.", cleaned: "Убрано постов", confirm_cascade_shorts: "У этой серии есть шортсы (%s). Удалить их тоже — со всех платформ и из базы?", shorts_deleted: "Шортсы серии удалены", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
+      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", cleanup_orphans: "Убрать лишние", confirm_cleanup_orphans: "Удалить из Postiz посты, которых нет в базе (лишние)? Живые публикации не трогаются.", cleaned: "Убрано постов", confirm_cascade_shorts: "У этой серии есть шортсы (%s). Удалить их тоже — со всех платформ и из базы?", shorts_deleted: "Шортсы серии удалены", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
       delete_everywhere: "Удалить везде (все платформы + база)",
       confirm_delete_everywhere: "Удалить ролик со ВСЕХ платформ и из базы? Файлы на диске останутся (скан вернёт).",
       remove_posts: "Удалить посты", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
@@ -111,11 +111,14 @@
       st_unmatched: "не найдено", st_confirmed: "подтверждено", st_rejected: "отклонено",
       st_ignored: "проигнорировано", st_claimed: "клейм", st_none: "нет",
       nav_manual: "Ручные", title_manual: "Ручные загрузки",
+      nav_more: "Ещё", more_title: "Ещё разделы",
+      folders_stepper: "Папка → Сканировать → Запустить. Дальше само.",
+      status_cta_add: "Добавить видео", status_cta_queue: "Очередь",
       mu_scan_all: "Сканировать всё", mu_scan: "Сканировать", mu_total: "Всего",
       mu_postiz: "От Postiz", mu_suggested: "Предложено",
       mu_confirmed: "Подтверждено", mu_none: "Ничего не найдено", mu_confirm: "Подтвердить",
       mu_reject: "Не моё", mu_ignore: "Игнорировать", mu_candidates: "Кандидаты",
-      mu_claim: "клейм", mu_claim_title: "Обнаружен клейм",
+      mu_claim: "клейм", mu_claim_title: "Обнаружен клейм", mu_claim_mark: "Отметить клейм",
       mu_claim_delete: "Удалить видео", mu_claim_keep: "Оставить", mu_last_scan: "Последний скан",
       gate_msg: "Откройте приложение из Telegram-бота.",
       help: "Справка", help_nav: "Навигация", help_folders: "Раздел «Папки»",
@@ -208,8 +211,8 @@
       kind_label: "Kind", kind_auto: "Auto", kind_series: "Series", kind_shorts: "Shorts",
       add_series: "+ Series", add_shorts: "+ Shorts", add_auto: "+ Auto",
       t_kind_changed: "Folder kind updated", t_group_added: "Group added", t_group_removed: "Group removed",
-      nav_status: "Status", nav_folders: "Folders", nav_calendar: "Calendar", nav_queue: "Queue",
-      nav_platforms: "Platforms", nav_tail: "Backlog", nav_failed: "Errors", nav_metrics: "Metrics",
+      nav_status: "Home", nav_folders: "Media", nav_calendar: "Plan", nav_queue: "Queue",
+      nav_platforms: "Social", nav_tail: "Backlog", nav_failed: "Errors", nav_metrics: "Stats",
       nav_actions: "Actions", nav_help: "Help",
       title_status: "Status", title_folders: "Video folders", title_calendar: "Calendar",
       title_queue: "Queue", title_platforms: "Platforms", title_tail: "Unposted series shorts",
@@ -266,11 +269,14 @@
       st_unmatched: "not found", st_confirmed: "confirmed", st_rejected: "rejected",
       st_ignored: "ignored", st_claimed: "claim", st_none: "none",
       nav_manual: "Manual", title_manual: "Manual uploads",
+      nav_more: "More", more_title: "More sections",
+      folders_stepper: "Folder → Scan → Run. The rest is automatic.",
+      status_cta_add: "Add video", status_cta_queue: "Queue",
       mu_scan_all: "Scan all", mu_scan: "Scan", mu_total: "Total",
       mu_postiz: "From Postiz", mu_suggested: "Suggested",
       mu_confirmed: "Confirmed", mu_none: "Nothing found", mu_confirm: "Confirm",
       mu_reject: "Not mine", mu_ignore: "Ignore", mu_candidates: "Candidates",
-      mu_claim: "claim", mu_claim_title: "Claim detected",
+      mu_claim: "claim", mu_claim_title: "Claim detected", mu_claim_mark: "Mark claim",
       mu_claim_delete: "Delete video", mu_claim_keep: "Keep", mu_last_scan: "Last scan",
       gate_msg: "Open the app from the Telegram bot.",
       help: "Help", help_nav: "Navigation", help_folders: "“Folders” section",
@@ -730,6 +736,9 @@
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14M3 12h18"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>',
+    help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5"/><circle cx="12" cy="16.6" r="0.7" fill="currentColor" stroke="none"/></svg>',
   };
   function icon(name, size) {
     const sz = size || 16;
@@ -764,6 +773,10 @@
       }<span class="meta">${t("limit")} ${p.daily_limit}</span></div>`)
       .join("");
     content().innerHTML = `<div class="view-enter">
+      <div class="form-row" style="padding:0 0 12px">
+        <button class="btn primary" data-goto="folders">${esc(t("status_cta_add"))}</button>
+        <button class="btn secondary" data-goto="queue">${esc(t("status_cta_queue"))}</button>
+      </div>
       <div class="grid">${cards || `<div class="empty">${t("no_data")}</div>`}</div>
       <div class="panel"><div class="panel-header">${t("platforms")}</div>
         ${plats || `<div class="empty">${t("no_platforms")}</div>`}
@@ -771,6 +784,7 @@
   }
 
   function renderFolders(d) {
+    const stepper = `<div class="row" style="border:0;padding:0 0 10px"><span class="meta">${esc(t("folders_stepper"))}</span></div>`;
     const items = d.items || (d.roots || []).map((x) => ({ path: x, kind: "auto" }));
     const roots = items
       .map((it) => `<div class="row"><div class="title mono" style="flex:1;word-break:break-all">${esc(it.path)}</div>
@@ -782,7 +796,7 @@
     const metaByPath = {};
     (b.roots_meta || []).forEach((m) => { metaByPath[m.path] = m; });
     const rsel = (b.roots || []).length > 1
-      ? `<div class="form-row">${(b.roots || []).map((r) => {
+      ? `<div class="form-row roots-row">${(b.roots || []).map((r) => {
           const m = metaByPath[r] || { available: true };
           const warn = m.available ? "" : ` ${icon("warn", 14)}`;
           return `<button class="btn ${r === b.root ? "primary" : "secondary"}" data-act="folder-open" data-p="${esc(r)}"${m.available ? "" : " disabled"}>${esc(r)}${warn}</button>`;
@@ -827,6 +841,7 @@
         <button class="btn secondary" data-act="folder-search">${t("search")}</button>
       </div>${searchResults}`;
     content().innerHTML = `
+      ${stepper}
       <div class="panel"><div class="panel-header">${t("folders_to_scan")}</div>
         <div class="row"><span class="meta">${t("folders_hint")}</span></div>
         ${roots || `<div class="empty">${t("folders_none")}</div>`}
@@ -840,7 +855,7 @@
         <div class="form-row">
           <button class="btn secondary" data-act="folder-up" data-p="${esc(b.parent || "")}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
           <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="series">${t("add_series")}</button>
-          <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="shorts">${t("add_shorts")}</button>
+          <button class="btn secondary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="shorts">${t("add_shorts")}</button>
           <button class="btn secondary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="auto">${t("add_auto")}</button>
           <button class="btn success" data-act="folder-scan">${t("scan")}</button>
         </div>
@@ -1457,6 +1472,7 @@
 
   function render() {
     $("title").textContent = titles()[state.view] || state.view;
+    syncTabs();
     const d = state.data;
     if (state.view === "status") renderStatus(d);
     else if (state.view === "folders") renderFolders(d);
@@ -1480,6 +1496,7 @@
     localStorage.setItem("lang", l);
     document.documentElement.lang = l;
     updateNavLabels();
+    syncTabs();
     $("btn-refresh").textContent = t("refresh");
     $("gate-msg").textContent = t("gate_msg");
     $("lang").querySelectorAll("button").forEach((b) =>
@@ -1488,10 +1505,81 @@
   }
 
   function updateNavLabels() {
-    $("nav").querySelectorAll("button[data-view]").forEach((b) => {
-      const span = b.querySelector(".label");
-      if (span) span.textContent = t("nav_" + b.dataset.view);
+    document.querySelectorAll("#nav button[data-view], #tabbar button[data-view]")
+      .forEach((b) => {
+        const span = b.querySelector(".label");
+        if (span) span.textContent = t("nav_" + b.dataset.view);
+      });
+    const more = $("tab-more");
+    if (more) {
+      const lbl = more.querySelector(".label");
+      if (lbl) lbl.textContent = t("nav_more");
+    }
+  }
+
+  const TAB_PRIMARY = ["status", "folders", "queue", "calendar"];
+
+  function syncTabs() {
+    const tb = $("tabbar");
+    if (!tb) return;
+    const primary = TAB_PRIMARY.indexOf(state.view) >= 0;
+    tb.querySelectorAll("button[data-view]").forEach((b) =>
+      b.classList.toggle("active", b.dataset.view === state.view));
+    const more = $("tab-more");
+    if (more) more.classList.toggle("active", !primary);
+  }
+
+  function openMoreSheet() {
+    if ($("more-sheet")) { closeMoreSheet(); return; }  // повторный тап = закрыть
+    const items = [
+      ["platforms", "users"], ["tail", "folder"], ["manual", "edit"],
+      ["actions", "swap"], ["metrics", "chart"], ["failed", "warn"],
+      ["help", "help"], ["settings", "gear"],
+    ];
+    const rows = items.map(([v, ic]) =>
+      `<button class="sheet-item" data-view="${v}">${icon(ic, 22)}<span>${esc(t("nav_" + v))}</span><span class="chev">›</span></button>`
+    ).join("");
+    const ov = document.createElement("div");
+    ov.className = "sheet-overlay";
+    ov.id = "more-sheet";
+    ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(t("more_title"))}">
+      <div class="sheet-grab"></div>
+      <div class="sheet-title">${esc(t("more_title"))}</div>
+      ${rows}
+      <div class="sheet-lang">
+        <button class="lang-btn${state.lang === "ru" ? " active" : ""}" data-lang="ru">RU</button>
+        <button class="lang-btn${state.lang === "en" ? " active" : ""}" data-lang="en">EN</button>
+      </div>
+    </div>`;
+    ov.addEventListener("click", (e) => {
+      if (e.target === ov) { closeMoreSheet(); return; }
+      const langBtn = e.target.closest("button[data-lang]");
+      if (langBtn) { setLang(langBtn.dataset.lang); closeMoreSheet(); return; }
+      const nav = e.target.closest("button[data-view]");
+      if (nav) {
+        closeMoreSheet();
+        gotoView(nav.dataset.view);
+      }
     });
+    document.body.appendChild(ov);
+  }
+
+  function closeMoreSheet() {
+    const el = $("more-sheet");
+    if (el) el.remove();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMoreSheet();
+  });
+
+  function gotoView(v) {
+    if (!v || !titles()[v]) return;
+    state.view = v;
+    document.querySelectorAll("#nav button[data-view]").forEach((b) =>
+      b.classList.toggle("active", b.dataset.view === v));
+    syncTabs();
+    load();
   }
 
   async function onAction(act, el) {
@@ -1967,11 +2055,17 @@
     $("nav").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-view]");
       if (!btn) return;
-      state.view = btn.dataset.view;
-      $("nav").querySelectorAll("button").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      load();
+      gotoView(btn.dataset.view);
     });
+    const tb = $("tabbar");
+    if (tb) {
+      tb.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        if (btn.dataset.more) { openMoreSheet(); return; }
+        if (btn.dataset.view) gotoView(btn.dataset.view);
+      });
+    }
     $("btn-refresh").addEventListener("click", () => load());
     $("lang").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-lang]");
@@ -1987,6 +2081,8 @@
       if (e.target && e.target.id === "folder-q" && e.key === "Enter") runFolderSearch();
     });
     content().addEventListener("click", (e) => {
+      const go = e.target.closest("[data-goto]");
+      if (go) { gotoView(go.dataset.goto); return; }
       const btn = e.target.closest("[data-act]");
       if (!btn) return;
       onAction(btn.dataset.act, btn);
@@ -2034,8 +2130,15 @@
         }
         setTimeout(applyFsClass, 300);
         setTimeout(applyFsClass, 1200);
-        const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const bg = dark ? "#000000" : "#f2f2f7";
+        // цвет зоны статус-бара = фактический токен темы из CSS, без «магических» hex
+        let bg = "";
+        try {
+          bg = (getComputedStyle(document.documentElement).getPropertyValue("--bg") || "").trim();
+        } catch (_) {}
+        if (!bg) {
+          const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          bg = dark ? "#000000" : "#f2f2f7";
+        }
         if (tg.setHeaderColor) { try { tg.setHeaderColor(bg); } catch (_) {} }
         if (tg.setBackgroundColor) { try { tg.setBackgroundColor(bg); } catch (_) {} }
         if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch (_) {} }
@@ -2081,6 +2184,7 @@
     api("/version").then((v) => { $("ver").textContent = "v" + (v.version || "?"); }).catch(() => {});
 
     updateNavLabels();
+    syncTabs();
     $("btn-refresh").textContent = t("refresh");
     $("lang").querySelectorAll("button").forEach((b) =>
       b.classList.toggle("active", b.dataset.lang === state.lang));

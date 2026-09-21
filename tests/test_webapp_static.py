@@ -18,7 +18,7 @@ ALLOWED = {
     "decodeURIComponent", "isNaN", "console", "alert", "confirm", "prompt",
     "requestAnimationFrame", "AbortController", "FileReader", "URLSearchParams", "URL",
     "Symbol", "WeakMap", "WeakSet", "btoa", "atob", "structuredClone", "queueMicrotask",
-    "window", "document",
+    "window", "document", "getComputedStyle", "matchMedia", "navigator", "location",
 }
 
 

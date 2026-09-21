@@ -193,7 +193,7 @@ def _is_image_bytes(blob: bytes) -> bool:
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parents[2] / "webapp"
-WEBAPP_BUILD = "820"  # cache-bust; bump with major.minor (no dots — path safety)
+WEBAPP_BUILD = "821"  # cache-bust; bump with major.minor (no dots — path safety)
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict[str, Any] | None:
@@ -1878,6 +1878,9 @@ class WebAppAPI:
                 "title": f"{kind}: {title}"[:140],
                 "status": r["status"],
                 "source": "db",
+                # C11: id сущности — чтобы UI показывал посты одного видео (YT+TG) одной строкой
+                "entity_type": r["entity_type"],
+                "entity_id": r["entity_id"],
             })
         postiz = self.comps.get("postiz")
         if postiz is not None and hasattr(postiz, "list_scheduled"):

@@ -143,7 +143,7 @@ if (!viewFails) ok(`все ${views.length} экранов открываются
 // 2. Очередь: редактирование → выбор обложки
 doc.querySelector('#nav button[data-view="queue"]').click();
 await wait(250);
-const rows = doc.querySelectorAll(".row").length;
+const rows = doc.querySelectorAll(".q-item").length;
 const delBtns = doc.querySelectorAll('[data-act="queue-remove"]').length;
 if (rows >= 2 && delBtns >= 1) ok(`очередь: строк ${rows}, кнопок удаления ${delBtns}`);
 else fail(`очередь не отрисовалась (rows=${rows}, del=${delBtns})`);
@@ -186,7 +186,7 @@ const tgChip = doc.querySelector('[data-act="queue-filter"][data-p="telegram"]')
 if (tgChip) {
   tgChip.click();
   await wait(150);
-  const n = doc.querySelectorAll(".q-row").length;
+  const n = doc.querySelectorAll(".q-item").length;
   if (n >= 1) ok(`фильтр telegram: строк ${n}`);
   else fail("фильтр telegram: строк нет");
   const back = doc.querySelector('[data-act="queue-filter"][data-p="all"]');

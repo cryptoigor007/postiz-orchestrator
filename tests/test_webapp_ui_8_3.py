@@ -35,8 +35,8 @@ def test_mobile_fullbleed_and_safe_areas():
     mob = CSS.split("@media (max-width: 640px)")[1]
     assert "max-width: none" in mob
     assert "var(--tabbar-h)" in mob
-    assert "env(safe-area-inset-bottom)" in mob
-    assert "body.tg-fs .topbar" in mob
+    assert "var(--sa-bottom)" in mob
+    assert "var(--sa-right)" in mob  # инсет справа учитывает кнопки Telegram
     assert ".sidebar { display: none" in mob
 
 

@@ -31,7 +31,7 @@
       confirm_delete_film: "Удалить фильм, все его шортсы и посты (включая базу)? После этого скан добавит его заново.",
       scan_none_new_hint: "Новых не найдено: всё уже в базе. Если хочешь добавить заново — удали из очереди (кнопка «Убрать» удаляет и из базы).",
       scan_empty_hint: "В этих папках видео не найдено. Проверь структуру: серия/vertical+wide, серия/shorts/short_001, или папка шортсов.",
-      scan_in_base: "В базе по этим папкам", scan_skipped: "удалённых", scan_restore_btn: "Вернуть и скан", t_restored: "Возвращено",
+      scan_in_base: "В базе по этим папкам", scan_skipped: "удалённых", scan_restore_btn: "Вернуть удалённое и запустить скан", t_restored: "Возвращено",
       folders_hint: "Как это работает: добавь папку (кнопки «+ Сериалы», «+ Шортсы», «+ Авто») → нажми «Сканировать» → появится панель «Найдено» и кнопка «Да, запустить» (или выбери дату). Система сама найдёт фильмы и шортсы и разложит их по расписанию.",
       queue_edit: "Редактировать", queue_edit_save: "Сохранить", queue_edit_cancel: "Отмена",
       edit_title: "Название", edit_desc: "Описание", edit_tags: "Хэштеги", t_saved: "Сохранено",
@@ -48,7 +48,10 @@
       sched_explain: "Настройки постинга по каждой соцсети отдельно: серии (фильмы), шортсы серии (тематические) и обычные шортсы. Группы задают общий таймер — соцсети из одной группы публикуются одновременно.",
       sched_long: "Серии (фильмы)", sched_thematic: "Шортсы серии", sched_standalone: "Обычные шортсы",
       sched_time: "Время", sched_times: "Времена (через запятую)",
-      sched_limit: "Лимит в день", sched_save: "Сохранить", sched_reset: "Сбросить", sched_saved: "Сохранено",
+      sched_limit: "Максимум публикаций в день", limit_day: "Лимит в день", pa_on: "Включено", pa_off: "Выключено", sched_save: "Сохранить", sched_reset: "Сбросить", sched_saved: "Сохранено",
+      sched_days: "дни", sched_count: "Сколько в день", sched_limit_hint: "Максимум публикаций платформы в сутки (глобально; настройки группы/платформы важнее).",
+      sched_priority: "Приоритет настроек: конкретная платформа → группа → глобально. Что не задано ниже — берётся из более общего уровня.",
+      group_platforms: "Соцсети группы", groups_hint: "Соцсети одной группы публикуются одновременно (общий таймер).",
       groups_header: "Группы соцсетей (одновременный постинг)", group_name: "Название группы",
       group_add: "Добавить группу", group_remove: "Удалить", groups_none: "Групп нет",
       errors_header: "Ошибки публикаций", help_header: "Справка",
@@ -67,13 +70,14 @@
       scan: "Сканировать", no_subfolders: "Нет подпапок", folders_to_scan: "Папки для сканирования",
       folders_none: "Папки не выбраны", browse: "Обзор папок",
       backlog_unposted: "Не опубликовано шортсов", backlog_awaiting: "Ждём ответа до",
-      backlog_distribute: "Разложить", backlog_wait: "Ждать ещё",
+      backlog_distribute: "Распределить остаток", backlog_wait: "Ждать ещё",
       backlog_skip: "Не публиковать", backlog_from: "Распределять с даты (необязательно)", backlog_on: "распределение вкл", backlog_off: "распределение выкл",
-      calendar_empty: "Календарь пуст", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", cleanup_orphans: "Убрать лишние", confirm_cleanup_orphans: "Удалить из Postiz посты, которых нет в базе (лишние)? Живые публикации не трогаются.", cleaned: "Убрано постов", confirm_cascade_shorts: "У этой серии есть шортсы (%s). Удалить их тоже — со всех платформ и из базы?", shorts_deleted: "Шортсы серии удалены", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
+      calendar_empty: "Календарь пуст", cal_day: "День", cal_week: "Неделя", cal_month: "Месяц", cal_today: "Сегодня", calendar_explain: "Показаны запланированные и опубликованные посты (из оркестратора и Postiz), сгруппированные по дням. Пометка справа — статус поста.", queue_empty: "Пусто", restore_posts: "Вернуть удалённые посты", restored: "Восстановлено", cleanup_orphans: "Убрать лишние посты из Postiz", confirm_cleanup_orphans: "Удалить из Postiz посты, которых нет в базе (лишние)? Живые публикации не трогаются.", cleaned: "Убрано постов", confirm_cascade_shorts: "У этой серии есть шортсы (%s). Удалить их тоже — со всех платформ и из базы?", shorts_deleted: "Шортсы серии удалены", confirm_cascade_tg_bulk: "У %s роликов есть уже поставленные Telegram-посты со ссылкой. Удалить их тоже?", confirm_cascade_tg: "На этот ролик уже стоит Telegram-пост со ссылкой. Удалить его тоже?", cascade_deleted: "Удалено вместе с Telegram-ссылкой", confirm_delete_row: "Удалить только этот пост (%s)? Другие платформы и запись в базе останутся.",
       delete_everywhere: "Удалить везде (все платформы + база)",
       confirm_delete_everywhere: "Удалить ролик со ВСЕХ платформ и из базы? Файлы на диске останутся (скан вернёт).",
       remove_posts: "Удалить посты", search: "Найти", search_placeholder: "Поиск папки по имени…", search_none: "Ничего не найдено", searching: "Ищу…", search_short: "Введите минимум 2 символа", queue_all: "Все", queue_select: "Выбрать", queue_done: "Готово",
       queue_selected: "выбрано", queue_bulk_tags: "Хештеги…", queue_bulk_apply: "Применить",
+      delete_everywhere_hint: "Опасная зона: удаление из базы и со всех платформ.",
       queue_bulk_clear: "Снять выделение",
       queue_bulk_del: "Удалить выбранные посты (%s)? Удаляются только выбранные платформы; файлы и другие посты остаются.",
       queue_bulk_tagp: "Новые хештеги для выбранных (%s):",
@@ -83,6 +87,17 @@
       tail_title: "Остаток шортсов серии", tail_explain: "Шортсы уже нарезаны для серии, но ещё не опубликованы. Когда новых серий больше нет, система распределяет остаток по слотам (в слот основной серии — обычные шортсы, в 20:30 — шортсы к другим сериям), и только после этого запускается следующая серия. Перед запуском она спросит подтверждение.", enable: "Включить", disable: "Выключить",
       tail_off: "выкл", no_errors: "Ошибок нет",
       quick_actions: "Быстрые действия", act_sync: "Обновить статусы",
+      act_group_plan: "Планирование", act_group_data: "Данные и синхронизация", act_group_service: "Обслуживание",
+      h_distribute: "Разложить длинные видео по свободным слотам расписания.",
+      h_schedule: "Разложить всю очередь по слотам сейчас (без ожидания авто-режима).",
+      h_sync: "Забрать статусы постов из Postiz (вышло или нет).",
+      h_reconcile: "Сверить базу и Postiz: найти потерянные и лишние посты.",
+      h_restore: "Вернуть ранее удалённые посты обратно в очередь.",
+      h_cleanup: "Удалить из Postiz посты, которых нет в базе (живые публикации не трогает).",
+      h_backup: "Сделать резервную копию базы сейчас.",
+      h_refresh: "Перечитать данные с сервера без других действий.",
+      errors_hint: "Здесь только неудавшиеся публикации. Полный текст ошибки — под номером поста.",
+      m_ok: "ОК",
       test_title: "Проверка (тестовый пост)", test_hint: "Пробный пост в Postiz с выбранной задержкой. Боевая очередь не затрагивается.",
       test_schedule: "Тест-пост", test_dry: "Dry-run", test_disabled: "Тестовый контур выключен (test_publish.enabled=false).",
       test_recent: "Последние тестовые посты", test_cancel: "Отменить", test_entity: "Что публикуем", test_delay: "задержка, мин",
@@ -208,7 +223,10 @@
       sched_explain: "Posting settings per network: series (films), series shorts (thematic) and regular shorts. Groups share one timer — networks in one group publish simultaneously.",
       sched_long: "Series (films)", sched_thematic: "Series shorts", sched_standalone: "Regular shorts",
       sched_time: "Time", sched_times: "Times (comma separated)",
-      sched_limit: "Daily limit", sched_save: "Save", sched_reset: "Reset", sched_saved: "Saved",
+      sched_limit: "Max posts per day", limit_day: "Daily limit", pa_on: "Enabled", pa_off: "Disabled", sched_save: "Save", sched_reset: "Reset", sched_saved: "Saved",
+      sched_days: "days", sched_count: "Times per day", sched_limit_hint: "Max posts per platform per day (global; group/platform settings take priority).",
+      sched_priority: "Priority: platform → group → global. Anything not set below is inherited from the broader level.",
+      group_platforms: "Networks in group", groups_hint: "Networks in one group publish simultaneously (shared timer).",
       groups_header: "Network groups (simultaneous posting)", group_name: "Group name",
       group_add: "Add group", group_remove: "Remove", groups_none: "No groups",
       errors_header: "Publishing errors", help_header: "Help",
@@ -229,11 +247,12 @@
       backlog_unposted: "Unposted shorts", backlog_awaiting: "Awaiting answer until",
       backlog_distribute: "Distribute backlog", backlog_wait: "Wait more",
       backlog_skip: "Do not publish", backlog_from: "Distribute from date (optional)", backlog_on: "distribution on", backlog_off: "distribution off",
-      calendar_empty: "Calendar is empty", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", cleanup_orphans: "Clean up leftover posts in Postiz", confirm_cleanup_orphans: "Delete Postiz posts that are not in the DB (leftovers)? Published ones are kept.", cleaned: "Cleaned posts", confirm_cascade_shorts: "This series has %s shorts. Delete them too — from all platforms and the DB?", shorts_deleted: "Series shorts deleted", confirm_cascade_tg_bulk: "%s items have a scheduled Telegram link post. Delete those too?", confirm_cascade_tg: "A Telegram post with the link is already scheduled. Delete it too?", cascade_deleted: "Deleted together with the Telegram link", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
+      calendar_empty: "Calendar is empty", cal_day: "Day", cal_week: "Week", cal_month: "Month", cal_today: "Today", calendar_explain: "Scheduled and published posts (from the orchestrator and Postiz), grouped by day. The badge shows the post status.", queue_empty: "Empty", restore_posts: "Restore deleted posts", restored: "Restored", cleanup_orphans: "Remove leftover posts from Postiz", confirm_cleanup_orphans: "Delete Postiz posts that are not in the DB (leftovers)? Published ones are kept.", cleaned: "Cleaned posts", confirm_cascade_shorts: "This series has %s shorts. Delete them too — from all platforms and the DB?", shorts_deleted: "Series shorts deleted", confirm_cascade_tg_bulk: "%s items have a scheduled Telegram link post. Delete those too?", confirm_cascade_tg: "A Telegram post with the link is already scheduled. Delete it too?", cascade_deleted: "Deleted together with the Telegram link", confirm_delete_row: "Delete only this post (%s)? Other platforms and the DB record stay.",
       delete_everywhere: "Delete everywhere (all platforms + DB)",
       confirm_delete_everywhere: "Delete the item from ALL platforms and the DB? Files on disk stay.",
       remove_posts: "Delete posts", search: "Search", search_placeholder: "Find folder by name…", search_none: "Nothing found", searching: "Searching…", search_short: "Type at least 2 characters", queue_all: "All", queue_select: "Select", queue_done: "Done",
       queue_selected: "selected", queue_bulk_tags: "Hashtags…", queue_bulk_apply: "Apply",
+      delete_everywhere_hint: "Danger zone: removes from the DB and every platform.",
       queue_bulk_clear: "Clear selection",
       queue_bulk_del: "Delete selected posts (%s)? Only the selected platforms are removed; files and other posts stay.",
       queue_bulk_tagp: "New hashtags for selected (%s):",
@@ -243,6 +262,17 @@
       tail_title: "Unposted series shorts", tail_explain: "Shorts already cut for the series but not published yet. When no new episodes appear, the system distributes the backlog into slots (standard shorts in the main-series slot, other series' shorts at 20:30) and only then starts the next series. It asks for confirmation first.", enable: "Enable", disable: "Disable",
       tail_off: "off", no_errors: "No errors",
       quick_actions: "Quick actions", act_sync: "Sync now",
+      act_group_plan: "Planning", act_group_data: "Data & sync", act_group_service: "Maintenance",
+      h_distribute: "Spread long videos into free schedule slots.",
+      h_schedule: "Schedule the whole queue now (no waiting for auto mode).",
+      h_sync: "Pull post statuses from Postiz (published or failed).",
+      h_reconcile: "Compare DB and Postiz: find missing and leftover posts.",
+      h_restore: "Return previously deleted posts back to the queue.",
+      h_cleanup: "Delete Postiz posts that are not in the DB (published kept).",
+      h_backup: "Make a database backup right now.",
+      h_refresh: "Re-read server data without other actions.",
+      errors_hint: "Only failed publications are listed. The full error text is under the post id.",
+      m_ok: "OK",
       test_title: "Test (trial post)", test_hint: "Creates a trial post in Postiz with the chosen delay. The live queue is untouched.",
       test_schedule: "Test post", test_dry: "Dry run", test_disabled: "Test contour is off (test_publish.enabled=false).",
       test_recent: "Recent test posts", test_cancel: "Cancel", test_entity: "Publish what", test_delay: "delay, min",
@@ -332,12 +362,96 @@
     user: tg?.initDataUnsafe?.user || null,
     data: {},
     queueFilter: (() => { try { return localStorage.getItem("queueFilter") || "all"; } catch (_) { return "all"; } })(),
+    calView: (() => { try { return localStorage.getItem("calView") || "day"; } catch (_) { return "day"; } })(),
+    calDate: null,
+    schedCount: {},
     queueSelect: false,
     queueSelected: {},
     queueBulkTags: null,
   };
 
   const $ = (id) => document.getElementById(id);
+
+  // ===== B2: слой нативности — тема, инсеты, хаптики, нативный back =====
+  // Тема: берём цвета из themeParams — панель совпадает с темой пользователя.
+  function applyTgTheme() {
+    try {
+      const tp = (tg && tg.themeParams) || {};
+      const root = document.documentElement.style;
+      const map = {
+        "--tg-bg": tp.bg_color,
+        "--tg-card": tp.section_bg_color || tp.secondary_bg_color,
+        "--tg-card2": tp.secondary_bg_color,
+        "--tg-text": tp.text_color,
+        "--tg-hint": tp.hint_color,
+        "--tg-sep": tp.section_separator_color,
+        "--tg-accent": tp.button_color,
+        "--tg-accent-text": tp.button_text_color,
+        "--tg-danger": tp.destructive_text_color,
+        "--tg-subtitle": tp.subtitle_text_color,
+        "--tg-header": tp.header_bg_color,
+        "--tg-bottom": tp.bottom_bar_bg_color,
+      };
+      Object.entries(map).forEach(([k, v]) => { if (v) root.setProperty(k, String(v)); });
+      const dark = (tg && tg.colorScheme === "dark")
+        || (!tg && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("tg-dark", !!dark);
+      document.documentElement.classList.toggle("tg-native", !!tg);
+    } catch (_) {}
+  }
+
+  // Инсеты: safeArea + contentSafeAreaInset — второй учитывает кнопки Telegram ✕ и ⋮
+  function applyTgInsets() {
+    try {
+      const s0 = (tg && tg.safeAreaInset) || {};
+      const c0 = (tg && tg.contentSafeAreaInset) || {};
+      const px = (v) => (typeof v === "number" && v > 0 ? Math.round(v) : 0);
+      const root = document.documentElement.style;
+      root.setProperty("--sa-top", Math.max(px(s0.top), px(c0.top)) + "px");
+      root.setProperty("--sa-bottom", Math.max(px(s0.bottom), px(c0.bottom)) + "px");
+      root.setProperty("--sa-right", Math.max(px(s0.right), px(c0.right)) + "px");
+      root.setProperty("--sa-left", Math.max(px(s0.left), px(c0.left)) + "px");
+      const fs = !!(tg && (tg.isFullscreen === true || (window.__fsRequested && tg.isFullscreen !== false)));
+      document.body.classList.toggle("tg-fs", fs);
+    } catch (_) {}
+  }
+
+  // Хаптики: тактильный отклик как в нативном Telegram
+  function haptic(kind) {
+    try {
+      const h = tg && tg.HapticFeedback;
+      if (!h) return;
+      if (kind === "select") h.selectionChanged();
+      else if (kind === "success") h.notificationOccurred("success");
+      else if (kind === "error") h.notificationOccurred("error");
+      else if (kind === "heavy") h.impactOccurred("heavy");
+      else if (kind === "medium") h.impactOccurred("medium");
+      else h.impactOccurred("light");
+    } catch (_) {}
+  }
+
+  // Нативная кнопка «Назад» для шторок — вместо своих ✕ внутри Telegram
+  let _backHandlers = [];
+  function nativeBackAvailable() {
+    return !!(tg && tg.BackButton && tg.isVersionAtLeast && tg.isVersionAtLeast("6.1"));
+  }
+  function showNativeBack(fn) {
+    if (!nativeBackAvailable()) return false;
+    try {
+      tg.BackButton.onClick(fn);
+      _backHandlers.push(fn);
+      tg.BackButton.show();
+      return true;
+    } catch (_) { return false; }
+  }
+  function hideNativeBack() {
+    if (!nativeBackAvailable()) return;
+    try {
+      _backHandlers.forEach((f) => tg.BackButton.offClick(f));
+      _backHandlers = [];
+      tg.BackButton.hide();
+    } catch (_) {}
+  }
   const content = () => $("content");
   function esc(s) {
     return String(s == null ? "" : s)
@@ -357,6 +471,7 @@
   }
 
   function toast(msg) {
+    haptic("light");
     const el = $("toast");
     el.textContent = msg;
     el.classList.add("show");
@@ -446,7 +561,8 @@
       </div>`;
     document.body.appendChild(root);
 
-    function close() { root.remove(); }
+    function close() { root.remove(); hideNativeBack(); }
+    root.dataset.nativeBack = showNativeBack(() => close()) ? "1" : "";
     function apply(path) {
       if (!path) return;
       let found = Array.from(select.options).find((o) => o.value === path);
@@ -666,11 +782,19 @@
     return (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || status || "—";
   }
 
-  function statusBtn(status, waiting) {
+  function statusBadge(status, waiting) {
+    // C3: статус — бейдж (не кнопка), «ждёт премьеру» — отдельным бейджем ниже
+    const s = (status || "").toLowerCase();
+    let cls = "badge";
+    if (["published", "ok", "ready"].includes(s)) cls += " ok";
+    else if (["scheduled", "updating", "publishing", "queue"].includes(s)) cls += " info";
+    else if (["failed", "error"].includes(s)) cls += " err";
+    else if (["paused", "skipped", "overflow"].includes(s)) cls += " warn";
+    let out = `<span class="${cls}">${statusText(status)}</span>`;
     if (waiting) {
-      return `<span class="btn secondary status-btn" title="${t("waiting_hint")}">${t("st_waiting")}</span>`;
+      out += ` <span class="badge warn" title="${esc(t("waiting_hint"))}">${t("st_waiting")}</span>`;
     }
-    return `<span class="btn secondary status-btn">${statusText(status)}</span>`;
+    return out;
   }
 
   function pill(status) {
@@ -779,17 +903,29 @@
       })
       .join("");
     const plats = (d.platforms || [])
-      .map((p) => `<div class="row"><div class="title q-plat">${pIcon(p.name)}</div>${
-        p.paused ? pill("paused") : pill("ok")
-      }<span class="meta">${t("limit")} ${p.daily_limit}</span></div>`)
+      .map((p) => {
+        const off = !p.enabled;
+        const badge = off
+          ? `<span class="badge off">${t("pa_off")}</span>`
+          : (p.paused ? `<span class="badge warn">${t("st_paused")}</span>`
+                      : `<span class="badge ok">${t("pa_on")}</span>`);
+        return `<div class="item${off ? " is-off" : ""}">
+          <span class="q-plat big">${pIcon(p.name)}</span>
+          <div class="item__main">
+            <div class="item__title">${esc(p.name)}</div>
+            <div class="item__meta">${t("limit_day")}: ${p.daily_limit}</div>
+          </div>
+          <div class="item__actions row">${badge}</div>
+        </div>`;
+      })
       .join("");
     content().innerHTML = `<div class="view-enter">
-      <div class="form-row pb-12">
+      <div class="btn-grid">
         <button class="btn primary" data-goto="folders">${esc(t("status_cta_add"))}</button>
         <button class="btn secondary" data-goto="queue">${esc(t("status_cta_queue"))}</button>
       </div>
       <div class="grid">${cards || `<div class="empty">${t("no_data")}</div>`}</div>
-      <div class="panel"><div class="panel-header">${t("platforms")}</div>
+      <div class="panel"><div class="panel-head"><h3>${t("platforms")}</h3></div>
         ${plats || `<div class="empty">${t("no_platforms")}</div>`}
       </div>`;
   }
@@ -863,12 +999,14 @@
         <div class="row"><div class="title mono fs-12 wrap-any">${esc(b.path || "")}</div></div>
         ${searchBlock}
         ${warnRow}
-        <div class="form-row">
+        <div class="btn-grid">
           <button class="btn secondary" data-act="folder-up" data-p="${esc(b.parent || "")}" ${b.parent ? "" : "disabled"}>${t("up")}</button>
           <button class="btn primary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="series">${t("add_series")}</button>
           <button class="btn secondary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="shorts">${t("add_shorts")}</button>
           <button class="btn secondary" data-act="folder-add" data-p="${esc(b.path || "")}" data-kind="auto">${t("add_auto")}</button>
-          <button class="btn success" data-act="folder-scan">${t("scan")}</button>
+        </div>
+        <div class="btn-grid one">
+          <button class="btn secondary success-text" data-act="folder-scan">${t("scan")}</button>
         </div>
         ${dirs || `<div class="empty">${t("no_subfolders")}</div>`}
       </div>
@@ -896,24 +1034,127 @@
     renderFolders(state.data || {});
   }
 
+  // C11: План — День / Неделя / Месяц (визуализация)
+  const isoOf = (dt) => {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+  };
+  const addDaysIso = (iso, delta) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(y, m - 1, d + delta, 12, 0, 0);
+    return isoOf(dt);
+  };
+  const weekdayIso = (iso) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d, 12, 0, 0).getDay();
+  };
+  const humanDate = (iso) => {
+    try {
+      const [y, m, d] = iso.split("-").map(Number);
+      return new Intl.DateTimeFormat(state.lang === "ru" ? "ru-RU" : "en-US",
+        { weekday: "short", day: "numeric", month: "long" }).format(new Date(y, m - 1, d, 12));
+    } catch (_) { return iso; }
+  };
+  const DAY_SHORT = (iso) => {
+    try {
+      const [y, m, d] = iso.split("-").map(Number);
+      return new Intl.DateTimeFormat(state.lang === "ru" ? "ru-RU" : "en-US",
+        { weekday: "short" }).format(new Date(y, m - 1, d, 12));
+    } catch (_) { return ""; }
+  };
+
+  function calPostGroups(items) {
+    // один пост видео = одна строка: YT+TG рядом (парные иконки), а не вразнобой
+    const groups = new Map();
+    (items || []).forEach((it) => {
+      const k = (it.entity_type && it.entity_id)
+        ? `${it.entity_type}#${it.entity_id}` : `t:${it.title || ""}`;
+      if (!groups.has(k)) groups.set(k, { title: it.title || "", time: it.time || "", items: [] });
+      const g = groups.get(k);
+      if (!g.time && it.time) g.time = it.time;
+      g.items.push(it);
+    });
+    return Array.from(groups.values()).sort((a, b) => String(a.time).localeCompare(String(b.time)));
+  }
+
+  function calRow(g) {
+    const icons = g.items.map((it) => `<span class="q-plat">${pIcon(it.platform)}</span>`).join("");
+    const badges = g.items.map((it) => statusBadge(it.status, false)).join(" ");
+    const link = g.items.map((it) => it.url
+      ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="mono">↗</a>` : "").join(" ");
+    return `<div class="item">
+      <span class="mono">${esc(g.time || "—")}</span>
+      <div class="item__main">
+        <div class="item__title">${esc(g.title)}</div>
+        <div class="item__meta">${icons}</div>
+        <div class="item__meta">${badges} ${link}</div>
+      </div>
+    </div>`;
+  }
+
   function renderCalendar(d) {
-    const legend = `<div class="panel"><div class="panel-header">${t("title_calendar")}</div>
-      <div class="row"><span class="meta">${t("calendar_explain")}</span></div></div>`;
     const days = d.days || [];
+    const view = state.calView || "day";
+    const byDate = new Map(days.map((x) => [x.date, x]));
+    const todayIso = isoOf(new Date());
+    const cur = state.calDate || (byDate.has(todayIso) ? todayIso : (days[0] && days[0].date) || todayIso);
+    const seg = (keys) => `<div class="seg" role="group">${keys.map(([k, l]) =>
+      `<button class="${view === k ? "on" : ""}" data-act="cal-view" data-v="${k}" aria-pressed="${view === k}">${l}</button>`).join("")}</div>`;
+    const bar = `<div class="panel"><div class="cal-bar">${seg([
+      ["day", t("cal_day")], ["week", t("cal_week")], ["month", t("cal_month")]])}</div></div>`;
     if (!days.length) {
-      content().innerHTML = legend + `<div class="panel"><div class="empty">${t("calendar_empty")}</div></div>`;
+      content().innerHTML = bar + `<div class="panel"><div class="empty">${t("calendar_empty")}</div></div>`;
       return;
     }
-    content().innerHTML = legend + days.map((day) => {
-      const rows = (day.items || []).map((it) => {
-        const title = it.title || it.platform || "";
-        const link = it.url ? ` <a href="${esc(it.url)}" target="_blank" rel="noopener">↗</a>` : "";
-        return `<div class="row"><span class="mono">${it.time || ""}</span>
-          <div class="title">${esc(title)}${link}</div>
-          <span class="meta q-plat">${pIcon(it.platform)}</span>${pill(it.status)}</div>`;
+    let body = "";
+    if (view === "day") {
+      const day = byDate.get(cur);
+      const nav = `<div class="cal-nav">
+        <button class="btn secondary sm" data-act="cal-shift" data-n="-1">‹</button>
+        <b>${esc(humanDate(cur))}${cur === todayIso ? " · " + t("cal_today") : ""}</b>
+        <button class="btn secondary sm" data-act="cal-shift" data-n="1">›</button></div>`;
+      const groups = day ? calPostGroups(day.items) : [];
+      body = `<div class="panel"><div class="panel-head"><h3>${t("cal_day")}</h3></div>${nav}
+        ${groups.map(calRow).join("") || `<div class="empty">${t("calendar_empty")}</div>`}</div>`;
+    } else if (view === "week") {
+      const wd = weekdayIso(cur);
+      const start = addDaysIso(cur, -((wd + 6) % 7)); // понедельник
+      const cells = Array.from({ length: 7 }, (_v, i) => {
+        const ds = addDaysIso(start, i);
+        const day = byDate.get(ds);
+        const groups = day ? calPostGroups(day.items) : [];
+        const chips = groups.map((g) => `<button class="cal-witem" data-act="cal-day" data-d="${ds}">
+            <span class="mono">${esc(g.time || "")}</span>
+            <span class="q-plat">${g.items.map((it) => pIcon(it.platform)).join("")}</span></button>`).join("");
+        return `<div class="cal-wcol${ds === todayIso ? " today" : ""}">
+          <div class="cal-whead">${esc(DAY_SHORT(ds))} ${ds.slice(8)}</div>${chips}</div>`;
       }).join("");
-      return `<div class="panel"><div class="panel-header">${day.date} <span class="meta">${esc(day.count || 0)}</span></div>${rows}</div>`;
-    }).join("");
+      body = `<div class="panel"><div class="panel-head"><h3>${t("cal_week")}</h3>
+        <button class="btn secondary sm" data-act="cal-today">${t("cal_today")}</button></div>
+        <div class="cal-week">${cells}</div></div>`;
+    } else {
+      const [y, m] = cur.split("-").map(Number);
+      const first = new Date(y, m - 1, 1, 12);
+      const daysInMonth = new Date(y, m, 0, 12).getDate();
+      const lead = (first.getDay() + 6) % 7;
+      const cells = [];
+      for (let i = 0; i < lead; i++) cells.push(`<div class="cal-cell empty"></div>`);
+      for (let dd = 1; dd <= daysInMonth; dd++) {
+        const ds = `${y}-${String(m).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+        const day = byDate.get(ds);
+        const groups = day ? calPostGroups(day.items) : [];
+        const dots = groups.slice(0, 4).map((g) => `<span class="cal-dot">${g.items.map((it) => pIcon(it.platform)).join("")}</span>`).join("");
+        cells.push(`<button class="cal-cell${day ? " has" : ""}${ds === todayIso ? " today" : ""}" data-act="cal-day" data-d="${ds}">
+          <span class="cal-d">${dd}</span>${dots}
+          ${groups.length > 4 ? `<span class="cal-cnt">+${groups.length - 4}</span>` : ""}</button>`);
+      }
+      const wdays = (state.lang === "ru" ? ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] : ["mo", "tu", "we", "th", "fr", "sa", "su"])
+        .map((l) => `<span class="cal-wday-label">${l}</span>`).join("");
+      body = `<div class="panel"><div class="panel-head"><h3>${t("cal_month")}</h3>
+        <button class="btn secondary sm" data-act="cal-today">${t("cal_today")}</button></div>
+        <div class="cal-month"><div class="cal-wdays">${wdays}</div>${cells.join("")}</div></div>`;
+    }
+    content().innerHTML = `<div class="view-enter">${bar}${body}</div>`;
   }
 
   async function bulkDelete() {
@@ -1068,33 +1309,36 @@
       const key = keyOf(it);
       const checked = !!sel[key];
       const form = (edit && edit.key === key)
-        ? `<div class="panel q-edit-panel">
-             <div class="form-row"><label class="meta">${t("edit_title")}
-               <input id="qe-title" type="text" value="${esc(it.title_text || "")}" class="w-full"/></label></div>
-             <div class="form-row"><label class="meta">${t("edit_desc")}
-               <textarea id="qe-desc" rows="4" class="w-full">${esc(it.description_text || "")}</textarea></label></div>
-             <div class="form-row"><label class="meta">${t("edit_tags")}
-               <input id="qe-tags" type="text" value="${esc(it.hashtags_text || "")}" class="w-full"/></label></div>
-             <div class="form-row">
-               <label class="meta">${t("edit_cover")}
-                 <select id="qe-cover">
-                   <option value="">${t("cover_none")}</option>
-                   ${(it.covers || []).map((c) => `<option value="${esc(c)}" ${c === it.cover_path ? "selected" : ""}>${esc(c.split("/").pop())}</option>`).join("")}
-                 </select>
-               </label>
+        ? `<div class="q-edit-panel">
+             <label class="field"><span class="field__label">${t("edit_title")}</span>
+               <input id="qe-title" type="text" value="${esc(it.title_text || "")}"/></label>
+             <label class="field"><span class="field__label">${t("edit_desc")}</span>
+               <textarea id="qe-desc" rows="4">${esc(it.description_text || "")}</textarea></label>
+             <label class="field"><span class="field__label">${t("edit_tags")}</span>
+               <input id="qe-tags" type="text" value="${esc(it.hashtags_text || "")}"/></label>
+             <label class="field"><span class="field__label">${t("edit_cover")}</span>
+               <select id="qe-cover">
+                 <option value="">${t("cover_none")}</option>
+                 ${(it.covers || []).map((c) => `<option value="${esc(c)}" ${c === it.cover_path ? "selected" : ""}>${esc(c.split("/").pop())}</option>`).join("")}
+               </select></label>
+             <div class="btn-grid">
                <button class="btn secondary" data-act="cover-pick"
                        data-et="${it.entity_type}" data-eid="${it.entity_id}"
                        data-video="${esc(it.video_path || "")}">${t("cover_pick")}</button>
-             </div>
-             <div class="form-row">
-               <label class="meta">${t("edit_date")} <input id="qe-date" type="date" value="${it.date || ""}"/></label>
-               <label class="meta">${t("edit_time")} <input id="qe-time" type="time" value="${it.time || ""}"/></label>
-             </div>
-             <div class="form-row">
-               <button class="btn primary" data-act="queue-edit-save" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_edit_save")}</button>
                <button class="btn secondary" data-act="queue-edit-cancel">${t("queue_edit_cancel")}</button>
-               <button class="btn secondary" data-act="queue-remove-everywhere" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("delete_everywhere")}</button>
-               ${it.entity_type === "long_video" ? `<button class="btn secondary" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
+             </div>
+             <div class="btn-grid" style-x>
+               <label class="field" style-nopad><span class="field__label">${t("edit_date")}</span><input id="qe-date" type="date" value="${it.date || ""}"/></label>
+               <label class="field" style-nopad><span class="field__label">${t("edit_time")}</span><input id="qe-time" type="time" value="${it.time || ""}"/></label>
+             </div>
+             <div class="btn-grid">
+               <button class="btn primary" data-act="queue-edit-save" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}">${t("queue_edit_save")}</button>
+             </div>
+             <div class="divider"></div>
+             <div class="hint">${t("delete_everywhere_hint")}</div>
+             <div class="btn-grid">
+               <button class="btn secondary danger-text" data-act="queue-remove-everywhere" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("delete_everywhere")}</button>
+               ${it.entity_type === "long_video" ? `<button class="btn secondary danger-text" data-act="queue-remove-film-only" data-eid="${it.entity_id}" data-tg="${it.has_tg ? "1" : "0"}">${t("queue_remove_film_only")}</button>` : ""}
              </div>
            </div>`
         : "";
@@ -1105,23 +1349,22 @@
              <img class="q-cover" loading="lazy" alt=""
                src="/webapp/api/cover/thumb?key=${encodeURIComponent(state.key || "")}&path=${encodeURIComponent(it.cover_path)}"/></button>`
         : `<button class="q-cover-btn q-cover-empty" data-act="queue-edit" data-key="${key}" title="${t("cover_pick")}"></button>`;
-      const col = select ? "" : `<div class="queue-col">
+      const col = select ? "" : `<div class="item__actions">
           <button class="icon-btn" data-act="queue-edit" data-key="${key}" title="${t("queue_edit")}" aria-label="${t("queue_edit")}">${icon("edit", 18)}</button>
           <button class="icon-btn danger" data-act="queue-remove" data-et="${it.entity_type}" data-eid="${it.entity_id}" data-p="${it.platform}" title="${t("queue_remove")}" aria-label="${t("queue_remove")}">${icon("trash", 18)}</button>
         </div>`;
-      return `<div class="row q-row${checked ? " picked" : ""}">
-        <div class="q-line">${check}${cover}
-          <div class="q-main">
-            <div class="q-title" title="${esc(it.title || "")}">${esc(it.title || (it.entity_type + "#" + it.entity_id))}</div>
-            <div class="q-meta mono">
-              <span class="q-date">${it.date || ""}</span>
-              <span class="q-clock">${it.time || ""}</span>
-              <span class="q-plat">${pIcon(it.platform)}</span>
-              <span class="q-status">${statusBtn(it.status, it.waiting)}</span>
-            </div>
+      return `<div class="item q-item${checked ? " picked" : ""}${select ? " with-check" : ""}">
+        ${check}${cover}
+        <div class="item__main">
+          <div class="item__title" title="${esc(it.title || "")}">${esc(it.title || (it.entity_type + "#" + it.entity_id))}</div>
+          <div class="item__meta">
+            <span class="mono">${esc(it.date || "")}</span>
+            <span class="mono">${esc(it.time || "")}</span>
+            <span class="q-plat">${pIcon(it.platform)}</span>
           </div>
-          ${col}
+          <div class="item__meta">${statusBadge(it.status, it.waiting)}</div>
         </div>
+        ${col}
         ${form}</div>`;
     };
 
@@ -1140,20 +1383,30 @@
   }
 
   function renderPlatforms(d) {
-    const rows = (d.platforms || []).map((p) => `
-      <div class="row"><div class="title q-plat">${pIcon(p.name)}</div>
-        ${p.enabled ? pill("ok") : pill("off")}${p.paused ? pill("paused") : ""}
-        <span class="meta">${t("limit")} ${p.daily_limit}</span>
-        <button class="btn secondary" data-act="resume-one" data-p="${esc(p.name)}">${t("resume")}</button>
-        <button class="btn danger" data-act="pause-one" data-p="${esc(p.name)}">${t("pa_pause")}</button>
-      </div>`).join("");
+    const rows = (d.platforms || []).map((p) => {
+      const off = !p.enabled;
+      const badge = off
+        ? `<span class="badge off">${t("pa_off")}</span>`
+        : (p.paused ? `<span class="badge warn">${t("st_paused")}</span>`
+                    : `<span class="badge ok">${t("pa_on")}</span>`);
+      const action = off ? "" : (p.paused
+        ? `<button class="btn secondary sm" data-act="resume-one" data-p="${esc(p.name)}">${t("resume")}</button>`
+        : `<button class="btn secondary sm" data-act="pause-one" data-p="${esc(p.name)}">${t("pa_pause")}</button>`);
+      return `<div class="item${off ? " is-off" : ""}">
+        <span class="q-plat big">${pIcon(p.name)}</span>
+        <div class="item__main">
+          <div class="item__title">${esc(p.name)}</div>
+          <div class="item__meta">${t("limit_day")}: ${p.daily_limit}</div>
+        </div>
+        <div class="item__actions row">${badge}${action}</div>
+      </div>`;
+    }).join("");
     content().innerHTML = `
       <div class="panel">
-        <div class="panel-header">${t("platforms")}
-          <span class="panel-actions">
-            <button class="btn danger" data-act="pause-all">${t("pause_all")}</button>
-            <button class="btn success" data-act="resume-all">${t("resume_all")}</button>
-          </span>
+        <div class="panel-head"><h3>${t("platforms")}</h3></div>
+        <div class="btn-grid">
+          <button class="btn secondary danger-text" data-act="pause-all">${t("pause_all")}</button>
+          <button class="btn secondary success-text" data-act="resume-all">${t("resume_all")}</button>
         </div>
         ${rows || `<div class="empty">${t("none")}</div>`}
       </div>`;
@@ -1164,29 +1417,64 @@
         <input id="backlog-date" type="date" /></label></div>`;
     const rows = (d.backlog || []).map((p) => {
       const state = p.awaiting
-        ? pill(t("backlog_awaiting"))
-        : (p.tail_mode ? pill(t("backlog_on")) : pill(t("backlog_off")));
-      const slot = p.slot ? `<span class="mono meta">${String(p.slot).slice(0, 16).replace("T", " ")}</span>` : "";
-      return `<div class="row"><div class="title q-plat">${pIcon(p.platform)}</div>
-          <span class="meta">${t("backlog_unposted")}: ${p.count}</span>
-          ${state}${slot}</div>
-        <div class="form-row">
-          <button class="btn primary" data-act="backlog-answer" data-p="${p.platform}" data-a="distribute">${t("backlog_distribute")}</button>
-          <button class="btn secondary" data-act="backlog-answer" data-p="${p.platform}" data-a="wait">${t("backlog_wait")}</button>
-          <button class="btn danger" data-act="backlog-answer" data-p="${p.platform}" data-a="skip">${t("backlog_skip")}</button>
-        </div>`;
+        ? `<span class="badge warn">${t("backlog_awaiting")}</span>`
+        : (p.tail_mode ? `<span class="badge info">${t("backlog_on")}</span>`
+                       : `<span class="badge">${t("backlog_off")}</span>`);
+      const slot = p.slot ? `<span class="mono">${esc(String(p.slot).slice(0, 16).replace("T", " "))}</span>` : "";
+      const pname = String(p.platform || "");
+      const title = pname ? pname.charAt(0).toUpperCase() + pname.slice(1) : "—";
+      return `<div class="item">
+        <span class="q-plat big">${pIcon(p.platform)}</span>
+        <div class="item__main">
+          <div class="item__title">${esc(title)}</div>
+          <div class="item__meta">${t("backlog_unposted")}: <b>${p.count}</b>${slot ? " · " + slot : ""}</div>
+          <div class="item__meta">${state}</div>
+        </div>
+      </div>
+      <div class="btn-grid cols-3">
+        <button class="btn primary" data-act="backlog-answer" data-p="${esc(p.platform)}" data-a="distribute">${t("backlog_distribute")}</button>
+        <button class="btn secondary" data-act="backlog-answer" data-p="${esc(p.platform)}" data-a="wait">${t("backlog_wait")}</button>
+        <button class="btn secondary danger-text" data-act="backlog-answer" data-p="${esc(p.platform)}" data-a="skip">${t("backlog_skip")}</button>
+      </div>`;
     }).join("");
-    content().innerHTML = `<div class="panel"><div class="panel-header">${t("tail_title")}</div>
-      <div class="row"><span class="meta">${t("tail_explain")}</span></div>
+    content().innerHTML = `<div class="panel"><div class="panel-head"><h3>${t("tail_title")}</h3></div>
+      <div class="hint">${t("tail_explain")}</div>
       ${rows || `<div class="empty">${t("no_data")}</div>`}</div>`;
   }
 
   function failedHtml(d) {
-    const rows = ((d && d.items) || []).map((it) =>
-      `<div class="row"><div class="title">${it.entity_type}#${it.entity_id} · ${it.platform}</div>
-       <span class="meta">${esc(it.last_error || "")}</span>${pill(it.status)}</div>`).join("");
-    return `<div class="panel"><div class="panel-header">${t("errors_header")}</div>${
-      rows || `<div class="empty">${t("no_errors")}</div>`}</div>`;
+    const items = (d && d.items) || [];
+    if (!items.length) {
+      return `<div class="panel"><div class="panel-head"><h3>${t("errors_header")}</h3></div>
+        <div class="empty">${t("no_errors")}</div></div>`;
+    }
+    const byPlat = {};
+    items.forEach((it) => { (byPlat[it.platform] = byPlat[it.platform] || []).push(it); });
+    const panels = Object.entries(byPlat).map(([plat, list]) => `
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span class="q-plat big">${pIcon(plat)}</span> ${esc(plat)}</h3>
+          <span class="badge err">${list.length}</span>
+        </div>
+        ${list.map((it) => `<div class="item">
+          <span></span>
+          <div class="item__main">
+            <div class="item__title">${esc(it.entity_type)} #${esc(String(it.entity_id))}</div>
+            <div class="item__hint">${esc(it.last_error || "")}</div>
+          </div>
+          <div class="item__actions row">${statusBadge(it.status, false)}</div>
+        </div>`).join("")}
+      </div>`).join("");
+    return `<div class="panel"><div class="panel-head"><h3>${t("errors_header")}</h3>
+        <span class="badge err">${items.length}</span></div>
+      <div class="hint">${t("errors_hint")}</div></div>${panels}`;
+  }
+
+  function actCell(act, labelKey, hintKey, cls) {
+    return `<div class="act">
+      <button class="btn ${cls || "secondary"}" data-act="${act}">${t(labelKey)}</button>
+      <span class="item__hint">${t(hintKey)}</span>
+    </div>`;
   }
 
   function renderActions(d) {
@@ -1194,20 +1482,24 @@
       .map((p) => `<option>${esc(p.name)}</option>`).join("")
       || `<option>youtube</option>`;
     content().innerHTML = `
-      <div class="panel"><div class="panel-header">${t("quick_actions")}</div>
-        <div class="form-row">
-          <button class="btn primary" data-act="distribute">${t("distribute")}</button>
-          <button class="btn secondary" data-act="schedule">${t("act_schedule")}</button>
+      <div class="panel"><div class="panel-head"><h3>${t("act_group_plan")}</h3></div>
+        <div class="act-grid">
+          ${actCell("distribute", "distribute", "h_distribute", "primary")}
+          ${actCell("schedule", "act_schedule", "h_schedule")}
         </div>
-        <div class="form-row">
-          <button class="btn secondary" data-act="queue-restore-all">${t("restore_posts")}</button>
-          <button class="btn secondary" data-act="queue-cleanup-orphans">${t("cleanup_orphans")}</button>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>${t("act_group_data")}</h3></div>
+        <div class="act-grid">
+          ${actCell("sync", "act_sync", "h_sync")}
+          ${actCell("reconcile", "act_reconcile", "h_reconcile")}
+          ${actCell("queue-restore-all", "restore_posts", "h_restore")}
+          ${actCell("queue-cleanup-orphans", "cleanup_orphans", "h_cleanup")}
         </div>
-        <div class="form-row">
-          <button class="btn secondary" data-act="sync">${t("act_sync")}</button>
-          <button class="btn secondary" data-act="reconcile">${t("act_reconcile")}</button>
-          <button class="btn secondary" data-act="backup">${t("act_backup")}</button>
-          <button class="btn secondary" data-act="refresh">${t("refresh_data")}</button>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>${t("act_group_service")}</h3></div>
+        <div class="act-grid">
+          ${actCell("backup", "act_backup", "h_backup")}
+          ${actCell("refresh", "refresh_data", "h_refresh")}
         </div>
       </div>
       <div class="panel"><div class="panel-header">${t("test_title")}</div>
@@ -1302,8 +1594,10 @@
       metric(t("m_cycle_errors"), d.errors ?? 0),
     ].join("");
     const errRow = d.last_error
-      ? `<div class="row"><span class="pill err">${t("m_err_pill")}</span><span class="title">${esc(d.last_error)}</span></div>`
-      : `<div class="row"><span class="pill ok">ОК</span><span class="title">${t("m_no_err")}</span></div>`;
+      ? `<div class="item"><span></span><div class="item__main"><div class="item__title">${t("m_err_pill")}</div>
+           <div class="item__hint">${esc(d.last_error)}</div></div><div class="item__actions row"><span class="badge err">!</span></div></div>`
+      : `<div class="item"><span></span><div class="item__main"><div class="item__title">${t("m_no_err")}</div></div>
+           <div class="item__actions row"><span class="badge ok">${t("m_ok")}</span></div></div>`;
     content().innerHTML = `
       <div class="grid">${cards}</div>
       <div class="panel"><div class="panel-header">${t("m_publications")}</div>
@@ -1322,9 +1616,14 @@
 
   function helpSection(titleKey, items) {
     const rows = items.map(([nameKey, descKey]) =>
-      `<div class="row"><div class="title">${t(nameKey)}</div><span class="meta flex-2-right">${t(descKey)}</span></div>`
-    ).join("");
-    return `<div class="panel"><div class="panel-header">${t(titleKey)}</div>${rows}</div>`;
+      `<div class="item help-item">
+        <span></span>
+        <div class="item__main">
+          <div class="item__title">${t(nameKey)}</div>
+          <div class="item__hint">${t(descKey)}</div>
+        </div>
+      </div>`).join("");
+    return `<div class="panel"><div class="panel-head"><h3>${t(titleKey)}</h3></div>${rows}</div>`;
   }
 
   function renderManual(d) {
@@ -1383,10 +1682,11 @@
   }
 
   const DAY_KEYS = [["mon", "Пн"], ["tue", "Вт"], ["wed", "Ср"], ["thu", "Чт"], ["fri", "Пт"], ["sat", "Сб"], ["sun", "Вс"]];
-  function dayChecksKind(scope, kind, selected) {
-    return DAY_KEYS.map(([k, l]) =>
-      `<label class="chk mr-6"><input type="checkbox" data-day="${scope}|${kind}" value="${k}"${(selected || []).includes(k) ? " checked" : ""}/> ${l}</label>`
-    ).join("");
+  function dayChips(scope, kind, selected) {
+    const sel = selected || [];
+    return `<div class="chips day-chips">${DAY_KEYS.map(([k, l]) =>
+      `<label class="chip${sel.includes(k) ? " on" : ""}"><input type="checkbox" class="chip__input" data-day="${scope}|${kind}" value="${k}"${sel.includes(k) ? " checked" : ""}/>${l}</label>`
+    ).join("")}</div>`;
   }
   function schedBlock(key, title, eff, block, withLimit) {
     const long = (block && block.long) || {};
@@ -1399,18 +1699,30 @@
     const longTime = long.time || effLong.time || "";
     const thTime = th.time || effTh.time || "";
     const saDays = sa.days || effSa.days || [];
-    const saTimes = (sa.times || effSa.times || []).join(", ");
+    const saTimesArr = (sa.times || effSa.times || []).slice(0, 3);
+    const cnt = Number(state.schedCount && state.schedCount[key]) || Math.max(saTimesArr.length, 1);
     const limit = withLimit ? ((block && block.daily_limit) ?? ((eff && eff.daily_limit) ?? "")) : "";
-    return `<div class="panel"><div class="panel-header">${title}</div>
-      <div class="row"><span class="meta min-130">${t("sched_long")}</span>
-        <div>${dayChecksKind(key, "long", longDays)} <input type="time" data-time="${key}|long" value="${longTime}"/></div></div>
-      <div class="row"><span class="meta min-130">${t("sched_thematic")}</span>
-        <div><input type="time" data-time="${key}|thematic" value="${thTime}"/></div></div>
-      <div class="row"><span class="meta min-130">${t("sched_standalone")}</span>
-        <div>${dayChecksKind(key, "standalone", saDays)} <input type="text" data-times="${key}|standalone" value="${saTimes}" placeholder="12:00, 18:00"/></div></div>
-      ${withLimit ? `<div class="row"><span class="meta min-130">${t("sched_limit")}</span>
-        <input type="number" min="0" max="50" data-limit="${key}" value="${limit}"/></div>` : ""}
-      <div class="form-row">
+    const timeInputs = Array.from({ length: cnt }, (_v, i) =>
+      `<input type="time" data-time-n="${key}|standalone|${i}" value="${esc(saTimesArr[i] || "")}"/>`).join("");
+    const seg = [1, 2, 3].map((x) =>
+      `<button class="${x === cnt ? "on" : ""}" data-act="sched-count" data-p="${esc(key)}" data-n="${x}"
+        aria-pressed="${x === cnt}">${x}</button>`).join("");
+    return `<div class="panel"><div class="panel-head"><h3>${title}</h3></div>
+      <div class="field"><span class="field__label">${t("sched_long")} · ${t("sched_days")}</span>
+        ${dayChips(key, "long", longDays)}
+        <input type="time" data-time="${key}|long" value="${longTime}"/></div>
+      <div class="field"><span class="field__label">${t("sched_thematic")}</span>
+        <input type="time" data-time="${key}|thematic" value="${thTime}"/></div>
+      <div class="field"><span class="field__label">${t("sched_standalone")} · ${t("sched_days")}</span>
+        ${dayChips(key, "standalone", saDays)}</div>
+      <div class="field"><span class="field__label">${t("sched_count")}</span>
+        <div class="seg" role="group">${seg}</div>
+        <div class="times-row">${timeInputs}</div>
+        <input type="hidden" data-times="${key}|standalone" value="${esc(saTimesArr.join(", "))}"/></div>
+      ${withLimit ? `<div class="field"><span class="field__label">${t("sched_limit")}</span>
+        <input type="number" min="0" max="50" data-limit="${key}" value="${limit}"/>
+        <span class="item__hint">${t("sched_limit_hint")}</span></div>` : ""}
+      <div class="btn-grid">
         <button class="btn primary" data-act="sched-save" data-p="${key}">${t("sched_save")}</button>
         <button class="btn secondary" data-act="sched-reset" data-p="${key}">${t("sched_reset")}</button>
       </div></div>`;
@@ -1418,13 +1730,28 @@
   function groupsHtml(d) {
     const groups = d.groups || [];
     const plats = d.platforms || [];
-    const groupRows = groups.map((g) =>
-      `<div class="row"><div class="title">${icon("users", 15)} ${esc(g.name)}</div><span class="meta">${(g.platforms || []).join(", ")}</span>
-        <button class="btn danger" data-act="group-remove" data-p="${esc(g.name)}">${t("group_remove")}</button></div>`).join("");
-    const groupForm = `<div class="form-row"><input id="group-name" placeholder="${t("group_name")}" />
-      <span class="meta">${plats.map((p) => `<label class="chk mr-6"><input type="checkbox" data-gplat value="${p}"/> ${p}</label>`).join(" ")}</span>
-      <button class="btn secondary" data-act="group-add">${t("group_add")}</button></div>`;
-    return `<div class="panel"><div class="panel-header">${t("groups_header")}</div>
+    const groupRows = groups.map((g) => {
+      const chips = (g.platforms || []).map((p) =>
+        `<span class="badge info"><span class="q-plat">${pIcon(p)}</span>${esc(p)}</span>`).join(" ");
+      return `<div class="item">
+        <span class="q-plat big">${icon("users", 20)}</span>
+        <div class="item__main">
+          <div class="item__title">${esc(g.name)}</div>
+          <div class="item__meta">${chips || "—"}</div>
+        </div>
+        <div class="item__actions row">
+          <button class="btn secondary danger-text sm" data-act="group-remove" data-p="${esc(g.name)}">${t("group_remove")}</button>
+        </div>
+      </div>`;
+    }).join("");
+    const groupForm = `<div class="field"><span class="field__label">${t("group_name")}</span>
+        <input id="group-name" placeholder="${t("group_name")}"/></div>
+      <div class="field"><span class="field__label">${t("group_platforms")}</span>
+        <div class="chips">${plats.map((p) =>
+          `<label class="chip"><input type="checkbox" class="chip__input" data-gplat value="${esc(p)}"/><span class="q-plat">${pIcon(p)}</span>${esc(p)}</label>`).join("")}</div></div>
+      <div class="btn-grid one"><button class="btn primary" data-act="group-add">${t("group_add")}</button></div>`;
+    return `<div class="panel"><div class="panel-head"><h3>${t("groups_header")}</h3></div>
+      <div class="hint">${t("groups_hint")}</div>
       ${groupRows || `<div class="empty">${t("groups_none")}</div>`}${groupForm}</div>`;
   }
   function scheduleHtml(d) {
@@ -1439,20 +1766,20 @@
   function renderSettings(d) {
     const tab = state.settingsTab || "sched";
     const sched = d.sched || {};
-    const tabs = [["sched", t("settings_tab_sched")], ["errors", t("settings_tab_errors")], ["help", t("settings_tab_help")]];
+    const tabs = [["sched", t("settings_tab_sched")], ["help", t("settings_tab_help")]];
     const tabBtns = `<div class="panel"><div class="form-row">${tabs.map(([k, label]) =>
       `<button class="btn ${tab === k ? "primary" : "secondary"}" data-act="settings-tab" data-p="${k}">${label}</button>`).join("")}</div></div>`;
     let body = "";
-    if (tab === "errors") body = failedHtml(d.failed || {});
-    else if (tab === "help") body = helpHtml();
+    if (tab === "help") body = helpHtml();
     else {
       const mode = (sched.mode === "auto") ? "auto" : "manual";
       const modePanel = `<div class="panel"><div class="panel-header">${t("sched_title")}</div>
         <div class="row"><span class="meta">${t("mode_hint")}</span></div>
         <div class="form-row"><button class="btn ${mode === "auto" ? "success" : "secondary"}" data-act="toggle-mode">${mode === "auto" ? t("mode_auto") : t("mode_manual")}</button></div></div>`;
-      body = groupsHtml(sched)
+      body = `<div class="panel"><div class="hint">${t("sched_priority")}</div></div>`
+        + groupsHtml(sched)
         + modePanel
-        + `<div class="panel"><div class="row"><span class="meta">${t("sched_explain")}</span></div></div>`
+        + `<div class="panel"><div class="hint">${t("sched_explain")}</div></div>`
         + scheduleHtml(sched);
     }
     content().innerHTML = `<div class="view-enter">${tabBtns}${body}</div>`;
@@ -1560,7 +1887,7 @@
       ["help", "help"], ["settings", "gear"],
     ];
     const rows = items.map(([v, ic]) =>
-      `<button class="sheet-item" data-view="${v}">${icon(ic, 22)}<span>${esc(t("nav_" + v))}</span><span class="chev">›</span></button>`
+      `<button class="sheet-item" data-view="${v}">${icon(ic, 22)}<span>${esc(t("title_" + v))}</span><span class="chev">›</span></button>`
     ).join("");
     const ov = document.createElement("div");
     ov.className = "sheet-overlay";
@@ -1574,6 +1901,8 @@
         <button class="lang-btn${state.lang === "en" ? " active" : ""}" data-lang="en">EN</button>
       </div>
     </div>`;
+    const _useBack = showNativeBack(() => closeMoreSheet());
+    ov.dataset.nativeBack = _useBack ? "1" : "";
     ov.addEventListener("click", (e) => {
       if (e.target === ov) { closeMoreSheet(); return; }
       const langBtn = e.target.closest("button[data-lang]");
@@ -1590,6 +1919,7 @@
   function closeMoreSheet() {
     const el = $("more-sheet");
     if (el) el.remove();
+    hideNativeBack();
   }
 
   document.addEventListener("keydown", (e) => {
@@ -1703,6 +2033,45 @@
         toast(t("t_folder_removed"));
         return load();
       }
+      if (act === "cal-view") {
+        state.calView = el.dataset.v || "day";
+        try { localStorage.setItem("calView", state.calView); } catch (_) {}
+        renderCalendar(state.data || {});
+        return;
+      }
+      if (act === "cal-day") {
+        state.calDate = el.dataset.d;
+        state.calView = "day";
+        try { localStorage.setItem("calView", "day"); } catch (_) {}
+        renderCalendar(state.data || {});
+        return;
+      }
+      if (act === "cal-shift") {
+        const step = Number(el.dataset.n) || 1;
+        const view = state.calView || "day";
+        const cur = state.calDate || isoOf(new Date());
+        if (view === "month") {
+          const [y, m] = cur.split("-").map(Number);
+          const nm = m + step;
+          const dt = new Date(y + Math.floor((nm - 1) / 12), ((nm - 1) % 12 + 12) % 12, 1, 12);
+          state.calDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-01`;
+        } else {
+          state.calDate = addDaysIso(cur, view === "week" ? step * 7 : step);
+        }
+        renderCalendar(state.data || {});
+        return;
+      }
+      if (act === "cal-today") {
+        state.calDate = isoOf(new Date());
+        renderCalendar(state.data || {});
+        return;
+      }
+      if (act === "sched-count") {
+        state.schedCount = state.schedCount || {};
+        state.schedCount[el.dataset.p] = Number(el.dataset.n) || 1;
+        renderSettings(state.data || {});
+        return;
+      }
       if (act === "sched-save") {
         const key = el.dataset.p;
         const root = el.closest(".panel");
@@ -1720,7 +2089,10 @@
         if (thTime) block.thematic = { time: thTime };
         const saDays = daysOf("standalone");
         const saInput = root.querySelector(`[data-times="${key}|standalone"]`);
-        const saTimes = saInput ? saInput.value.split(",").map((x) => x.trim()).filter(Boolean) : [];
+        const saFromInputs = Array.from(root.querySelectorAll(`[data-time-n^="${key}|standalone|"]`))
+          .map((i) => (i.value || "").trim()).filter(Boolean);
+        const saTimes = saFromInputs.length ? saFromInputs
+          : (saInput ? saInput.value.split(",").map((x) => x.trim()).filter(Boolean) : []);
         if (saDays.length || saTimes.length) block.standalone = {};
         if (saDays.length) block.standalone.days = saDays;
         if (saTimes.length) block.standalone.times = saTimes;
@@ -2085,6 +2457,7 @@
       tb.addEventListener("click", (e) => {
         const btn = e.target.closest("button");
         if (!btn) return;
+        haptic("select");
         if (btn.dataset.more) { openMoreSheet(); return; }
         if (btn.dataset.view) gotoView(btn.dataset.view);
       });
@@ -2105,9 +2478,10 @@
     });
     content().addEventListener("click", (e) => {
       const go = e.target.closest("[data-goto]");
-      if (go) { gotoView(go.dataset.goto); return; }
+      if (go) { haptic("select"); gotoView(go.dataset.goto); return; }
       const btn = e.target.closest("[data-act]");
       if (!btn) return;
+      haptic(btn.classList.contains("danger") || btn.classList.contains("icon-btn") ? "medium" : "light");
       onAction(btn.dataset.act, btn);
     });
   }
@@ -2130,15 +2504,7 @@
     // В fullscreen Telegram рисует СВОЮ кнопку закрытия в правом верхнем углу —
     // помечаем body классом tg-fs, чтобы зарезервировать этот угол в вёрстке.
     function applyFsClass() {
-      let fs = false;
-      try {
-        if (tg) {
-          if (tg.isFullscreen === true) fs = true;
-          else if (tg.isFullscreen === false) fs = false;
-          else if (tg.requestFullscreen) fs = true; // оптимистично: мы его запросили
-        }
-      } catch (_) {}
-      document.body.classList.toggle("tg-fs", fs);
+      applyTgInsets();
     }
     window.__fsRequested = false;
     try {
@@ -2167,6 +2533,23 @@
         if (tg.disableVerticalSwipes) { try { tg.disableVerticalSwipes(); } catch (_) {} }
       }
     } catch (_) {}
+    // B2: тема/инсеты/цвет нижней панели + реакция на изменения
+    applyTgTheme();
+    applyTgInsets();
+    try {
+      if (tg && tg.onEvent) {
+        tg.onEvent("themeChanged", () => { applyTgTheme(); applyTgInsets(); });
+        tg.onEvent("safeAreaChanged", applyTgInsets);
+        tg.onEvent("contentSafeAreaChanged", applyTgInsets);
+      }
+    } catch (_) {}
+    try {
+      if (tg && tg.setBottomBarColor) {
+        const card = getComputedStyle(document.documentElement).getPropertyValue("--card").trim();
+        if (card) tg.setBottomBarColor(card);
+      }
+    } catch (_) {}
+
     function applyViewportHeight() {
       const h = (tg && (tg.viewportStableHeight || tg.viewportHeight)) || window.innerHeight;
       document.documentElement.style.setProperty("--wa-h", h + "px");

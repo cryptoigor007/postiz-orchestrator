@@ -9,6 +9,8 @@ sudo chown -R orchestrator:orchestrator /opt/orchestrator
 # deps in a venv (Debian 13 is externally-managed)
 sudo python3 -m venv /opt/orchestrator/venv
 sudo /opt/orchestrator/venv/bin/pip install -r /opt/orchestrator/requirements.txt
+# config.yaml — из config.example.yaml (живой конфиг в репозиторий не коммитится)
+sudo cp /opt/orchestrator/config.example.yaml /opt/orchestrator/config.yaml  # затем заполнить
 # .env next to config.yaml (POSTIZ_*, TELEGRAM_*, WEBAPP_*)
 sudo cp /opt/orchestrator/.env.example /opt/orchestrator/.env  # then edit
 sudo cp /opt/orchestrator/deploy/*.service /opt/orchestrator/deploy/*.timer /etc/systemd/system/

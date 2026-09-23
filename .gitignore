@@ -12,5 +12,4 @@ logs/
 .DS_Store
 tests/gui/node_modules/
 .coverage
-tests/gui/node_modules/
-.coverage
+config.yaml

@@ -788,19 +788,13 @@ button, a, [role="button"] { touch-action: manipulation; }
 .q-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--ctl-gap);
   padding: 10px 14px 4px; flex-wrap: wrap; }
 .chips { display: flex; gap: var(--ctl-gap); flex-wrap: wrap; }
-/* P5: обрезанный у правого края чип читается как «список листается», а не как дефект:
-   мягкое затемнение маской. Классы ставит syncChipFade() только при реальном переполнении
-   (scrollWidth > clientWidth), поэтому на широком экране маски нет вовсе. */
-/* П6 (приёмка №4): мягкий край — 12px и не ниже 0.75 прозрачности. Замер кадра: при 24px
-   до нуля подпись чипа гасла целиком («Точка наблюдени» — последняя буква #C9C9CA и пропадала,
-   фон чипа выцветал #ECECED → #FBFBFB). 0.75 оставляет букву у края читаемой (#551), а короткий
-   мягкий край всё ещё показывает «правее есть ещё». Края симметричны. */
-.chips.more-right { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 12px), rgba(0,0,0,0.75) 100%);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 12px), rgba(0,0,0,0.75) 100%); }
-.chips.more-left { -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,0.75) 0, #000 12px);
-  mask-image: linear-gradient(90deg, rgba(0,0,0,0.75) 0, #000 12px); }
-.chips.more-left.more-right { -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,0.75) 0, #000 12px, #000 calc(100% - 12px), rgba(0,0,0,0.75) 100%);
-  mask-image: linear-gradient(90deg, rgba(0,0,0,0.75) 0, #000 12px, #000 calc(100% - 12px), rgba(0,0,0,0.75) 100%); }
+/* П6 (приёмка №4–5): у полосы фильтров нет визуальной маски — ни мягкого затемнения, ни
+   прозрачности. Мягкий край читался как поломка: на 390px он гасил предпоследнюю букву чипа
+   в 2.3 раза (ядро 64…83 против 28…45 у соседних) и срезал последнюю, при том что обрез не на
+   краю экрана, а сразу за ним стоит резкий закреплённый чип «Сегодня». Голый вертикальный
+   обрез — нормальное поведение горизонтальной прокрутки, он же и индикатор «правее есть ещё».
+   Классы .more-right/.more-left остаются: syncChipFade() (app.js) ставит их при реальном
+   переполнении (scrollWidth > clientWidth) — по ним работает логика прокрутки и проверки. */
 .chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-hv);
   min-height: var(--ctl-hv); padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r);
   border: 1px solid transparent; background: var(--ctl-fill); color: var(--text); font-size: var(--ctl-font);

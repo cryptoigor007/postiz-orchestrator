@@ -22,6 +22,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -381,21 +383,21 @@ def test_chip_rows_single_gap():
         assert "gap: var(--ctl-gap)" in body, f"{sel}: зазор строки контролов не --ctl-gap"
 
 
-def test_chips_scroller_has_edge_fade_only_when_overflowing():
-    """Обрезка чипов у правого края = подсказка «можно листать» (маска), а не дефект."""
-    body = _joined(".chips.more-right")
-    assert "mask-image" in body and "linear-gradient" in body, \
-        ".chips.more-right: нет мягкого затемнения (mask-image + linear-gradient)"
-    assert "-webkit-mask-image" in body, ".chips.more-right: нет -webkit-mask-image (Safari/Telegram iOS)"
-    assert "var(--ctl-gap)" not in body
-    left = _joined(".chips.more-left")
-    assert "mask-image" in left, ".chips.more-left: нет затемнения у левого края (когда список прокручен)"
-    assert "syncChipFade" in JS, "нет JS-функции, которая включает маску только при переполнении"
+def test_chips_scroller_marks_overflow_with_class_not_mask():
+    """Переполнение полосы отмечается классом (syncChipFade), но маски у края нет.
+
+    П6 (приёмка №5): мягкое затемнение убрано — обрез прокрутки читался как поломка
+    (на 390px гасил предпоследнюю букву чипа в 2.3 раза и срезал последнюю). Классы
+    .more-right/.more-left остаются: по ним работает логика прокрутки и проверки.
+    """
+    assert "mask-image" not in CSS and "mask" not in CSS, "у полосы снова появилась маска"
+    assert "syncChipFade" in JS, "нет JS-функции, которая отмечает переполнение полосы"
     assert "scrollWidth" in JS and "clientWidth" in JS, \
-        "маска должна включаться по факту переполнения (scrollWidth > clientWidth)"
-    assert re.search(r'syncChipFade\(', JS.split("function syncChipFade")[1]), "syncChipFade не вызывается"
+        "класс должен ставиться по факту переполнения (scrollWidth > clientWidth)"
+    assert re.search(r"syncChipFade\(", JS.split("function syncChipFade")[1]), "syncChipFade не вызывается"
     assert 'addEventListener("scroll"' in JS or "addEventListener('scroll'" in JS, \
-        "маска не пересчитывается при прокрутке чипов"
+        "класс не пересчитывается при прокрутке чипов"
+    assert "more-right" in JS and "more-left" in JS, "классы краёв исчезли из логики"
 
 
 # --------------------------------------------------------------------------
@@ -794,22 +796,51 @@ def test_today_ring_uses_ink_accent():
         "кольцо «сегодня» ушло из общего акцента для чернил"
     assert "solid var(--accent)" not in body, "кольцо «сегодня» вернулось к сырому --accent"
 
-def test_chips_mask_edge_is_short_and_never_fully_transparent():
-    """П6 (приёмка №4): мягкий край полосы фильтров — 12px и не ниже 0.75 прозрачности.
+def test_chips_strip_has_no_visual_mask():
+    """П6 (приёмка №5): у полосы фильтров нет визуальной маски — только голый обрез прокрутки.
 
-    Замер кадра after-light-390-month.png: при 24px «до нуля» последняя буква подписи
-    чипа уходила в #C9C9CA и пропадала совсем, фон чипа выцветал #ECECED → #FBFBFB;
-    на 320-дне чернила гасли с #1C1C1E до нуля к x196. Текст под краем обязан читаться.
+    Мягкий край (24px до нуля, затем 12px до 0.75) на 390px гасил предпоследнюю букву чипа
+    (ядро 64…83 против 28…45 у соседних) и срезал последнюю, хотя обрез и не на краю экрана:
+    сразу за ним стоит резкий закреплённый чип «Сегодня». Классы .more-right/.more-left
+    оставлены — по ним работает syncChipFade() и проверки переполнения.
     """
-    right = _rule(".chips.more-right")
-    left = _rule(".chips.more-left")
-    both = _rule(".chips.more-left.more-right")
-    for name, body in (("more-right", right), ("more-left", left), ("more-left.more-right", both)):
-        assert "transparent" not in body, f"{name}: край снова гасит содержимое в ноль"
-        assert "12px" in body, f"{name}: мягкий край не 12px"
-        assert "rgba(0,0,0,0.75)" in body, f"{name}: нет нижней границы прозрачности 0.75"
-    assert "rgba(0,0,0,0.75) 0" in left, "левый край несимметричен"
-    assert "rgba(0,0,0,0.75) 100%" in right, "правый край несимметричен"
-    assert "rgba(0,0,0,0.75) 0" in both and "rgba(0,0,0,0.75) 100%" in both, \
-        "оба края сразу: нет симметрии 0.75"
+    for selector in (".chips.more-right", ".chips.more-left", ".chips.more-left.more-right"):
+        assert selector not in ALL_RULES, f"{selector}: вернулось правило визуального края полосы"
+    assert "mask" not in CSS, "в стилях снова появилась маска"
+    assert "syncChipFade" in JS and "more-right" in JS and "more-left" in JS, (
+        "логика переполнения полосы пропала вместе с маской"
+    )
 
+
+CHIP_FRAME = Path("/tmp/orch-cal3/shots/after-light-390-month.png")
+
+
+@pytest.mark.skipif(
+    not CHIP_FRAME.exists() or shutil.which("ffmpeg") is None,
+    reason="нет свежего кадра 390-месяца или ffmpeg — замер только на стенде",
+)
+def test_last_visible_chip_letter_is_not_faded():
+    """Последняя видимая буква чипа не светлее соседних (замер по кадру, полоса x31..272).
+
+    С маской её ядро было 64…83 при 28…45 у соседних букв. После снятия маски — как у соседей.
+    """
+
+    def darkest(x0: int, x1: int) -> int:
+        raw = subprocess.run(
+            [
+                "ffmpeg", "-v", "error", "-i", str(CHIP_FRAME),
+                "-vf", f"crop={x1 - x0}:18:{x0}:116",
+                "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+            ],
+            capture_output=True, check=True,
+        ).stdout
+        return min(raw[0::3]) if raw else 255
+
+    neighbours = darkest(236, 256)
+    if neighbours > 120:  # кадр с другими данными/шириной — ложную тревогу не поднимаем
+        pytest.skip("в кадре нет подписи чипа на ожидаемом месте")
+    last = darkest(260, 272)  # зона последней видимой буквы: тут начиналась маска
+    assert last <= neighbours + 20, (
+        f"последняя видимая буква светлее соседних: ядро #{last:02X} против #{neighbours:02X}"
+    )
+    assert last <= 60, f"последняя видимая буква погашена: ядро #{last:02X}"

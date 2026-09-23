@@ -794,3 +794,22 @@ def test_today_ring_uses_ink_accent():
         "кольцо «сегодня» ушло из общего акцента для чернил"
     assert "solid var(--accent)" not in body, "кольцо «сегодня» вернулось к сырому --accent"
 
+def test_chips_mask_edge_is_short_and_never_fully_transparent():
+    """П6 (приёмка №4): мягкий край полосы фильтров — 12px и не ниже 0.75 прозрачности.
+
+    Замер кадра after-light-390-month.png: при 24px «до нуля» последняя буква подписи
+    чипа уходила в #C9C9CA и пропадала совсем, фон чипа выцветал #ECECED → #FBFBFB;
+    на 320-дне чернила гасли с #1C1C1E до нуля к x196. Текст под краем обязан читаться.
+    """
+    right = _rule(".chips.more-right")
+    left = _rule(".chips.more-left")
+    both = _rule(".chips.more-left.more-right")
+    for name, body in (("more-right", right), ("more-left", left), ("more-left.more-right", both)):
+        assert "transparent" not in body, f"{name}: край снова гасит содержимое в ноль"
+        assert "12px" in body, f"{name}: мягкий край не 12px"
+        assert "rgba(0,0,0,0.75)" in body, f"{name}: нет нижней границы прозрачности 0.75"
+    assert "rgba(0,0,0,0.75) 0" in left, "левый край несимметричен"
+    assert "rgba(0,0,0,0.75) 100%" in right, "правый край несимметричен"
+    assert "rgba(0,0,0,0.75) 0" in both and "rgba(0,0,0,0.75) 100%" in both, \
+        "оба края сразу: нет симметрии 0.75"
+

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Watchdog: restart orchestrator if main process is dead (called by systemd timer)."""
 from __future__ import annotations
+
 import subprocess
 import sys
 

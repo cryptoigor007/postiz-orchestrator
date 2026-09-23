@@ -59,7 +59,7 @@ def _snapshot(db: Database, ids: list[int] | None) -> dict[tuple, dict]:
            "FROM entity_platform_status WHERE platform IN ('youtube','telegram')")
     params: tuple = ()
     if ids:
-        sql += " AND entity_type='short' AND entity_id IN (%s)" % ",".join("?" * len(ids))
+        sql += f" AND entity_type='short' AND entity_id IN ({','.join('?' * len(ids))})"
         params = tuple(ids)
     return {(r["entity_type"], r["entity_id"], r["platform"]): dict(r)
             for r in db.fetchall(sql, params)}

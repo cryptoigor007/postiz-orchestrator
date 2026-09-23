@@ -1057,18 +1057,25 @@
 
   const SVG = {
     spinner: '<svg viewBox="0 0 24 24" class="spin"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.25"/><path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>',
-    users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M17.6 14.2A6.2 6.2 0 0 1 21.2 20"/></svg>',
-    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 2.4 20h19.2z"/><path d="M12 9.4v4.4"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/></svg>',
-    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
-    swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13"/><path d="M4 14l3 3 3-3"/><path d="M17 20V7"/><path d="M14 10l3-3 3 3"/></svg>',
-    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M14.5 6.5l3 3"/></svg>',
-    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/><path d="M10.5 11v5M13.5 11v5"/></svg>',
+    // P6: второй силуэт крупнее (дуги в 6.5 юнита против 5.6) — при 22px штрих 1.8 читался
+    // рваными «волосками» (замер чернил: 18×16px против 16×16 у соседей по шторке).
+    users: '<svg viewBox="-0.85 -0.55 25.5 25.5" fill="none" stroke="currentColor" stroke-width="1.91" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M2.6 19.8a6.4 6.4 0 0 1 12.8 0"/><path d="M16.2 5.1a3.4 3.4 0 0 1 0 6.5"/><path d="M17.3 14.1a6.4 6.4 0 0 1 3.9 5.4"/></svg>',
+    warn: '<svg viewBox="-1.13 -1.33 26.25 26.25" fill="none" stroke="currentColor" stroke-width="1.97" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 2.4 20h19.2z"/><path d="M12 9v3.8"/><circle cx="12" cy="16.6" r="1.05" fill="currentColor" stroke="none"/></svg>',
+    folder: '<svg viewBox="-0.38 -0.38 24.75 24.75" fill="none" stroke="currentColor" stroke-width="1.86" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    swap: '<svg viewBox="0.88 0.88 22.25 22.25" fill="none" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13"/><path d="M4 14l3 3 3-3"/><path d="M17 20V7"/><path d="M14 10l3-3 3 3"/></svg>',
+    edit: '<svg viewBox="0.91 1.71 21.88 21.88" fill="none" stroke="currentColor" stroke-width="1.64" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M14.5 6.5l3 3"/></svg>',
+    trash: '<svg viewBox="1.5 2 21 21" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/><path d="M10.5 11v5M13.5 11v5"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14M3 12h18"/></svg>',
-    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14 3h-4l-.6 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2L10 21h4l.6-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg>',
-    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>',
-    help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5"/><circle cx="12" cy="16.6" r="0.7" fill="currentColor" stroke="none"/></svg>',
+    // P6: восьмизубый контур при 22px выглядел «снежинкой» без отверстия (замер: центр 100%
+    // чернил). Кольцо r=6.3 + 8 коротких толстых зубцов (2.6 против обводки 1.8) + отверстие
+    // r=3.6: при 22px отверстие ~6.4px, зубцы 2.3px — читается шестернёй, а не снежинкой.
+    gear: '<svg viewBox="-0.38 -0.38 24.75 24.75" fill="none" stroke="currentColor" stroke-width="1.86" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.3"/><circle cx="12" cy="12" r="3.6"/><path d="M12 5.7V3.4M18.3 12h2.3M12 18.3v2.3M5.7 12H3.4M16.45 7.55l1.63-1.63M16.45 16.45l1.63 1.63M7.55 16.45l-1.63 1.63M7.55 7.55l-1.63-1.63" stroke-width="2.6"/></svg>',
+    chart: '<svg viewBox="0.88 0.88 22.25 22.25" fill="none" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>',
+    // P6: «?» рисовался большой дугой (a2.5 2.5 0 1 1) — при 22px она схлопывалась в сплошное
+    // пятно (замер: центр иконки 100% чернил, «?» не читался). Теперь короткая дуга-крючок + ножка + точка.
+    help: '<svg viewBox="-0.38 -0.38 24.75 24.75" fill="none" stroke="currentColor" stroke-width="1.86" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5.1.7c0 1.7-2.6 2.3-2.6 3.6"/><circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/></svg>',
     // P4: шевроны ‹ › крупной SVG-галкой (26px, штрих 2.8) — текстовый глиф был ~8×14px
     chevL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.8 4.8 7.6 12l7.2 7.2"/></svg>',
     chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 4.8 16.4 12l-7.2 7.2"/></svg>',
@@ -1089,7 +1096,7 @@
   function pIcon(name) {
     const key = String(name || "").toLowerCase();
     const svg = PLATFORM_ICONS[key] || '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z"/></svg>';
-    return `<span class="pico" title="${esc(name || "")}">${svg}</span>`;
+    return `<span class="pico pico-brand" title="${esc(name || "")}">${svg}</span>`;
   }
 
   function renderStatus(d) {
@@ -1345,8 +1352,11 @@
     const pch = projChips("cal-project");
     // выбранный период — подписью (а не заголовком «День», который дублировал сегмент)
     const period = (() => {
-      const isToday = ` · ${t("cal_today")}`;
-      if (view === "day") return esc(humanDate(cur) + (cur === todayIso ? isToday : ""));
+      // P6: приписка «· Сегодня» — отдельным узлом .cal-note. На 320px подпись периода не
+      // влезает (замер: нужно 180px, окно 154px) и обрезалась многоточием «21–27 сентября · Се…»;
+      // приписка скрывается на узких экранах (см. .cal-note), а сама дата всегда целая.
+      const note = (on) => (on ? `<span class="cal-note"> · ${esc(t("cal_today"))}</span>` : "");
+      if (view === "day") return esc(humanDate(cur)) + note(cur === todayIso);
       if (view === "week") {
         const start = addDaysIso(cur, -((weekdayIso(cur) + 6) % 7));
         const end = addDaysIso(start, 6);
@@ -1355,7 +1365,7 @@
           : `${dayMonth(start)} – ${dayMonth(end)}`;
         const year = start.slice(0, 4) === todayIso.slice(0, 4) ? "" : ` ${start.slice(0, 4)}`;
         const here = todayIso >= start && todayIso <= end;
-        return esc(text + year + (here ? isToday : ""));
+        return esc(text + year) + note(here);
       }
       return esc(monthYear(cur));
     })();
@@ -1388,8 +1398,12 @@
         const chips = groups.map((g) => `<button class="cal-witem" data-act="cal-day" data-d="${ds}">
             <span class="mono">${esc(g.time || "")}</span>
             <span class="q-plat">${g.items.map((it) => pIcon(it.platform)).join("")}</span></button>`).join("");
+        // P6: чипы дня — в своей колонке (.cal-wchips). На телефоне колонка дня — строка:
+        // заголовок 62px + чипы. Без обёртки flex-wrap начинал новую строку от левого края
+        // ряда, и перенесённый чип вставал под подписью дня (x31 вместо x97).
         return `<div class="cal-wcol${ds === todayIso ? " today" : ""}">
-          <div class="cal-whead">${esc(DAY_SHORT(ds))} ${ds.slice(8)}</div>${chips}</div>`;
+          <div class="cal-whead">${esc(DAY_SHORT(ds))} ${ds.slice(8)}</div>` +
+          (chips ? `<div class="cal-wchips">${chips}</div>` : "") + `</div>`;
       }).join("");
       body = `<div class="panel">${calNav(period)}<div class="cal-week">${cells}</div></div>`;
     } else {
@@ -1559,7 +1573,7 @@
 
     const toolbar = `<div class="q-toolbar">
         <div class="chips">${chips}</div>
-        <button class="btn ${select ? "primary" : "secondary"} q-sel-btn" data-act="queue-select">${select ? t("queue_done") : t("queue_select")}</button>
+        <button class="btn ${select ? "primary" : "secondary"} sm q-sel-btn" data-act="queue-select">${select ? t("queue_done") : t("queue_select")}</button>
       </div>`;
 
     const bulkBar = !select ? "" : `<div class="bulk-bar">

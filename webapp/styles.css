@@ -140,9 +140,13 @@ html, body {
 .lang-btn.active { background: var(--accent-fill); color: var(--accent-text); }
 .lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .main { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; display: flex; flex-direction: column; background: var(--bg); }
-.topbar { display: flex; align-items: center; justify-content: center; gap: 12px;
-  padding: calc(12px + var(--sa-top) + var(--chrome-top)) calc(22px + var(--sa-right)) 10px calc(22px + var(--sa-left)); }
-.topbar-center { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+/* P6: заголовок по центру бара, кнопка обновления — по правому краю контента (было: absolute
+   сразу за текстом → группа «Очередь ↻» уезжала на +17px от центра, а кнопка не была
+   выровнена по правому краю). Полосу кнопок Telegram (✕/⋮) резервирует --chrome-top сверху. */
+.topbar { display: flex; align-items: center; justify-content: center; gap: 12px; position: relative;
+  --topbar-pad-r: calc(22px + var(--sa-right));
+  padding: calc(12px + var(--sa-top) + var(--chrome-top)) var(--topbar-pad-r) 10px calc(22px + var(--sa-left)); }
+.topbar-center { display: inline-flex; align-items: center; min-width: 0; max-width: calc(100% - 104px); }
 .topbar-center h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
 .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -256,11 +260,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .content {
     padding: 6px calc(14px + var(--sa-left)) calc(var(--tabbar-h) + 24px + var(--sa-bottom)) calc(14px + var(--sa-right));
   }
-  .topbar { padding: calc(8px + var(--sa-top) + var(--chrome-top)) calc(14px + var(--sa-right)) 4px calc(14px + var(--sa-left)); }
+  .topbar { --topbar-pad-r: calc(14px + var(--sa-right));
+    padding: calc(8px + var(--sa-top) + var(--chrome-top)) var(--topbar-pad-r) 4px calc(14px + var(--sa-left)); }
   .topbar h2 { font-size: 22px; letter-spacing: -0.02em; }
-  /* Полоса кнопок Telegram (✕/⋮) — в правом верхнем углу: там ничего не размещаем.
-     Заголовок и иконка обновления — одной центрированной группой по центру экрана. */
-  /* заголовок — ровно по центру экрана; иконка рядом, не сдвигает его */
+  /* Полосу кнопок Telegram (✕/⋮) резервирует --chrome-top: заголовок центрирован,
+     кнопка обновления — у правого края контента (см. .topbar .icon-ghost). */
   .btn { height: var(--btn-h); min-height: var(--btn-h); }
   .row { padding: 10px 14px; }
   .form-row { gap: var(--btn-gap); }
@@ -339,7 +343,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .sheet-item:active { background: rgba(0,0,0,0.05); transform: scale(0.995); }
 @media (prefers-color-scheme: dark) { .sheet-item:active { background: rgba(255,255,255,0.07); } }
 .sheet-item .ico, .sheet-item .ico svg,
-.sheet-item .pico, .sheet-item .pico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; color: var(--text-2); }
+.sheet-item .pico, .sheet-item .pico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; color: var(--text); }
 /* .pico базово имеет margin-right: 4px — в строке шторки (flex + gap 12) он давал зазор 16px */
 .sheet-item .pico { margin-right: 0; }
 .sheet-item .chev { margin-left: auto; color: var(--text-3); }
@@ -383,10 +387,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out), opacity var(--dur-ui) var(--ease-out);
 }
 .icon-ghost .ico, .icon-ghost .ico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; }
-/* рядом с названием: иконка позиционируется от правого края заголовка и не сдвигает его центр */
-.topbar-center .icon-ghost { position: absolute; left: 100%; top: 50%; margin-left: 2px; transform: translateY(-50%); }
+/* Кнопка обновления — у правого края бара, от заголовка не зависит */
+.topbar .icon-ghost { position: absolute; right: var(--topbar-pad-r, 22px); top: 50%; transform: translateY(-50%); }
 .icon-ghost:active { transform: translateY(-50%) scale(0.97); background: var(--ctl-fill); }
-.topbar-center .icon-ghost:focus-visible { transform: translateY(-50%); }
+.topbar .icon-ghost:focus-visible { transform: translateY(-50%); }
 .icon-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .icon-ghost.spin-once .ico { animation: ghostSpin 620ms var(--ease-out); }
 @keyframes ghostSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
@@ -409,7 +413,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .item__meta {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 6px var(--sp-2);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2);
   font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums;
 }
 .item__actions {
@@ -441,8 +445,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
    = 44px нажатия. Вкладка внутри — 36px и r=12, как у «Сегодня»/чипов/стрелок. */
 .seg { display: inline-flex; padding: var(--ctl-pad); gap: 2px; background: var(--ctl-fill); border-radius: var(--ctl-r); }
 .seg button {
-  all: unset; box-sizing: border-box; height: var(--ctl-hv); padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r);
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  height: var(--ctl-hv); padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r);
   font-size: var(--ctl-font); font-weight: 600; color: var(--text-2); cursor: pointer; white-space: nowrap;
+  text-align: center;
   transition: background var(--dur-ui) var(--ease-out), color var(--dur-ui) var(--ease-out);
 }
 .seg button.on { background: var(--ctl-on-fill); color: var(--ctl-on-fg); }
@@ -464,11 +470,28 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .btn.danger-text:hover { background: rgba(255,59,48,0.14); }
   .btn.success-text:hover { background: rgba(52,199,89,0.16); }
 }
-/* P5: компактная кнопка — та же семья, что и .btn: нажатие и поверхность 44px,
-   радиус --ctl-r, шрифт --ctl-font. Было 36/10px/12px — «мелкая» кнопка промахивалась
-   мимо тап-цели 44px и выбивалась из радиуса семьи (см. .cal-bar .btn.sm — плотная полоса). */
-.btn.sm { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--ctl-font); font-weight: 600;
-  padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r); }
+/* P6: «sm» — плотный вариант той же семьи: видимая поверхность 36px (--ctl-hv) внутри
+   нажатия 44px (--ctl-h), одна заливка/радиус/типографика с чипами, вкладками и языком.
+   Отрицательные поля возвращают раскладке 36px — иначе плотная кнопка растягивала бы
+   строку чипов (замер: зазор перед «Выбрать» 10px против 8px между чипами). */
+.btn.sm { height: var(--ctl-h); min-height: var(--ctl-h); margin: calc(-1 * var(--ctl-pad)) 0;
+  position: relative; isolation: isolate; padding: 0 var(--ctl-pad-x); background: transparent;
+  border: 0; box-shadow: none; border-radius: var(--ctl-r); font-size: var(--ctl-font); font-weight: 600; }
+.btn.sm::before { content: ""; position: absolute; inset: var(--ctl-pad) 0; z-index: -1;
+  border-radius: var(--ctl-r); background: var(--ctl-fill); }
+.btn.primary.sm::before { background: var(--accent-fill); }
+.btn.danger.sm::before { background: rgba(255,59,48,0.14); }
+.btn.success.sm::before { background: rgba(52,199,89,0.16); }
+.btn.danger-text.sm::before, .btn.success-text.sm::before { background: var(--ctl-fill); }
+@media (hover: hover) and (pointer: fine) {
+  .btn.sm:hover { background: transparent; }
+  .btn.sm:hover::before { background: var(--ctl-fill-hover); }
+  .btn.primary.sm:hover::before { background: var(--accent-press); }
+  .btn.danger.sm:hover::before { background: rgba(255,59,48,0.22); }
+  .btn.success.sm:hover::before { background: rgba(52,199,89,0.24); }
+  .btn.danger-text.sm:hover::before { background: rgba(255,59,48,0.14); }
+  .btn.success-text.sm:hover::before { background: rgba(52,199,89,0.16); }
+}
 
 /* Сетка «кнопка + пояснение» (экраны Действия/Расписание) */
 .act-grid { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
@@ -538,6 +561,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 }
 .cal-period { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-size: 13.5px; font-weight: 650; text-align: center; font-variant-numeric: tabular-nums; }
+/* P6: приписка «· Сегодня» в подписи периода. На самых узких экранах (320–345px) строка
+   «21–27 сентября · Сегодня» не влезает (нужно 180px, доступно 154px при 320px) и резалась
+   многоточием; приписка убирается, дата остаётся целой. Сегодняшний день и так подсвечен. */
+@media (max-width: 345px) { .cal-note { display: none; } }
 /* Строка события: колонка времени фиксирована (заголовки строк выровнены даже без времени),
    плашки статусов прижаты к правому краю — правые края пар совпадают между событиями */
 .cal-row { grid-template-columns: auto minmax(0, 1fr); }
@@ -546,22 +573,15 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .cal-row .cal-link { margin-left: auto; }
 /* Поверхность свайпа: горизонталь наша, вертикальную промотку оставляем браузеру */
 .cal-swipe { touch-action: pan-y; overscroll-behavior-x: contain; }
-/* «Сегодня» — тот же контрол семейства: нажатие 44, видимая поверхность 36 (накладка ::before),
-   r=--ctl-r, шрифт --ctl-font. Было: 44px с прозрачными рамками 4px и r=14 — рядом со стрелками
-   (r=12) и чипами (pill) это читалось как разные кнопки. Отрицательные поля возвращают полосе
-   прежнюю высоту: 44px кнопки «выглядывают» в отступ полосы, а не растягивают её. */
-.cal-bar .btn.sm { height: var(--ctl-h); min-height: var(--ctl-h); margin: calc(-1 * var(--ctl-pad)) 0;
-  position: relative; isolation: isolate; padding: 0 var(--ctl-pad-x); background: transparent; border: 0;
-  border-radius: var(--ctl-r); font-size: var(--ctl-font); font-weight: 600; }
-.cal-bar .btn.sm::before { content: ""; position: absolute; inset: var(--ctl-pad) 0; z-index: -1;
-  border-radius: var(--ctl-r); background: var(--ctl-fill); }
-@media (hover: hover) and (pointer: fine) {
-  .cal-bar .btn.sm:hover { background: transparent; }
-  .cal-bar .btn.sm:hover::before { background: var(--ctl-fill-hover); }
-}
+/* «Сегодня» — тот же плотный вариант семьи (.btn.sm выше): нажатие 44, видимая поверхность
+   36, r=--ctl-r, шрифт --ctl-font; отрицательные поля возвращают полосе прежнюю высоту. */
 .cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: var(--sp-2) var(--sp-4) var(--sp-4); }
 .cal-wcol { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.cal-wcol.today .cal-whead { color: var(--accent); }
+/* P6: чипы дня живут в своей колонке — тогда перенос строки не уводит чип под подпись дня */
+.cal-wchips { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* Подпись сегодняшнего дня — как акцентный текст по нейтральному фону (--accent-on-bg):
+   чистый #007AFF давал 4.02:1 при норме 4.5:1 для мелкой подписи 11px. */
+.cal-wcol.today .cal-whead { color: var(--accent-on-bg); }
 .cal-whead { font-size: 11px; font-weight: 700; text-align: center; color: var(--text-2); }
 .cal-witem { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column;
   align-items: center; gap: 2px; padding: 6px 2px; border-radius: 10px;
@@ -573,13 +593,17 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
    строки по самой высокой, а первая строка (подписи пн…вс) остаётся auto. */
 .cal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto;
   grid-auto-rows: 1fr; gap: 3px; padding: var(--sp-2) var(--sp-4) var(--sp-4); }
+/* P6 (приёмка №2): геометрия ячейки — эталонная (gap 4px, поля 5px): три ряда значков плюс
+   подпись дня дают ровно 63px контента, ряд сетки — 73px, шаг 75/76 (менять нельзя).
+   Четвёртого ряда быть не может: код берёт три группы, остальное сворачивает в счётчик «+N». */
 .cal-cell { all: unset; box-sizing: border-box; cursor: pointer; min-height: 58px; border-radius: 10px;
   background: rgba(120,120,128,0.08); padding: 5px 6px; display: flex; flex-direction: column; gap: 4px;
   overflow: hidden;
   transition: transform var(--dur-press) var(--ease-out); }
 .cal-cell:active { transform: scale(0.97); }
 .cal-cell.has { background: rgba(10,132,255,0.10); }
-.cal-cell.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* П6: кольцо «сегодня» — из общего акцента для чернил (было сырое #007AFF: бледнее недели) */
+.cal-cell.today { outline: 2px solid var(--accent-on-bg); outline-offset: -2px; }
 .cal-cell.empty { background: transparent; pointer-events: none; }
 .cal-wdays { display: contents; }
 .cal-wday-label { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding-bottom: 2px; }
@@ -612,7 +636,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
    (зазор 4px против 19.5px у дней с постами), ритм заголовков плясал 17…80px. */
 @media (max-width: 640px) {
   .cal-week { grid-template-columns: 1fr; gap: 4px; }
-  .cal-wcol { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px; min-height: var(--btn-h); }
+  /* P6: ряд дня не переносит колонку чипов на новую строку (иначе она встаёт под подписью
+     дня, x=31) — подпись 62px фиксирована, чипы занимают ровно остаток и переносятся внутри
+     него: любой чип, включая перенесённый, начинается на x=97, как у соседних дней. */
+  .cal-wcol { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 4px; min-height: var(--btn-h); }
+  .cal-wchips { flex: 1 1 0; min-width: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; }
   .cal-whead { width: 62px; text-align: left; }
   .cal-witem { flex-direction: row; gap: 6px; padding: 5px 8px; min-height: var(--btn-h); justify-content: flex-start; }
   /* S2: чипы — одной строкой с горизонт. скроллом (базовое .chips ниже перебивает
@@ -640,7 +668,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* Значки соцсетей */
 .pico { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; opacity: 0.92; }
-.pico svg { width: 16px; height: 16px; display: block; fill: currentColor; }
+/* П6: контурные значки (icon()) по умолчанию не заливаются: CSS fill перебивает
+   атрибут fill="none" у корня SVG, из-за чего «?», «!» и шестерня рисовались сплошняком.
+   Заливка нужна только логотипам платформ — у них свой класс .pico-brand. */
+.pico svg { width: 16px; height: 16px; display: block; fill: none; }
+.pico-brand svg { fill: currentColor; }
 
 /* Очередь: единая колонка действий (одно объявление вместо трёх) */
 .queue-col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
@@ -777,7 +809,8 @@ button, a, [role="button"] { touch-action: manipulation; }
 /* 85% белого на акценте давали 4.0:1 — плотный текст токена держит ≥4.5:1 */
 .chip.on .cnt { color: var(--ctl-on-fg); }
 .chip:active { transform: scale(0.97); }
-.q-sel-btn { padding: 6px 12px; font-size: 12px; }
+/* P6: у «Выбрать» нет своего кегля/паддинга — это тот же .btn.sm (13px, 0 12px, 36 в 44),
+   что и «Сегодня»/чипы: было 12px/6px 12px при высоте 44 — кнопка выпадала из семьи. */
 
 .day-sep { display: flex; align-items: center; justify-content: space-between;
   padding: 12px 16px 6px; font-size: 12px; font-weight: 700; color: var(--text-2); }
@@ -807,6 +840,9 @@ button, a, [role="button"] { touch-action: manipulation; }
   justify-content: center; cursor: pointer;
   transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out); }
 .icon-btn:active { transform: scale(0.97); }
+/* Значок — единственный ребёнок центрирующей кнопки: базовый margin-right: 4px (.pico)
+   сдвигал его на 2px влево от центра (замер: чернила 12×12 при боксе 44×44, центр −2.5px). */
+.icon-btn .pico, .icon-btn .pico svg { margin-right: 0; }
 .icon-btn.danger { color: var(--red); }
 .icon-btn[disabled], .btn[disabled] { opacity: 0.45; pointer-events: none; }
 

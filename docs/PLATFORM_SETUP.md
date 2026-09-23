@@ -47,6 +47,35 @@ Postiz (наша ВМ 120, `postiz-*`) публикует в площадки ч
    ставлю лимиты (Facebook 5/день, TikTok 7/день), добавляю в расписание.
 5. Прогоняю тестовую публикацию и показываю результат.
 
+## Адрес туннеля Postiz: он меняется, и это надо отслеживать
+
+Postiz открывается наружу через **quick tunnel** Cloudflare (`cloudflared-postiz` на pve → `https://192.168.100.60`).
+У quick-туннеля адрес вида `https://<случайное-имя>.trycloudflare.com` **меняется при каждом перезапуске**
+(например `systemctl restart cloudflared-postiz`), а от него зависят две вещи:
+
+1. **Контейнер Postiz (ВМ 120)** — три переменные в `/home/postiz/postiz/docker-compose.yml`:
+   `MAIN_URL`, `NEXT_PUBLIC_BACKEND_URL` (тот же адрес + `/api`), `FRONTEND_URL`.
+   После правки: `docker compose up -d` — пересоздаёт контейнер `postiz`.
+2. **Кабинеты площадок** — Redirect URI (без него вход и подключение канала ломаются):
+
+| Провайдер | Где менять | Что указать |
+|---|---|---|
+| Meta (Facebook + Instagram) | developers.facebook.com → приложение → Facebook Login → Valid OAuth Redirect URIs | `<адрес>/integrations/social/facebook` и `<адрес>/integrations/social/instagram` |
+| TikTok | developers.tiktok.com → приложение → Login Kit → Redirect URI | `<адрес>/integrations/social/tiktok` |
+| Google / YouTube | console.cloud.google.com → OAuth client → Authorized redirect URIs | `<адрес>/integrations/social/youtube` |
+
+Проверка (скрипт только читает и печатает, что менять; ничего не правит и не перезапускает):
+
+```bash
+ssh root@<pve> 'bash /opt/orchestrator/scripts/postiz_tunnel_sync.sh'          # полный отчёт + готовые команды
+ssh root@<pve> 'bash /opt/orchestrator/scripts/postiz_tunnel_sync.sh --check'  # как таймер: тихо, пока всё синхронно
+```
+
+Таймер `postiz-tunnel-sync.timer` запускает проверку каждые 30 минут и попадает в журнал **только**
+при расхождении (`journalctl -u postiz-tunnel-sync.service`). Файл `/var/lib/cloudflared-postiz.url`
+никто не обновляет автоматически — это просто заметка для человека, после смены адреса её стоит поправить.
+Лучший способ не ловить эту проблему — не перезапускать `cloudflared-postiz` без необходимости.
+
 ## Хранение секретов
 
 Пароли, присланные владельцем в Telegram, лежат в `/root/tg_media_owner/` (каталог `700`, файлы `600`),

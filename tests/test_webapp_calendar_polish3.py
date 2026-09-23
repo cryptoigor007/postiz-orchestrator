@@ -24,9 +24,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CSS_RAW = (ROOT / "webapp" / "styles.css").read_text(encoding="utf-8")
 JS = (ROOT / "webapp" / "app.js").read_text(encoding="utf-8")
+HTML = (ROOT / "webapp" / "index.html").read_text(encoding="utf-8")
 CSS = re.sub(r"\s+", " ", re.sub(r"/\*.*?\*/", " ", CSS_RAW, flags=re.S))
 
 
@@ -191,11 +194,11 @@ def test_calendar_controls_are_one_family():
     assert _token(light, "btn-h-sm") == "36px" and _token(light, "ctl-hv") == "var(--btn-h-sm)"
     assert _token(light, "ctl-pad") == "4px", "--ctl-pad: 36 + 2×4 = 44"
     # тела правил у одного селектора могут быть разнесены (базовый блок + блок тап-целей)
-    for sel in (".btn.cal-step", ".cal-bar .btn.sm", ".chip", ".seg button"):
+    for sel in (".btn.cal-step", ".btn.sm", ".chip", ".seg button"):
         body = _joined(sel)
         assert body, f"нет правила {sel}"
         assert "border-radius: var(--ctl-r)" in body, f"{sel}: скругление не из общего токена --ctl-r"
-    for sel in (".btn.cal-step", ".cal-bar .btn.sm"):
+    for sel in (".btn.cal-step", ".btn.sm"):
         assert "height: var(--ctl-h)" in _joined(sel), f"{sel}: нажатие не 44px (--ctl-h)"
         assert "inset: var(--ctl-pad)" in _joined(sel + "::before"), \
             f"{sel}: видимая поверхность не вписана инсетом --ctl-pad (44 − 2×4 = 36)"
@@ -203,11 +206,11 @@ def test_calendar_controls_are_one_family():
         assert "height: var(--ctl-hv)" in _joined(sel), f"{sel}: видимая высота не --ctl-hv (36px)"
         assert "height: var(--ctl-h)" in _joined(sel + "::after"), \
             f"{sel}: область нажатия не добита до 44px (--ctl-h)"
-    for sel in (".btn.cal-step::before", ".cal-bar .btn.sm::before", ".chip", ".seg"):
+    for sel in (".btn.cal-step::before", ".btn.sm::before", ".chip", ".seg"):
         assert "background: var(--ctl-fill)" in _joined(sel), f"{sel}: обычная заливка не --ctl-fill"
     assert "padding: var(--ctl-pad)" in _joined(".seg"), ".seg: трек не собран инсетом --ctl-pad (36+2×4=44)"
     assert "border-radius: var(--ctl-r)" in _joined(".seg"), ".seg: скругление трека не --ctl-r"
-    for sel in (".chip", ".seg button", ".cal-bar .btn.sm"):
+    for sel in (".chip", ".seg button", ".btn.sm"):
         assert "font-size: var(--ctl-font)" in _joined(sel), f"{sel}: шрифт не из общего токена --ctl-font"
 
 
@@ -278,25 +281,33 @@ def test_danger_success_buttons_contrast_both_schemes():
                 f"{'тёмная' if dark else 'светлая'} схема, {sel}: контраст {ratio:.2f}:1 < 4.5:1")
 
 
+def _accent_text(scheme: str) -> tuple[float, float, float]:
+    """--accent-on-bg как цвет RGB: либо готовый токен, либо затемнение акцента."""
+    tok = _token(scheme, "accent-on-bg")
+    if tok.startswith("var("):
+        name = re.search(r"var\(--([a-z0-9-]+)\)", tok).group(1)
+        return _hex(
+            re.search(rf"--{name}: var\(--tg-[a-z-]+, (#[0-9a-fA-F]{{3,6}})\)", scheme).group(1)
+        )
+    m = re.search(r"color-mix\(in srgb, var\(--accent\) (\d+)%, #000\)", tok)
+    a = _hex(re.findall(r"--accent: var\(--tg-accent, (#[0-9a-fA-F]{3,6})\)", scheme)[-1])
+    p = int(m.group(1)) / 100
+    return (a[0] * p, a[1] * p, a[2] * p)
+
+
 def test_accent_as_text_contrast_both_schemes():
     """Акцент как текст/значок на нейтральном фоне ≥4.5:1 (tabbar 10.5px, значок «обновить», «сегодня» в шапке колонки)."""
     for dark in (False, True):
         scheme = _scheme_css(dark)
-        tok = _token(scheme, "accent-on-bg")
-        if tok.startswith("var("):
-            name = re.search(r"var\(--([a-z0-9-]+)\)", tok).group(1)
-            fg = _hex(re.search(rf"--{name}: var\(--tg-[a-z-]+, (#[0-9a-fA-F]{{3,6}})\)", scheme).group(1))
-        else:
-            m = re.search(r"color-mix\(in srgb, var\(--accent\) (\d+)%, #000\)", tok)
-            a = _hex(re.findall(r"--accent: var\(--tg-accent, (#[0-9a-fA-F]{3,6})\)", scheme)[-1])
-            p = int(m.group(1)) / 100
-            fg = (a[0] * p, a[1] * p, a[2] * p)
+        fg = _accent_text(scheme)
         bg = _card(scheme)
         ratio = _ratio(fg, bg)
         assert ratio >= 4.5, (
-            f"{'тёмная' if dark else 'светлая'} схема: акцент как текст {ratio:.2f}:1 < 4.5:1 (было 3.6:1)")
-        assert "var(--accent-on-bg)" in _rule(".tabbar button.active"), \
+            f"{'тёмная' if dark else 'светлая'} схема: акцент как текст {ratio:.2f}:1 < 4.5:1 (было 3.6:1)"
+        )
+        assert "var(--accent-on-bg)" in _rule(".tabbar button.active"), (
             ".tabbar button.active: цвет не из токена --accent-on-bg (3.6:1 для подписи 10.5px)"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -466,7 +477,7 @@ def test_before_surface_does_not_paint_over_labels():
     пиксель «Сегодня» (41,41,43) вместо цвета текста (28,28,30), т.е. подпись была под 14% серого.
     """
     for host, pseudo in ((".btn.cal-step", ".btn.cal-step::before"),
-                         (".cal-bar .btn.sm", ".cal-bar .btn.sm::before")):
+                         (".btn.sm", ".btn.sm::before")):
         assert "isolation: isolate" in _last(host), \
             f"{host}: нет своего контекста наложения — поверхность уедет под фон родителя"
         assert "z-index: -1" in _last(pseudo), \
@@ -493,3 +504,293 @@ def test_no_dead_platform_icon_size_rule():
         "мёртвое правило размера значка в .panel-header осталось"
     pico = _joined(".sheet-item .pico")
     assert pico, "нет правила размера значка шторки"
+
+
+# --------------------------------------------------------------------------
+# 8.4.52 (P6): приёмка №2 — 13 дефектов, найденных по скриншотам after-*.png
+# Замеры «до» (Chrome/CDP, /tmp/orch-cal3/review2-320_390-light_dark.json):
+#   * подпись «День» в синей таблетке сегмента прижата влево (чернила x 12…29 из 73);
+#   * кнопка «Выбрать» в очереди 44px против 36px у чипов и зазор 10px против 8px;
+#   * разнобой значков шторки: высоты 16,16,16,16,16,18,18,18,17 / ширины 18,18,16,16,16,20,18,18,14,
+#     у «Справки» вместо «?» — сплошное пятно (центр 100% чернил), у «Настроек» — «снежинка» без отверстия;
+#   * значок «Календаря» в tabbar 18×18 против 16×16 у соседей, «Ещё» — 16×4;
+#   * перенесённый чип дня в «Неделе» вставал под подписью дня (x=31 вместо x=97);
+#   * подпись сегодняшнего дня в «Неделе» — чистый акцент #007AFF по белому (4.02:1);
+#   * в ячейке месяца три ряда точек упирались в нижнюю кромку (запас 0px);
+#   * зазор в ряду плашек статусов 6px против 8px по вертикали;
+#   * значки кнопок очереди стояли на 2px левее центра (base .pico { margin-right: 4px });
+#   * «Очередь ↻» в шапке: заголовок по центру экрана, но кнопка не прижата к правому краю (разрыв 2px),
+#     подпись при этом не могла занять строку целиком;
+#   * подпись периода на 320px обрезалась многоточием («21–27 сентября · Се…», нужно 180px, окно 154px).
+# --------------------------------------------------------------------------
+def test_seg_label_is_centered():
+    """Подпись вкладки сегмента — по центру таблетки (было: чернила «День» 12…29 из 73)."""
+    body = _rule(".seg button")
+    assert body, "нет правила .seg button"
+    assert "display: inline-flex" in body, "подпись вкладки не центрируется (нужен inline-flex)"
+    assert "align-items: center" in body and "justify-content: center" in body, (
+        "вкладка сегмента не центрирует подпись по обеим осям"
+    )
+    assert "text-align: center" in body, (
+        "у вкладки сегмента осталось выравнивание текста по умолчанию"
+    )
+
+
+def test_dense_button_visible_surface_36_inside_44_hit():
+    """Плотная кнопка семьи: нажатие 44px, видимая поверхность 36px, r=--ctl-r, шрифт --ctl-font.
+
+    Так «Выбрать» в очереди перестала быть отдельным контролом (было 44 с padding 6px 12px и
+    шрифтом 12px против 36px/13px у чипов и «Сегодня»).
+    """
+    sm = _last(".btn.sm")
+    assert "height: var(--ctl-h)" in sm and "min-height: var(--ctl-h)" in sm, (
+        "плотная кнопка: область нажатия не 44px"
+    )
+    assert "margin: calc(-1 * var(--ctl-pad)) 0" in sm, (
+        "плотная кнопка не компенсирует отрицательными полями лишнюю высоту нажатия"
+    )
+    assert "padding: 0 var(--ctl-pad-x)" in sm, "боковые поля плотной кнопки не из семьи"
+    assert "background: transparent" in sm and "border: 0" in sm, (
+        "поверхность плотной кнопки должна рисоваться накладкой ::before, а не рамками"
+    )
+    assert "border-radius: var(--ctl-r)" in sm and "font-size: var(--ctl-font)" in sm, (
+        "плотная кнопка выпала из семьи (радиус/шрифт)"
+    )
+    before = _last(".btn.sm::before")
+    assert "inset: var(--ctl-pad) 0" in before, "видимая поверхность плотной кнопки не 36px"
+    assert "background: var(--ctl-fill)" in before, "заливка плотной кнопки не из общего токена"
+    assert not _all_rules(CSS).get(".q-sel-btn"), (
+        "у «Выбрать» снова своя геометрия — она должна наследовать .btn.sm"
+    )
+    m = re.search(r'class="btn \$\{select \? "primary" : "secondary"\} ([^"]*)"', JS)
+    assert m and "sm" in m.group(1).split(), (
+        "кнопка «Выбрать» в разметке без класса sm — остаётся 44px видимой поверхности"
+    )
+
+
+def test_queue_toolbar_one_gap_and_meta_one_gap():
+    """Один зазор в ряду кнопок очереди и один — в мета-строке (было 10px против 8px и 6px против 8px)."""
+    assert "gap: var(--ctl-gap)" in _last(".q-toolbar"), (
+        "зазор ряда «Выбрать»/чипов не общий --ctl-gap (было 10px против 8px)"
+    )
+    meta = _last(".item__meta")
+    assert "gap: var(--sp-2)" in meta, (
+        "зазор мета-строки не общий (было 6px по горизонтали против 8px)"
+    )
+    assert "6px var(--sp-2)" not in _joined(".item__meta"), "остался прежний двухосный зазор"
+
+
+def test_week_today_head_is_accent_text_not_accent_fill():
+    """Подпись сегодняшнего дня в «Неделе» — акцентный ТЕКСТ (≥4.5:1), а не чистый #007AFF (4.02:1)."""
+    body = _last(".cal-wcol.today .cal-whead")
+    assert "color: var(--accent-on-bg)" in body, (
+        "подпись сегодняшнего дня снова чистым акцентом (4.02:1 на белом)"
+    )
+    for dark in (False, True):
+        scheme = _scheme_css(dark)
+        ratio = _ratio(_accent_text(scheme), _card(scheme))
+        assert ratio >= 4.5, (
+            f"{'тёмная' if dark else 'светлая'} схема: подпись сегодняшнего дня {ratio:.2f}:1 < 4.5:1"
+        )
+
+
+# Харнесс покадрового замера лежит вне репозитория (локальный стенд /tmp/orch-cal3).
+# Тест сторожит ловушку приёмки №2: зонд мягкого края чипов уводил полосу в scrollLeft=9999,
+# и следующий кадр «после» снимался с прокрученной полосой — обрезанный край читался как дефект вёрстки.
+FRAME_HARNESS = Path("/tmp/orch-cal3/measure.mjs")
+
+
+@pytest.mark.skipif(
+    not FRAME_HARNESS.exists(), reason="стенд покадрового замера недоступен (вне репозитория)"
+)
+def test_frame_capture_resets_chip_scroll():
+    """Перед снятием кадра прокрутка полосы чипов сброшена в 0 (иначе в кадр попадёт обрезанный край)."""
+    src = FRAME_HARNESS.read_text(encoding="utf-8")
+    assert "scrollLeft=0" in src, "в харнессе пропал сброс прокрутки полосы чипов"
+    step = src.index("const m = await ev(COLLECT);")
+    capture = src.index("Page.captureScreenshot", step)
+    window = src[step:capture]
+    assert "scrollLeft=0" in window, (
+        "полоса чипов не возвращается в начало перед снятием кадра — обрезанный край снова попадёт в «после»"
+    )
+
+
+def test_month_cell_geometry_is_reference():
+    """Ячейка месяца: три ряда значков + подпись дают ровно 63px контента → ряд сетки 73px, шаг 75/76.
+
+    Геометрия эталонная: gap 4px и поля 5px (любое уменьшение «уплотняет» месяц и ломает шаг сетки).
+    Четвёртого ряда быть не может — код берёт три группы, остальное считает в «+N» (проверено ниже).
+    """
+    body = _rule(".cal-cell")
+    assert "gap: 4px" in body, "зазор рядов в ячейке месяца не 4px — поехал шаг сетки 75/76"
+    assert "padding: 5px 6px" in body, "поля ячейки месяца не эталонные (5px/6px)"
+    assert "min-height: 58px" in body, "минимальная высота ячейки месяца изменилась"
+    assert "overflow: hidden" in body, (
+        "ячейка месяца должна обрезать лишнее, а не вылезать за рамку"
+    )
+    # арифметика ряда: подпись дня 15px + 3 ряда значков 12px + 3 зазора 4px = 63px контента
+    assert 15 + 3 * 12 + 3 * 4 == 63, "контент ячейки с тремя рядами значков должен быть 63px"
+    assert 63 + 2 * 5 == 73, "ряд сетки месяца должен остаться 73px"
+    assert ".slice(0, 3)" in JS or "slice(0,3)" in JS, (
+        "в коде пропал предел трёх рядов значков — четвёртый ряд начнёт вылезать из ячейки"
+    )
+
+
+def test_queue_action_icon_glyph_centered():
+    """Значок кнопки-иконки очереди — по центру кнопки (было смещение 2px из-за margin-right: 4px)."""
+    for sel in (".icon-btn .pico", ".icon-btn .pico svg"):
+        assert "margin-right: 0" in _joined(sel), (
+            f"{sel}: базовый отступ .pico сдвигает значок из центра"
+        )
+
+
+def test_topbar_refresh_is_right_aligned():
+    """«Очередь ↻» в шапке: кнопка прижата к правому краю (было 2px разрыва и уезжающий заголовок)."""
+    bar = _joined(".topbar")
+    assert "position: relative" in bar, "шапке не от чего отсчитывать правый край"
+    assert "--topbar-pad-r" in bar and "var(--sa-right)" in bar, (
+        "правый отступ шапки не учитывает безопасную зону Telegram"
+    )
+    ghost = _joined(".topbar .icon-ghost")
+    assert "position: absolute" in ghost and "right: var(--topbar-pad-r" in ghost, (
+        "кнопка обновления не прижата к правому краю контента"
+    )
+    assert "translateY(-50%)" in ghost, "кнопка обновления не выровнена по центру строки"
+    assert "var(--topbar-pad-r)" in _in_media(".topbar", "max-width: 640px"), (
+        "на телефоне правый отступ шапки не пересчитан (14px вместо 22px)"
+    )
+    assert "max-width: calc(100% - 104px)" in _rule(".topbar-center"), (
+        "заголовок может заехать под кнопку обновления"
+    )
+
+
+def test_week_chips_wrap_inside_agenda_column():
+    """«Неделя» на телефоне: перенесённый чип дня остаётся в колонке дней (x=97), а не под подписью (x=31)."""
+    assert _rule(".cal-wchips"), "чипы дня не вынесены в свою колонку (.cal-wchips)"
+    col = _in_media(".cal-wcol", "max-width: 640px")
+    assert "flex-wrap: nowrap" in col, (
+        "ряд дня переносит колонку чипов на новую строку — чипы уезжают под подпись дня"
+    )
+    chips = _in_media(".cal-wchips", "max-width: 640px")
+    assert "flex: 1 1 0" in chips, "колонка чипов не занимает ровно остаток строки"
+    # разметка: чипы завёрнуты в .cal-wchips (иначе CSS не сработает)
+    assert 'class="cal-wchips"' in JS, "в разметке «Недели» нет обёртки .cal-wchips"
+
+
+def test_period_label_not_clipped_on_narrow_screens():
+    """Подпись периода на 320px: «· Сегодня» скрывается, сама дата остаётся целой (было «21–27 сентября · Се…»)."""
+    assert 'class="cal-note"' in JS, "приписка «· Сегодня» не вынесена в отдельный узел"
+    assert 'esc(t("cal_today"))' in JS, "приписка «· Сегодня» потеряла перевод"
+    note = _in_media(".cal-note", "max-width: 345px")
+    assert "display: none" in note, (
+        "на узких экранах приписка не скрывается — подпись снова обрежется"
+    )
+    assert "text-overflow: ellipsis" in _rule(".cal-period"), (
+        "у подписи периода не осталось страховки от переполнения"
+    )
+
+
+def _svg_tags(src: str) -> list[tuple[str, float]]:
+    """[(viewBox, stroke-width корневого <svg>)] — толщина берётся только у корня, не у зубцов."""
+    out = []
+    for m in re.finditer(r"<svg ([^>]*)>", src):
+        attrs = m.group(1)
+        vb = re.search(r'viewBox="([^"]+)"', attrs)
+        sw = re.search(r'stroke-width="([\d.]+)"', attrs)
+        if vb and sw:
+            out.append((vb.group(1), float(sw.group(1))))
+    return out
+
+
+def test_icons_one_live_area_and_one_line_weight():
+    """Все значки — в одной сетке: живая площадь квадратная, штрих при рендере 1.65px.
+
+    ip_1: нормировка значка шторки/навигации делается viewBox'ом (чернила = 0.8 бокса), а толщина
+    линии компенсируется (stroke-width = 1.8 × S / 24), иначе крупный viewBox утоньшал бы штрих,
+    а мелкий — утолщал. Проверка ловит и трёхзначный viewBox (Chrome его молча игнорирует).
+    """
+    tags = _svg_tags(JS) + _svg_tags(HTML)
+    assert len(tags) >= 25, f"разобрано слишком мало значков: {len(tags)}"
+    for vb, sw in tags:
+        nums = vb.split()
+        assert len(nums) == 4, f"viewBox «{vb}» не из четырёх чисел — браузер его игнорирует"
+        _x, _y, w, h = (float(v) for v in nums)
+        assert abs(w - h) < 1e-6, f"живая площадь значка не квадратная: «{vb}»"
+        assert w > 0
+        if abs(w - 24) > 1e-6:  # нормированные значки: штрих приведён к 1.8 юнита при боксе 24
+            assert abs(sw * 24 / w - 1.8) <= 0.02, (
+                f"значок с viewBox «{vb}»: штрих {sw} даёт {sw * 24 / w:.2f} вместо 1.8 юнита — "
+                "линия выпадает из общего веса"
+            )
+
+
+def test_icon_dots_are_visible_not_hairline():
+    """Точки внутри значков — не волосок: «?»/«!» ≥0.9 юнита, точки «Ещё» 2.2 (было 0.6–0.7 и 1.6)."""
+    for name in ("help", "warn"):
+        svg = re.search(rf"{name}: '(<svg[^']+)'", JS).group(1)
+        r = max(
+            float(x) for x in re.findall(r'<circle[^>]*r="([\d.]+)"[^>]*fill="currentColor"', svg)
+        )
+        assert r >= 0.9, f"{name}: точка {r} юнита при 22px — волосок (нужно ≥0.9)"
+    more = re.search(r'data-more="1"[\s\S]*?<svg[^>]*>([\s\S]*?)</svg>', HTML).group(1)
+    radii = sorted(float(x) for x in re.findall(r'r="([\d.]+)"', more))
+    assert radii == [2.2, 2.2, 2.2], f"точки «Ещё» {radii} — значок «тоньше» соседей по tabbar"
+
+
+def test_gear_has_hole_and_thick_teeth():
+    """Шестерня читается шестернёй: отверстие в центре и зубцы толще обводки (было «снежинкой»)."""
+    gear = re.search(r"gear: '(<svg[^']+)'", JS).group(1)
+    circles = [
+        (float(a), float(b), float(c))
+        for a, b, c in re.findall(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"', gear)
+    ]
+    assert len(circles) == 2, "у шестерни нет отдельного отверстия (было сплошное пятно)"
+    outer, hole = max(circles, key=lambda c: c[2]), min(circles, key=lambda c: c[2])
+    assert hole[2] >= 3.0, f"отверстие шестерни {hole[2]} юнита — при 22px не видно"
+    assert outer[2] > hole[2] + 1.5, "обод и отверстие слиплись"
+    teeth = re.search(r'<path[^>]*stroke-width="([\d.]+)"', gear)
+    root = float(re.search(r'stroke-width="([\d.]+)"', gear).group(1))
+    assert teeth and float(teeth.group(1)) >= root * 1.3, (
+        "зубцы не толще обводки — шестерня снова выглядит снежинкой"
+    )
+
+def test_outline_icons_are_not_filled_by_css():
+    """П6 (приёмка №3): CSS `fill` перебивает атрибут fill="none" у корня SVG — значки рисовались заливкой.
+
+    Замер кадра after-light-390-more.png: «Справка» — сплошной диск (0 светлых пикселей внутри
+    рамки чернил), «Ошибки» — сплошной треугольник, «Настройки» — ядро без отверстия; computed
+    fill у значка был rgb(99,99,102) вместо none. Контурные значки (icon()) не заливаются,
+    логотипы платформ (pIcon()) получают заливку отдельным классом .pico-brand.
+    """
+    base = _rule(".pico svg")
+    assert "fill: none" in base, 'контурные значки снова заливаются: CSS fill перебивает fill="none"'
+    brand = _rule(".pico-brand svg")
+    assert "fill: currentColor" in brand, "логотипы платформ остались без заливки"
+    assert 'class="pico pico-brand"' in JS, "pIcon() не помечает логотипы платформ классом .pico-brand"
+    # правило-исключение должно идти после базового: специфичность одинаковая
+    assert CSS.index(".pico svg { width: 16px") < CSS.index(".pico-brand svg"), \
+        ".pico-brand svg стоит выше базового .pico svg и не сработает"
+    block = JS[JS.index("const PLATFORM_ICONS"):JS.index("function pIcon")]
+    assert 'fill="none"' not in block, "логотипы платформ стали контурными — заливка больше не нужна?"
+
+
+def test_sheet_icons_are_item_ink_not_secondary():
+    """Значки шторки — чернила пункта, а не «второстепенный» серый.
+
+    Замер: значок #6E6E71 (--text-2) при подписи #2C2C2E (--text) — список читался неактивным.
+    """
+    body = _joined(".sheet-item .pico")
+    assert "color: var(--text)" in body, "значок шторки не в чернилах пункта"
+    assert "color: var(--text-2)" not in body, "значок шторки снова светлее подписи"
+
+
+def test_today_ring_uses_ink_accent():
+    """Кольцо «сегодня» в месяце — общий акцент для чернил, а не сырой --accent (#007AFF).
+
+    Замер: неделя рисовала «сегодня» как #0064D1, месяц — кольцом #007AFF (бледнее).
+    """
+    body = _rule(".cal-cell.today")
+    assert "outline" in body and "var(--accent-on-bg)" in body, \
+        "кольцо «сегодня» ушло из общего акцента для чернил"
+    assert "solid var(--accent)" not in body, "кольцо «сегодня» вернулось к сырому --accent"
+

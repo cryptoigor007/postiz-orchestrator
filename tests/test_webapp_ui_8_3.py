@@ -247,8 +247,21 @@ def test_calendar_filter_bar_not_stretched():
     body = bar.group(1)
     assert "align-items: center" in body, "полоса календаря растягивает сегмент по высоте"
     assert "gap:" in body, "чипы проектов слипаются с сегментом (нет gap)"
-    cal_mob = CSS[CSS.index(".cal-week { grid-template-columns: 1fr"):]
-    assert re.search(r"\.cal-bar \.chips \{[^}]*flex-wrap: nowrap", cal_mob[:900], re.S), \
+    # окно поиска — ровно мобильный медиазапрос (по балансу скобок): фиксированные 900 символов
+    # ломались от любой новой строки комментария внутри блока
+    mob_start = CSS.index(".cal-week { grid-template-columns: 1fr")
+    mob_at = CSS.rindex("@media", 0, mob_start)          # сам медиазапрос, а не его первое правило
+    depth, k = 0, CSS.index("{", mob_at)
+    while True:
+        if CSS[k] == "{":
+            depth += 1
+        elif CSS[k] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        k += 1
+    cal_mob = CSS[mob_start:k]
+    assert re.search(r"\.cal-bar \.chips \{[^}]*flex-wrap: nowrap", cal_mob, re.S), \
         "чипы проектов в полосе календаря переносятся «этажами» вместо одной строки"
 
 
@@ -319,11 +332,11 @@ def test_calendar_dense_controls_have_44px_tap_area():
         m = re.search(re.escape(selector) + r"[^{]*::after\s*\{([^}]*)\}", CSS, re.S)
         assert m, f"нет расширения тап-цели для {selector}::after"
         assert "height: var(--ctl-h)" in m.group(1), f"{selector}::after: область нажатия меньше 44px"
-    today = _css_rule(".cal-bar .btn.sm")
+    today = _css_rule(".btn.sm")
     # 8.4.51 (P5): та же геометрия семейства, но поверхность 36px — накладкой ::before,
     # а не прозрачными рамками с background-clip: 44 − 2×4 = 36
     assert "height: var(--ctl-h)" in today, "«Сегодня»: область нажатия меньше 44px"
-    before = _css_rule(".cal-bar .btn.sm::before")
+    before = _css_rule(".btn.sm::before")
     assert "inset: var(--ctl-pad) 0" in before, "«Сегодня»: видимая поверхность не 36px (инсет --ctl-pad)"
     assert "background: var(--ctl-fill)" in before, "«Сегодня»: заливка не из общего токена --ctl-fill"
     assert _css_rule(".cal-step"), "нет правила .cal-step"

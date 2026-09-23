@@ -48,7 +48,7 @@ TELEGRAM_BOT_TOKEN=<orchestrator bot>
 ## config.yaml
 - platforms.telegram.enabled: true
 - platforms.*.integration_id: paste from Postiz UI after connecting channel
-- telegram.allowed_chat_ids: [7004751908, -5565497388]
+- telegram.allowed_chat_ids: [7004751908]  # 2026-09-23: второй id (-5…88) убран, бота в том чате нет («chat not found»)
 - limits.postiz_create_per_hour: 30
 
 ## Connected (verified)

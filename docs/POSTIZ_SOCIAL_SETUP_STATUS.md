@@ -14,7 +14,8 @@
 ## Готово
 
 - **Facebook: вход выполнен.** Аккаунт `Vasya Petrov`, логин — телефон `+37379799432` (он же логин, отдельная почта не потребовалась). Пароль из скриншота подошёл. Сессия сохранена в профиле `/tmp/fbwork`.
-- **Регистрация разработчика Meta начата:** шаг `Register` пройден, остановились на шаге `Verify account` — Facebook отправил SMS-код на `0797 99 432 (Moldova)`. **Ждём код от владельца.**
+- **Регистрация разработчика Meta:** шаг `Register` пройден; **`Verify account` ПРОЙДЕН** — SMS-код принят, телефон `+37379799432` подтверждён (повторная SMS не нужна). Сейчас диалог стоит на шаге **`Contact info`**: нужен e-mail владельца, который Facebook примет. Адрес `ko_geniy@mail.ru` Facebook отклонил («Этот электронный адрес нельзя использовать») — в аккаунт он НЕ добавлен, письмо не отправлялось. **Ждём адрес от владельца.**
+- **В Meta-аккаунте владельца 3 профиля:** Facebook (`Vasya Petrov`), Instagram и Threads (оба `tochkanablyudeniya`). Отдельный Instagram создавать не нужно — подключать будем существующий. Страница «Точка наблюдения» видна в Meta-аккаунте.
 - **TikTok:** портал `developers.tiktok.com/apps/` требует вход; форма входа имеет только `Email` + `Password`. Пароль есть, **нужен e-mail/логин владельца**.
 - **Домен/OAuth решён:** Postiz доступен по `https://risks-missions-men-entire.trycloudflare.com` (валидный сертификат; `FRONTEND_URL` и `MAIN_URL` внутри контейнера уже обновлены). Проверено снаружи: медиа отдаётся HTTP 200.
 
@@ -49,12 +50,19 @@ App Domains: `risks-missions-men-entire.trycloudflare.com`
 
 ## Переменные окружения Postiz (имена; сейчас НЕ заданы ни одной)
 
+Проверено **по коду провайдеров в контейнере** (`/app/libraries/nestjs-libraries/src/integrations/social/`):
+
+| Провайдер | Переменные окружения | Примечание |
+|---|---|---|
+| Facebook | `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `FRONTEND_URL` | публикация только в Страницу |
+| Instagram | те же `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | отдельного `INSTAGRAM_*` в коде **нет** — подключается к тому же приложению Meta |
+| **Threads** | `THREADS_APP_ID`, `THREADS_APP_SECRET` | провайдер в сборке **есть** (`threads.provider.ts`); Meta требует **отдельное** приложение Threads API. Профиль Threads у владельца уже есть (`tochkanablyudeniya`) |
+| TikTok | `TIKTOK_CLIENT_ID`, `TIKTOK_CLIENT_SECRET` | OAuth через `open.tiktokapis.com`; OAuth-токен отдельного формата |
+
 ```
-FACEBOOK_APP_ID=      FACEBOOK_APP_SECRET=
-INSTAGRAM_APP_ID=     INSTAGRAM_APP_SECRET=
-TIKTOK_CLIENT_ID=     TIKTOK_CLIENT_SECRET=
 FRONTEND_URL=https://risks-missions-men-entire.trycloudflare.com
 ```
+
 После заполнения — перезапуск контейнера `postiz`.
 
 ## Права (scopes), которые запрашивает Postiz
@@ -62,11 +70,12 @@ FRONTEND_URL=https://risks-missions-men-entire.trycloudflare.com
 - **Facebook** (`identifier = facebook`, отображается как «Facebook Page»): `pages_show_list`, `business_management`, `pages_manage_posts`, `pages_manage_engagement`, `pages_read_engagement`, `read_insights`
 - **TikTok**: `video.list`, `user.info.basic`, `video.publish`, `video.upload`, `user.info.profile`, `user.info.stats`
 - **Instagram**: `instagram.provider.ts` → `identifier = instagram`, redirect `/integrations/social/instagram`
+- **Threads**: подключается отдельным приложением Threads API, redirect — `/integrations/social/threads`
 
 ## Блокеры, требующие владельца
 
-1. **Код из СМС** для шага `Verify account` в регистрации Meta for Developers.
-2. **E-mail/логин TikTok** — без него вход в портал разработчика невозможен.
+1. **E-mail для шага `Contact info`** регистрации Meta for Developers — адрес, который Facebook примет (mail.ru он отклоняет) и к которому у владельца есть доступ: на него придёт письмо-подтверждение. Адрес `vasailev18@gmail.com` владелец использовать запретил.
+2. **E-mail/логин TikTok** — без него вход в портал разработчика невозможен (пароль уже есть).
 3. ~~У аккаунта Facebook НЕТ ни одной Страницы~~ — **СНЯТО**: Страница создана (см. раздел ниже).
 4. **App Review:** для сценария «владелец подключает свой собственный аккаунт/Страницу» приложение может оставаться в Development Mode (владелец — админ приложения). Проверка приложения и Business Verification понадобятся только если подключать чужие аккаунты.
 

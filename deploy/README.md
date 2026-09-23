@@ -15,6 +15,7 @@ sudo cp /opt/orchestrator/deploy/*.service /opt/orchestrator/deploy/*.timer /etc
 sudo systemctl daemon-reload
 sudo systemctl enable --now orchestrator.service
 sudo systemctl enable --now orchestrator-watchdog.timer
+sudo systemctl enable --now postiz-tunnel-sync.timer
 ```
 
 ## Что лежит в deploy/ (юниты и скрипты)
@@ -31,13 +32,25 @@ sudo systemctl enable --now orchestrator-watchdog.timer
 | `lan-default.sh` | `/usr/local/sbin/` | дефолтный LAN-маршрут (запускается udev-правилом на USB-сетевухе) |
 | `vm-nat.service` + `vm-nat.sh` | туда же | NAT/форвардинг для ВМ Postiz |
 | `cloudflared-url-sync.{service,timer}` + `cloudflared_url_sync.sh` | туда же + `/usr/local/bin/` | публичный URL панели → меню-кнопка Telegram (раз в минуту) |
-| `cloudflared-postiz.service` | туда же | quick tunnel к ВМ Postiz (`https://192.168.100.60`) — публичный доступ к панели Postiz |
+| `cloudflared-postiz.service` | туда же | quick tunnel к ВМ Postiz (`https://192.168.100.60`) — публичный доступ к панели Postiz (адрес меняется при перезапуске, см. строку ниже); `ExecStartPost` пишет текущий адрес в `/var/lib/cloudflared-postiz.url` |
+| `cloudflared-postiz-url.conf` | drop-in: `/etc/systemd/system/cloudflared-postiz.service.d/10-postiz-url.conf` | та же строка `ExecStartPost` отдельным дроп-ином для уже работающей службы (юнит не трогаем, туннель не перезапускаем — иначе сменится адрес). Если юнит поставлен из репо, дроп-ин не нужен, но и не мешает (запись идемпотентна). В дроп-ине — **только** `ExecStartPost`: `ExecStart=` там повторять нельзя, systemd добавит второй и откажется стартовать юнит |
+| `postiz-tunnel-sync.{service,timer}` + `postiz_tunnel_sync.sh` | `/etc/systemd/system/` (pve) + `/opt/orchestrator/scripts/` (ставится деплоем) | проверяет, что публичный адрес quick-туннеля Postiz совпадает с `MAIN_URL`/`FRONTEND_URL` в compose ВМ; при расхождении пишет в журнал, что именно поменять (раз в 30 мин) |
 | `postiz-purge-drafts.{service,timer}` + `postiz_purge_drafts.sh` | **в ВМ 120**: `/etc/systemd/system/`, `/usr/local/bin/` | мягкое удаление черновиков Postiz старше часа, каждые 15 мин |
 | `logrotate-host-logs` | `/etc/logrotate.d/orchestrator-host-logs` | ротация `/var/log/{net-watchdog,lan-default,usb-net-restore,ssd_backup}.log` (5 МБ × 5, сжатие) |
 | `postiz_patch_streaming_upload.js`, `set_youtube_oauth.sh` | вручную | патч потоковой загрузки Postiz и разовая настройка YouTube OAuth |
 
 Установка логротации: `sudo cp deploy/logrotate-host-logs /etc/logrotate.d/orchestrator-host-logs`.
-Юниты `postiz-*` ставятся не на pve, а внутрь ВМ 120.
+Юниты `postiz-purge-drafts*` ставятся не на pve, а внутрь ВМ 120; `postiz-tunnel-sync*` — наоборот, на pve.
+
+Проверка адреса туннеля Postiz (сменился адрес → публикация «в никуда», что обновлять: `docs/PLATFORM_SETUP.md`):
+```bash
+ssh root@<pve> 'bash /opt/orchestrator/scripts/postiz_tunnel_sync.sh'          # полный отчёт
+ssh root@<pve> 'bash /opt/orchestrator/scripts/postiz_tunnel_sync.sh --check'  # режим таймера: тихо, пока всё синхронно
+```
+Скрипт только читает: он печатает готовые команды, а выполняет их человек. Таймер делает то же самое
+каждые 30 минут и попадает в журнал только при расхождении.
+Файл `/var/lib/cloudflared-postiz.url` теперь пишется сам при каждом естественном запуске туннеля
+(`ExecStartPost`), вручную его править не нужно — скрипт в любом случае берёт свежий адрес из журнала.
 
 ## WebApp (Telegram)
 - `WEBAPP_PUBLIC_URL=https://<public-https>/webapp/` (валидный TLS обязателен)

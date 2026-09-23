@@ -7,6 +7,13 @@ Wants=network-online.target
 Restart=always
 RestartSec=5
 ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --no-tls-verify --url https://192.168.100.60
+# Публичный адрес quick-туннеля меняется при каждом перезапуске. После старта пишем его в
+# /var/lib/cloudflared-postiz.url — это заметка для человека (scripts/postiz_tunnel_sync.sh
+# предпочитает свежий адрес из journalctl). Цикл ждёт появления ссылки в журнале (до 20 с) и всегда
+# завершается успешно, чтобы не уронить юнит. Работает только при следующем запуске туннеля:
+# перезапускать cloudflared-postiz нельзя — адрес сменится, а он уже вписан в Meta/TikTok и в ВМ.
+# (В unit-файле нельзя писать printf "%s": systemd съедает %s как спецификатор, поэтому echo.)
+ExecStartPost=/bin/bash -c 'for i in {1..20}; do u=$(/usr/bin/journalctl -u cloudflared-postiz --no-pager -n 50 2>/dev/null | grep -oE "https://[a-z0-9-]+[.]trycloudflare[.]com" | tail -1); if [ -n "$u" ]; then echo "$u" > /var/lib/cloudflared-postiz.url; exit 0; fi; sleep 1; done; exit 0'
 StandardOutput=journal
 StandardError=journal
 

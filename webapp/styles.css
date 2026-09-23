@@ -1,0 +1,900 @@
+/* Emil Kowalski + Apple Design: ease-out, press scale, materials, reduced-motion */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-press: 140ms;
+  --dur-ui: 200ms;
+  --dur-toast: 220ms;
+  /* B1: Telegram-first токены (значения приходят из themeParams, фолбэк — Apple-палитра) */
+  --bg: var(--tg-bg, #f2f2f7);
+  --sidebar: color-mix(in srgb, var(--bg) 82%, transparent);
+  --card: var(--tg-card, #ffffff);
+  --text: var(--tg-text, #1c1c1e);
+  --text-2: var(--tg-subtitle, #636366);
+  --text-3: var(--tg-hint, #6b6b70);
+  --sep: var(--tg-sep, rgba(60, 60, 67, 0.12));
+  --border-strong: rgba(60, 60, 67, 0.30); /* границы управляющих элементов (контраст >= 3:1) */
+  --accent: var(--tg-accent, #007aff);
+  --accent-text: var(--tg-accent-text, #fff);
+  /* Заливка акцентом под белым текстом: #007aff с белым давал 4.02:1 (норма 4.5:1 для 12–15px).
+     88% акцента + 12% чёрного → 4.98:1; тёмная схема — 84% → 4.94:1. Оттенок смысла не меняет. */
+  --accent-fill: color-mix(in srgb, var(--accent) 88%, #000);
+  /* Акцент как текст/значок по нейтральному фону: 3.6:1 у #007aff — мало для подписи 10.5px.
+     82% акцента даёт 5.02:1; в тёмной схеме акцент уже даёт 5.7:1, там затемнять нельзя. */
+  --accent-on-bg: color-mix(in srgb, var(--accent) 82%, #000);
+  --accent-press: color-mix(in srgb, var(--accent-fill) 88%, #000);
+  --green: #34c759;
+  --orange: #ff9f0a;
+  --red: var(--tg-danger, #ff3b30);
+  /* Плашки статусов: текст на тонированном фоне ≥4.5:1 (WCAG AA, мелкий текст 11.5px).
+     Смысловой оттенок (зелёный/синий/оранжевый/красный) сохраняется — меняется только
+     светлота под схему. Замер до правки: 2.83–3.97:1. */
+  --badge-ok-fg: #0d7038; --badge-info-fg: #0b5ccc; --badge-warn-fg: #8a5200; --badge-err-fg: #b8271d;
+  --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+  --radius: 14px;
+  --r-sm: 10px; --r-md: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  /* Шкала отступов (ритм 4/8/12/16/24/32) */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+  /* Safe-area: JS пишет safeAreaInset+contentSafeAreaInset; фолбэк — env() */
+  --sa-top: env(safe-area-inset-top, 0px);
+  --sa-bottom: env(safe-area-inset-bottom, 0px);
+  --sa-right: env(safe-area-inset-right, 0px);
+  --sa-left: env(safe-area-inset-left, 0px);
+  /* Резерв полосы под кнопку Telegram ✕ (для клиентов без contentSafeAreaInset) */
+  --chrome-top: 0px;   /* + запас под кнопку TG на старых клиентах */
+  /* Единая система кнопок (Emil Kowalski: одна высота, один ритм) */
+  --btn-h: 44px;
+  --btn-h-sm: 36px;
+  --btn-pad-x: 16px;
+  --btn-radius: 12px;
+  --btn-gap: 8px;
+  --btn-font: 15px;
+  --btn-font-sm: 13px;
+  --tabbar-h: 49px;
+  /* P5 (msg 283): ОДНО семейство контролов панели — стрелки календаря, «Сегодня», чипы и
+     переключатель вида. До правки на одном экране жили три семейства: стрелки 44×44/r=12,
+     «Сегодня» 44 (видно 36)/r=14, чипы 36/r=999/12px, сегмент 36 (вкладка 28)/r=10 с белой
+     «таблеткой» вместо акцента. Контракт семейства: нажатие 44, видимая поверхность 36,
+     скругление 12, одна серая заливка, одна типографика, одно нажатие (scale .97);
+     отличается ТОЛЬКО состояние «выбрано» — акцентной заливкой. */
+  --ctl-h: var(--btn-h);            /* 44px — область нажатия (mobile-native: тап-цель ≥44) */
+  --ctl-hv: var(--btn-h-sm);        /* 36px — видимая поверхность (плотность строки) */
+  --ctl-pad: 4px;                   /* инсет: 36 + 2×4 = 44 = --ctl-h (трек сегмента) */
+  --ctl-r: 12px;                    /* одно скругление у всех контролов */
+  --ctl-fill: rgba(120,120,128,0.14);
+  --ctl-fill-hover: rgba(120,120,128,0.22);
+  --ctl-font: var(--btn-font-sm);   /* 13px */
+  --ctl-pad-x: 12px;
+  --ctl-gap: var(--sp-2);           /* 8px — один зазор в строках контролов */
+  --ctl-on-fill: var(--accent-fill);
+  --ctl-on-fg: var(--accent-text);
+  /* Значок-маркер платформы: один размер на всей панели. Было 16px (очередь), 14px (день и
+     неделя календаря), 12px (месяц) — один и тот же значок выглядел по-разному. Месяц задаёт
+     предел: клетка 34.28px при 320px минус поля 2×4px = 26px, поэтому 12px — единственный
+     размер, при котором пара «видео + отправить» влезает (12+12+4=28 > 26 при 4px поля —
+     на ≤340px поля клетки 3px и шаг сетки 2px дают 29.14px). */
+  --ico-mark: 12px;
+  --ico-mark-gap: 4px;              /* зазор внутри пары значков — один во всех трёх видах */
+  --ico-nav: 22px;                  /* значок навигации: tabbar и шторка «Ещё» (было 23 против 22) */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--tg-bg, #000); --card: var(--tg-card, #1c1c1e);
+    --text: var(--tg-text, #f5f5f7); --text-2: var(--tg-subtitle, #98989f); --text-3: var(--tg-hint, #9a9aa0);
+    --sep: var(--tg-sep, rgba(84,84,88,0.45)); --border-strong: rgba(235,235,245,0.32);
+    --accent: var(--tg-accent, #0a84ff); --accent-press: color-mix(in srgb, var(--accent-fill) 88%, #fff);
+    --accent-fill: color-mix(in srgb, var(--accent) 84%, #000); --accent-on-bg: var(--accent);
+    --badge-ok-fg: #3ecf6f; --badge-info-fg: #5aa9ff; --badge-warn-fg: #f0b357; --badge-err-fg: #ff7d72;
+    --sidebar: color-mix(in srgb, var(--bg) 86%, transparent);
+    --shadow: 0 1px 0 rgba(255,255,255,0.04), 0 12px 32px rgba(0,0,0,0.45);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-press: 0ms; --dur-ui: 0ms; --dur-toast: 0ms; }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; font-family: var(--font); background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+#app { display: flex; height: var(--wa-h, 100dvh); max-width: 980px; margin: 0 auto; }
+.sidebar {
+  width: 228px; min-width: 0; background: var(--sidebar);
+  backdrop-filter: saturate(160%) blur(24px); -webkit-backdrop-filter: saturate(160%) blur(24px);
+  border-right: 1px solid var(--sep); display: flex; flex-direction: column;
+  padding: calc(14px + var(--sa-top)) 10px calc(14px + var(--sa-bottom));
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 10px 12px 16px; }
+.brand-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(145deg, #64d2ff, #007aff); color: #fff;
+  font-weight: 700; font-size: 15px; display: grid; place-items: center;
+  box-shadow: 0 4px 12px rgba(0,122,255,0.28);
+}
+.brand h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
+.brand span { display: block; font-size: 11px; color: var(--text-3); font-weight: 500; margin-top: 1px; }
+.nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.nav button {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 9px; font-size: 13px; font-weight: 510; color: var(--text); cursor: pointer;
+  transition: background var(--dur-press) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+.nav button:active { transform: scale(0.98); }
+.nav button.active { background: var(--accent-fill); color: var(--accent-text); }
+@media (hover: hover) and (pointer: fine) { .nav button:hover { background: rgba(0,0,0,0.04); } }
+.nav button .ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.92; }
+.nav button .ico svg { width: 18px; height: 18px; display: block; }
+.sidebar-footer { padding: 12px 12px 6px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--sep); margin-top: 8px; }
+.lang { display: inline-flex; gap: 6px; margin-top: 8px; }
+.lang-btn {
+  all: unset; box-sizing: border-box; padding: 4px 10px; border-radius: 8px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  background: rgba(120,120,128,0.14); color: var(--text);
+  transition: background var(--dur-press) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+.lang-btn:active { transform: scale(0.97); }
+.lang-btn.active { background: var(--accent-fill); color: var(--accent-text); }
+.lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.main { flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; display: flex; flex-direction: column; background: var(--bg); }
+.topbar { display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: calc(12px + var(--sa-top) + var(--chrome-top)) calc(22px + var(--sa-right)) 10px calc(22px + var(--sa-left)); }
+.topbar-center { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+.topbar-center h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+.topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px calc(22px + var(--sa-left)) calc(32px + var(--sa-bottom)) calc(22px + var(--sa-right)); -webkit-overflow-scrolling: touch; }
+.view-enter {
+  opacity: 1; transform: translateY(0) scale(1);
+  transition: opacity var(--dur-ui) var(--ease-out), transform var(--dur-ui) var(--ease-out);
+}
+@starting-style {
+  .view-enter { opacity: 0; transform: translateY(6px) scale(0.98); }
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.card {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  border: 1px solid var(--sep); padding: 14px 16px;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+.card:active { transform: scale(0.98); }
+.card .label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.card .value { font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.panel {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  border: 1px solid var(--sep); overflow: hidden; margin-bottom: 14px;
+}
+.panel-header {
+  padding: 12px 16px; font-size: 13px; font-weight: 650; border-bottom: 1px solid var(--sep);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.row {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  border-bottom: 1px solid var(--sep); font-size: 13px;
+  transition: background var(--dur-press) var(--ease-out);
+}
+.row:last-child { border-bottom: none; }
+.row:active { background: rgba(0,0,0,0.03); }
+@media (prefers-color-scheme: dark) { .row:active { background: rgba(255,255,255,0.04); } }
+.row .title { font-weight: 600; flex: 1; min-width: 0; }
+.row .meta { color: var(--text-2); font-size: 12px; }
+.row .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-2); }
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.pill {
+  display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+  height: 24px; padding: 0 9px; font-size: 11.5px; font-weight: 600;
+  background: rgba(120,120,128,0.12); color: var(--text-2); white-space: nowrap;
+}
+.pill.ok { background: rgba(52,199,89,0.16); color: var(--badge-ok-fg); }
+.pill.warn { background: rgba(255,159,10,0.18); color: var(--badge-warn-fg); }
+.pill.err { background: rgba(255,59,48,0.16); color: var(--badge-err-fg); }
+.pill.info { background: rgba(10,132,255,0.14); color: var(--badge-info-fg); }
+.btn {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--btn-h); min-height: var(--btn-h); padding: 0 var(--btn-pad-x); border-radius: var(--btn-radius);
+  font-size: var(--btn-font); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; user-select: none; white-space: nowrap; text-align: center;
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out), opacity var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
+}
+.btn:active { transform: scale(0.97); }
+.btn:focus-visible, .nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+.btn.primary { background: var(--accent-fill); color: var(--accent-text); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.btn.secondary { background: rgba(120,120,128,0.14); color: var(--text); }
+.btn.danger { background: rgba(255,59,48,0.14); color: var(--badge-err-fg); }
+.btn.success { background: rgba(52,199,89,0.16); color: var(--badge-ok-fg); }
+/* mobile-native: hover — только там, где устройство умеет hover (иначе на телефоне залипает после тапа) */
+@media (hover: hover) and (pointer: fine) {
+  .btn.primary:hover { background: var(--accent-press); }
+  .btn.secondary:hover { background: rgba(120,120,128,0.22); }
+  .btn.danger:hover { background: rgba(255,59,48,0.22); }
+  .btn.success:hover { background: rgba(52,199,89,0.24); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-color-scheme: dark) {
+  .nav button:hover { background: rgba(255,255,255,0.06); }
+}
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+.panel-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.form-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 16px; align-items: center; }
+input, select, textarea {
+  font: inherit; font-size: 13px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--sep);
+  background: var(--bg); color: var(--text); outline: none; min-width: 0;
+  transition: border-color var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,0.22); }
+select { appearance: none; -webkit-appearance: none; padding-right: 28px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center; background-size: 14px; }
+textarea { resize: vertical; min-height: 84px; font-family: var(--font); }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.empty { padding: 32px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 24px + var(--sa-bottom));
+  transform: translateX(-50%) translateY(12px) scale(0.96);
+  background: rgba(28,28,30,0.94); color: #fff; padding: 11px 18px; border-radius: 980px;
+  font-size: 13px; font-weight: 550; opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-toast) var(--ease-out), transform var(--dur-toast) var(--ease-out);
+  z-index: 10050; max-width: 90%; box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+.auth-gate { display: grid; place-items: center; height: var(--wa-h, 100dvh); padding: 24px; text-align: center; }
+.auth-gate h2 { margin-bottom: 8px; letter-spacing: -0.02em; }
+.auth-gate p { color: var(--text-2); font-size: 14px; max-width: 320px; line-height: 1.4; }
+@media (max-width: 640px) {
+  /* Телефон: приложение на всю ширину/высоту Telegram, без «карточки по центру» */
+  #app {
+    flex-direction: column; width: 100%; max-width: none; margin: 0;
+    height: var(--wa-h, 100dvh); min-height: var(--wa-h, 100dvh);
+  }
+  .sidebar { display: none; }               /* mobile-навигация — нижний tabbar */
+  .nav, .sidebar-footer, .brand { display: none; }
+  .content {
+    padding: 6px calc(14px + var(--sa-left)) calc(var(--tabbar-h) + 24px + var(--sa-bottom)) calc(14px + var(--sa-right));
+  }
+  .topbar { padding: calc(8px + var(--sa-top) + var(--chrome-top)) calc(14px + var(--sa-right)) 4px calc(14px + var(--sa-left)); }
+  .topbar h2 { font-size: 22px; letter-spacing: -0.02em; }
+  /* Полоса кнопок Telegram (✕/⋮) — в правом верхнем углу: там ничего не размещаем.
+     Заголовок и иконка обновления — одной центрированной группой по центру экрана. */
+  /* заголовок — ровно по центру экрана; иконка рядом, не сдвигает его */
+  .btn { height: var(--btn-h); min-height: var(--btn-h); }
+  .row { padding: 10px 14px; }
+  .form-row { gap: var(--btn-gap); }
+  /* primary на всю ширину — только когда он по сути единственный CTA в ряду
+     (ряд из 2 элементов: подпись/вторичное + primary). Ряды выбора корней и
+     мультикнопочные тулбары не растягиваем. */
+  .form-row:not(.roots-row):has(> .btn.primary):has(> :last-child:nth-child(2)) > .btn.primary { flex: 1 1 100%; }
+  .form-row .btn { min-width: 0; }
+}
+
+/* Чипы фильтров на телефоне: одна строка с горизонтальным скроллом (не «три этажа») */
+@media (max-width: 640px) {
+  .chips {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px; scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar { height: 0; }
+  .chip { flex: 0 0 auto; }
+}
+
+/* Очередь: единая высота контролов в строке (36px, не мешаем 36 и 44) */
+.q-row .icon-btn, .q-row .q-cover-btn, .q-row .q-cover, .q-row .q-cover-empty {
+  width: var(--btn-h-sm); height: var(--btn-h-sm);
+}
+.q-row .q-cover, .q-row .q-cover-empty { object-fit: cover; }
+.q-row .q-check { width: 30px; height: 30px; margin-top: 0; }
+
+/* Тост всегда над таббаром и поверх шторок — см. .toast (bottom/z-index) */
+
+/* ===== Нижний tabbar (mobile) — 4 primary + «Ещё» ===== */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: stretch;
+  height: calc(var(--tabbar-h) + var(--sa-bottom));
+  padding-bottom: var(--sa-bottom);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(160%) blur(20px); -webkit-backdrop-filter: saturate(160%) blur(20px);
+  border-top: 1px solid var(--sep);
+}
+.tabbar button {
+  all: unset; box-sizing: border-box; flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 5px 2px 3px; color: var(--text-2); cursor: pointer; overflow: hidden;
+  transition: transform var(--dur-press) var(--ease-out), color var(--dur-ui) var(--ease-out);
+}
+.tabbar button .ico, .tabbar button .ico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; }
+.tabbar button .label { font-size: 10.5px; font-weight: 600; letter-spacing: -0.01em;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabbar button:active { transform: scale(0.94); }
+.tabbar button.active { color: var(--accent-on-bg); }
+.tabbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 10px; }
+@media (min-width: 641px) { .tabbar { display: none !important; } }
+
+/* ===== Шторка «Ещё» / iOS-лист ===== */
+.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 80;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0 0 0; animation: fadeIn 160ms var(--ease-out); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.sheet {
+  width: 100%; max-width: 560px; background: var(--card); color: var(--text);
+  border-radius: 20px 20px 0 0; box-shadow: var(--shadow);
+  padding-bottom: calc(10px + var(--sa-bottom));
+  animation: sheetUp 220ms var(--ease-out); max-height: 82vh; overflow: auto;
+}
+@keyframes sheetUp { from { transform: translateY(18px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sheet, .sheet-overlay { animation: none; } }
+.sheet-grab { width: 38px; height: 5px; border-radius: 999px; background: var(--sep); margin: 8px auto 2px; }
+.sheet-title { font-size: 15px; font-weight: 700; padding: 8px 16px 6px; letter-spacing: -0.01em; }
+.sheet-item {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 13px 16px; font-size: 16px; font-weight: 500; cursor: pointer;
+  border-bottom: 1px solid var(--sep);
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-press) var(--ease-out);
+}
+.sheet-item:last-child { border-bottom: none; }
+.sheet-item:active { background: rgba(0,0,0,0.05); transform: scale(0.995); }
+@media (prefers-color-scheme: dark) { .sheet-item:active { background: rgba(255,255,255,0.07); } }
+.sheet-item .ico, .sheet-item .ico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; color: var(--text-2); }
+.sheet-item .chev { margin-left: auto; color: var(--text-3); }
+.sheet-lang { display: flex; gap: 8px; padding: 12px 16px 4px; }
+
+/* ===== Утилиты (замена инлайн-стилей: строгий CSP style-src 'self') ===== */
+.w-full { width: 100%; }
+.w-86 { width: 86px; }
+.w-120 { width: 120px; }
+.min-0 { min-width: 0; }
+.min-130 { min-width: 130px; }
+.min-140 { min-width: 140px; }
+.min-180 { min-width: 180px; }
+.flex-1 { flex: 1 1 auto; }
+.flex-2-right { flex: 2 1 auto; text-align: right; }
+.wrap-any { word-break: break-all; overflow-wrap: anywhere; }
+.fs-11 { font-size: 11px; }
+.fs-12 { font-size: 12px; }
+.mr-6 { margin-right: 6px; }
+.pt-8 { padding-top: 8px; }
+.pb-12 { padding-bottom: 12px; }
+.row-plain { border: 0; padding: 0 0 10px; }
+.row-center-8 { align-items: center; gap: 8px; }
+.pbar-fill { width: 0; }
+/* Размеры иконок классами (icon(name, size)) */
+.pico-12, .pico-12 svg { width: 12px; height: 12px; }
+.pico-13, .pico-13 svg { width: 13px; height: 13px; }
+.pico-14, .pico-14 svg { width: 14px; height: 14px; }
+.pico-15, .pico-15 svg { width: 15px; height: 15px; }
+.pico-16, .pico-16 svg { width: 16px; height: 16px; }
+.pico-18, .pico-18 svg { width: 18px; height: 18px; }
+.pico-20, .pico-20 svg { width: 20px; height: 20px; }
+.pico-22, .pico-22 svg { width: 22px; height: 22px; }
+.pico-26, .pico-26 svg { width: 26px; height: 26px; }
+
+/* Ghost-иконка (обновление рядом с заголовком): без заливки, крупный тап, мягкий отклик */
+.icon-ghost {
+  all: unset; box-sizing: border-box; width: 44px; height: 44px; flex: 0 0 auto;
+  display: inline-grid; place-items: center; border-radius: var(--ctl-r);
+  color: var(--accent-on-bg); cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out), opacity var(--dur-ui) var(--ease-out);
+}
+.icon-ghost .ico, .icon-ghost .ico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; }
+/* рядом с названием: иконка позиционируется от правого края заголовка и не сдвигает его центр */
+.topbar-center .icon-ghost { position: absolute; left: 100%; top: 50%; margin-left: 2px; transform: translateY(-50%); }
+.icon-ghost:active { transform: translateY(-50%) scale(0.97); background: var(--ctl-fill); }
+.topbar-center .icon-ghost:focus-visible { transform: translateY(-50%); }
+.icon-ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.icon-ghost.spin-once .ico { animation: ghostSpin 620ms var(--ease-out); }
+@keyframes ghostSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon-ghost.spin-once .ico { animation: none; } }
+
+/* CTA на «Обзоре»: та же сетка, что и карточки → те же левый/правый края */
+.cta-grid { margin-bottom: 12px; }
+.cta-grid .btn { width: 100%; }
+
+/* ===== B3: примитивы интерфейса (единый ритм и выравнивание) ===== */
+.item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-3); align-items: start;
+  padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--sep);
+}
+.item:last-child { border-bottom: none; }
+.item__main { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.item__title {
+  font-size: 14.5px; font-weight: 600; line-height: 1.25; color: var(--text);
+  overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.item__meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px var(--sp-2);
+  font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums;
+}
+.item__actions {
+  display: flex; flex-direction: column; justify-content: space-between;
+  align-items: flex-end; gap: var(--sp-2); align-self: stretch;
+}
+.item__actions.row { flex-direction: row; align-items: center; justify-content: flex-end; }
+.item__hint { font-size: 12px; line-height: 1.35; color: var(--text-2); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  background: rgba(120,120,128,0.14); color: var(--text-2);
+}
+.badge.ok { background: rgba(52,199,89,0.16); color: var(--badge-ok-fg); }
+.badge.info { background: rgba(10,132,255,0.14); color: var(--badge-info-fg); }
+.badge.warn { background: rgba(255,159,10,0.18); color: var(--badge-warn-fg); }
+.badge.err, .badge.off { background: rgba(255,59,48,0.15); color: var(--badge-err-fg); }
+.badge.muted { opacity: .72; }
+
+.btn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+.btn-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.btn-grid.one { grid-template-columns: 1fr; }
+.item.is-off { opacity: .55; }
+.q-plat.big .pico, .q-plat.big .pico svg { width: 26px; height: 26px; }
+.btn-grid .btn { width: 100%; }
+
+/* P5: трек — та же поверхность, что у чипов, только как контейнер: 36-вкладка + 2×4 инсета
+   = 44px нажатия. Вкладка внутри — 36px и r=12, как у «Сегодня»/чипов/стрелок. */
+.seg { display: inline-flex; padding: var(--ctl-pad); gap: 2px; background: var(--ctl-fill); border-radius: var(--ctl-r); }
+.seg button {
+  all: unset; box-sizing: border-box; height: var(--ctl-hv); padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r);
+  font-size: var(--ctl-font); font-weight: 600; color: var(--text-2); cursor: pointer; white-space: nowrap;
+  transition: background var(--dur-ui) var(--ease-out), color var(--dur-ui) var(--ease-out);
+}
+.seg button.on { background: var(--ctl-on-fill); color: var(--ctl-on-fg); }
+.seg button:active { transform: scale(0.97); }
+
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--sep); }
+.panel-head h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.hint { padding: var(--sp-2) var(--sp-4) 0; font-size: 12px; line-height: 1.4; color: var(--text-3); }
+
+/* Поля с подписью сверху (вместо узких правых колонок) */
+.field { display: flex; flex-direction: column; gap: 6px; padding: var(--sp-2) var(--sp-4) 0; }
+.field__label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.field input, .field select, .field textarea { width: 100%; }
+
+/* Текстовые варианты кнопок (без заливки — меньше визуального шума) */
+.btn.danger-text { background: var(--ctl-fill); color: var(--badge-err-fg); }
+.btn.success-text { background: var(--ctl-fill); color: var(--badge-ok-fg); }
+@media (hover: hover) and (pointer: fine) {
+  .btn.danger-text:hover { background: rgba(255,59,48,0.14); }
+  .btn.success-text:hover { background: rgba(52,199,89,0.16); }
+}
+.btn.sm { height: var(--btn-h-sm); min-height: var(--btn-h-sm); font-size: var(--btn-font-sm); padding: 0 12px; border-radius: 10px; }
+
+/* Сетка «кнопка + пояснение» (экраны Действия/Расписание) */
+.act-grid { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+.act-grid .act { display: flex; flex-direction: column; gap: 6px; }
+@media (min-width: 641px) { .act-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Очередь: раскладка строки-карточки */
+.q-item { position: relative; }
+.q-item.picked { background: rgba(10,132,255,0.06); }
+.q-item.with-check { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+.q-item .q-cover, .q-item .q-cover-empty { width: 72px; height: 108px; }
+.q-item .q-cover-btn { border-radius: 10px; overflow: hidden; }
+.q-edit-panel {
+  grid-column: 1 / -1; margin: var(--sp-2) 0 0; padding-bottom: var(--sp-2);
+  background: color-mix(in srgb, var(--card) 92%, var(--bg));
+  border: 1px solid var(--sep); border-radius: var(--radius);
+}
+.q-edit-panel .btn-grid { padding: var(--sp-2) var(--sp-4); }
+.btn-grid .field { padding: 0; }
+.btn-grid.flush { padding: var(--sp-1) var(--sp-4) var(--sp-3); }
+
+/* День в очереди/календаре */
+.day-sep { display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4) var(--sp-1); font-size: 12px; font-weight: 700; color: var(--text-2); }
+.day-sep .cnt { font-weight: 600; color: var(--text-3); }
+
+/* C10: чипы-чекбоксы (дни, соцсети в группах) */
+.chip__input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.chip { position: relative; }
+.chip:has(.chip__input:checked) { background: var(--ctl-on-fill); border-color: transparent; color: var(--ctl-on-fg); }
+.chip:has(.chip__input:checked) .cnt { color: var(--ctl-on-fg); }
+.chip:has(.chip__input:checked) .pico { color: var(--ctl-on-fg); }
+.day-chips { margin: 2px 0 8px; }
+.times-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+.times-row input[type="time"] { flex: 1 1 120px; }
+
+/* C11: План (календарь) — сегмент, навигация, неделя, месяц */
+/* S2: align-items — иначе вытянутый по высоте сосед (чипы) растягивает серую подложку .seg;
+   gap — чтобы чипы не слипались с сегментом */
+.cal-bar { display: flex; align-items: center; justify-content: center; gap: var(--ctl-gap); padding: var(--sp-2) var(--sp-4); }
+/* P4: вкладки сегмента одинаковой ширины (белая «таблетка» не скачет 57/72.8/66.6px),
+   промежуток между чипами — как до «Сегодня» (8px): один ритм в строке */
+.cal-bar .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.cal-bar .chips { gap: var(--ctl-gap); }
+/* Навигация периода одна на три вида: ‹ и › — штатные .btn 44×44 у самых краёв строки,
+   подпись периода ровно по центру (сетка 44 / 1fr / 44 — «дата по центру» без ручных отступов) */
+.cal-nav { display: grid; grid-template-columns: var(--btn-h) minmax(0, 1fr) var(--btn-h);
+  align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--sep); }
+/* P5: стрелка — тот же контрол, что чип/«Сегодня»/вкладка: нажатие 44, видимая серая
+   поверхность 36 (накладка ::before с инсетом --ctl-pad), r=--ctl-r, одна типографика.
+   Было: 44×44 с r=12 и заливкой на всю кнопку — рядом с «Сегодня» (r=14) и чипами (pill) это
+   выглядело тремя разными кнопками. */
+.btn.cal-step { width: var(--ctl-h); min-width: var(--ctl-h); height: var(--ctl-h); padding: 0;
+  position: relative; background: transparent; box-shadow: none; border: 0; border-radius: var(--ctl-r); }
+.btn.cal-step::before { content: ""; position: absolute; inset: var(--ctl-pad);
+  border-radius: var(--ctl-r); background: var(--ctl-fill); }
+/* Шеврон: 22px при штрихе 2.8 (та же доля поверхности 0.61, что 26px при 44px).
+   Размер задан явно: общие .pico/.pico svg (16px) идут ниже по файлу и перебивают .pico-22. */
+.btn.cal-step .pico { width: 22px; height: 22px; margin-right: 0; opacity: 1; position: relative; }
+.btn.cal-step .pico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; }
+/* hover — только там, где есть настоящий курсор (mobile-native: залипающий hover на тапе) */
+@media (hover: hover) and (pointer: fine) {
+  .btn.secondary.cal-step:hover { background: transparent; }
+  .btn.secondary.cal-step:hover::before { background: var(--ctl-fill-hover); }
+}
+.cal-period { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 13.5px; font-weight: 650; text-align: center; font-variant-numeric: tabular-nums; }
+/* Строка события: колонка времени фиксирована (заголовки строк выровнены даже без времени),
+   плашки статусов прижаты к правому краю — правые края пар совпадают между событиями */
+.cal-row { grid-template-columns: auto minmax(0, 1fr); }
+.cal-row .cal-time { min-width: 42px; }
+.cal-row .item__meta.cal-badges { justify-content: flex-end; }
+.cal-row .cal-link { margin-left: auto; }
+/* Поверхность свайпа: горизонталь наша, вертикальную промотку оставляем браузеру */
+.cal-swipe { touch-action: pan-y; overscroll-behavior-x: contain; }
+/* «Сегодня» — тот же контрол семейства: нажатие 44, видимая поверхность 36 (накладка ::before),
+   r=--ctl-r, шрифт --ctl-font. Было: 44px с прозрачными рамками 4px и r=14 — рядом со стрелками
+   (r=12) и чипами (pill) это читалось как разные кнопки. Отрицательные поля возвращают полосе
+   прежнюю высоту: 44px кнопки «выглядывают» в отступ полосы, а не растягивают её. */
+.cal-bar .btn.sm { height: var(--ctl-h); min-height: var(--ctl-h); margin: calc(-1 * var(--ctl-pad)) 0;
+  position: relative; padding: 0 var(--ctl-pad-x); background: transparent; border: 0;
+  border-radius: var(--ctl-r); font-size: var(--ctl-font); font-weight: 600; }
+.cal-bar .btn.sm::before { content: ""; position: absolute; inset: var(--ctl-pad) 0;
+  border-radius: var(--ctl-r); background: var(--ctl-fill); }
+@media (hover: hover) and (pointer: fine) {
+  .cal-bar .btn.sm:hover { background: transparent; }
+  .cal-bar .btn.sm:hover::before { background: var(--ctl-fill-hover); }
+}
+.cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: var(--sp-2) var(--sp-4) var(--sp-4); }
+.cal-wcol { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cal-wcol.today .cal-whead { color: var(--accent); }
+.cal-whead { font-size: 11px; font-weight: 700; text-align: center; color: var(--text-2); }
+.cal-witem { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; padding: 6px 2px; border-radius: 9px;
+  background: rgba(10,132,255,0.10); font-size: 11px; color: var(--text);
+  transition: transform var(--dur-press) var(--ease-out); }
+.cal-witem:active { transform: scale(0.95); }
+/* P4: строки сетки месяца одной высоты — иначе строка с тремя строками иконок была 67px
+   против 58px у соседних (шаг сетки 61/61/61/70). grid-auto-rows: 1fr выравнивает все
+   строки по самой высокой, а первая строка (подписи пн…вс) остаётся auto. */
+.cal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto;
+  grid-auto-rows: 1fr; gap: 3px; padding: var(--sp-2) var(--sp-4) var(--sp-4); }
+.cal-cell { all: unset; box-sizing: border-box; cursor: pointer; min-height: 58px; border-radius: 10px;
+  background: rgba(120,120,128,0.08); padding: 5px 6px; display: flex; flex-direction: column; gap: 4px;
+  overflow: hidden;
+  transition: transform var(--dur-press) var(--ease-out); }
+.cal-cell:active { transform: scale(0.97); }
+.cal-cell.has { background: rgba(10,132,255,0.10); }
+.cal-cell.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cal-cell.empty { background: transparent; pointer-events: none; }
+.cal-wdays { display: contents; }
+.cal-wday-label { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding-bottom: 2px; }
+.cal-d { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-1);
+  font-size: 12px; font-weight: 650; color: var(--text-2); }
+.cal-cell.has .cal-d { color: var(--text); }
+.cal-dot { display: inline-flex; gap: var(--ico-mark-gap); align-items: center; max-width: 100%; min-width: 0; overflow: hidden; }
+/* P5: пара «видео + отправить» — один размер (--ico-mark) и один зазор (--ico-mark-gap)
+   во всех трёх видах. Было: день 14px/зазор 8px, неделя 14px/зазор 0px, месяц 12px/зазор 2px —
+   один и тот же значок выглядел по-разному, а зазор «плавал» 0…8px. Предел задаёт клетка
+   месяца при 320px: 34.28px − поля 2×4px = 26px, поэтому 12px — единственный размер, при
+   котором пара влезает (12+12+4 = 28 > 26; на ≤340px поля клетки 3px + шаг сетки 2px → 29.14px). */
+.cal-cell .pico, .cal-cell .pico svg,
+.cal-row .q-plat .pico, .cal-row .q-plat .pico svg,
+.cal-witem .q-plat .pico, .cal-witem .q-plat .pico svg { width: var(--ico-mark); height: var(--ico-mark); }
+.cal-cell .pico { margin-right: 0; }
+.cal-row .q-plat, .cal-witem .q-plat, .cal-cell .pico { color: var(--text-2); }
+/* зазор внутри пары — тот же токен, что и размер: 4px в дне, неделе и месяце */
+.cal-row .item__meta:not(.cal-badges) { column-gap: var(--ico-mark-gap); }
+.cal-witem .q-plat { gap: var(--ico-mark-gap); }
+.cal-cnt { font-size: 10.5px; color: var(--text-2); }
+/* P5: на очень узких экранах (≤340px) ячейка 34.28px. Чтобы пара значков осталась того же
+   размера и с тем же зазором, что в дне и неделе, ужимаем не значки, а сетку и поля:
+   шаг 2px и поля 3px → (34.28+6-2) − 6 = 29.14px при нужных 28px (запас 1.14px). */
+@media (max-width: 340px) {
+  .cal-month { gap: 2px; }
+  .cal-cell { padding-left: 3px; padding-right: 3px; }
+}
+/* P3: в «Неделе» день без постов — тоже строка 44px: раньше пустые «сб 26»/«вс 27» слипались
+   (зазор 4px против 19.5px у дней с постами), ритм заголовков плясал 17…80px. */
+@media (max-width: 640px) {
+  .cal-week { grid-template-columns: 1fr; gap: 4px; }
+  .cal-wcol { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px; min-height: var(--btn-h); }
+  .cal-whead { width: 62px; text-align: left; }
+  .cal-witem { flex-direction: row; gap: 6px; padding: 5px 8px; min-height: var(--btn-h); justify-content: flex-start; }
+  /* S2: чипы — одной строкой с горизонт. скроллом (базовое .chips ниже перебивает
+     мобильный медиазапрос, wrap перебиваем точечно); «Сегодня» — справа в строке чипов. */
+  .cal-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); }
+  .cal-bar .seg { grid-column: 1 / -1; justify-self: center; }
+  .cal-bar .chips {
+    /* поля — иначе скроллер срежет расширенную область нажатия чипа */
+    grid-column: 1; width: 100%; min-width: 0; flex-wrap: nowrap; overflow-x: auto;
+    padding: 4px 0; margin: -4px 0;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .cal-bar .chips::-webkit-scrollbar { height: 0; }
+  .cal-bar .chip { flex: 0 0 auto; }
+  .cal-bar .btn[data-act="cal-today"] { grid-column: 2; align-self: center; }
+}
+
+/* Разделитель секции внутри панели */
+.divider { height: 1px; background: var(--sep); margin: var(--sp-3) 0 0; }
+
+/* Карточки метрик: ровно 2 колонки на телефоне */
+@media (max-width: 640px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+[hidden] { display: none !important; }
+
+/* Значки соцсетей */
+.pico { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; opacity: 0.92; }
+.pico svg { width: 16px; height: 16px; display: block; fill: currentColor; }
+
+/* Очередь: единая колонка действий (одно объявление вместо трёх) */
+.queue-col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.status-btn { pointer-events: none; cursor: default; }
+.q-plat { display: inline-flex; align-items: center; }
+/* P5: значок-маркер платформы — один размер на всей панели (--ico-mark).
+   Было: 16px здесь, 14px в .q-row (правило мертво — в разметке нет .q-row), 14px в календаре,
+   12px в месяце; один и тот же значок выглядел на экранах по-разному. */
+.q-plat .pico, .q-plat .pico svg { width: var(--ico-mark); height: var(--ico-mark); margin-right: 0; }
+
+/* Текст без наложений */
+.row > .btn { flex: 0 0 auto; }
+.row .title { overflow-wrap: anywhere; line-height: 1.3; }
+.pico { flex: 0 0 auto; }
+.panel-header .q-plat .pico { width: 22px; height: 22px; }
+.panel-header .q-plat .pico svg { width: 22px; height: 22px; }
+
+/* Переносы: моно-текст (пути) переносится, время/дата — нет */
+.row .title.mono, .row .title { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+
+/* Песочные часы: индикатор выполнения операций */
+.busy-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.35); z-index: 9999; }
+.busy-box { background: var(--panel, #fff); color: var(--text-1, #000); padding: 16px 22px; border-radius: 12px;
+  font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+
+/* Прогресс-оверлей (Emil Kowalski style: мягкие тени, ease-out) */
+.busy-box { min-width: 280px; max-width: 90vw; }
+.busy-row { display: flex; align-items: center; gap: 10px; }
+.busy-row .pico { width: 20px; height: 20px; }
+.busy-meta { justify-content: space-between; color: var(--text-2); font-size: 12px; margin-top: 6px; }
+.pbar { height: 6px; border-radius: 999px; background: var(--sep); overflow: hidden; margin-top: 10px; }
+.pbar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 300ms var(--ease-out); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.warn-text { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Доступность и размеры касания */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+/* Плотные области: одна согласованная высота 36px (не «пляшущие» кнопки) */
+.q-row .btn, .queue-col .btn, .status-btn, .q-status .status-btn,
+.panel-header .btn, .search-list .btn {
+  height: var(--btn-h-sm); min-height: var(--btn-h-sm); font-size: var(--btn-font-sm);
+  padding: 0 12px; border-radius: 10px;
+}
+.chip { min-height: var(--ctl-hv); }
+.icon-btn { width: var(--ctl-h); height: var(--ctl-h); }
+
+/* macOS-штрихи: тап-хайлайт, скрытые скроллбары, инсет-разделители списков */
+html { -webkit-tap-highlight-color: transparent; }
+/* mobile-native (Emil): палец вместо мыши — без задержки двойного тапа */
+button, a, [role="button"] { touch-action: manipulation; }
+/* Плотные чипы и сегмент выглядят компактно (36/32px), но палец по ним попадает:
+   расширяем область нажатия до 44px невидимой накладкой. Так можно не всем: .btn
+   обрезает содержимое ради многоточия (overflow: hidden), поэтому у кнопок
+   область нажатия расширяют прозрачные рамки — см. .cal-bar .btn.sm. */
+.seg button { position: relative; }
+.chip::after, .seg button::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  height: var(--ctl-h); transform: translateY(-50%);
+}
+.content::-webkit-scrollbar, .sidebar::-webkit-scrollbar { width: 0; height: 0; }
+.row { position: relative; border-bottom: none; }
+.row::after { content: ""; position: absolute; left: 16px; right: 0; bottom: 0; height: 1px; background: var(--sep); }
+.row:last-child::after { display: none; }
+
+/* Выбор обложки (cover picker) */
+.cover-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex;
+  align-items: center; justify-content: center; z-index: 70; padding: 12px; }
+.cover-panel { background: var(--card); color: var(--text); border-radius: var(--radius);
+  width: min(700px, 96vw); max-height: 88vh; display: flex; flex-direction: column;
+  overflow: hidden; box-shadow: var(--shadow); }
+.cover-head { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--sep); }
+.cover-tabs { display: flex; gap: var(--ctl-gap); padding: 10px 14px 0; flex-wrap: wrap; }
+.cover-body { padding: 10px 14px 16px; overflow: auto; }
+.cp-path { font-size: 12px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
+.cp-sec { font-size: 12px; color: var(--text-2); margin: 10px 0 6px;
+  text-transform: uppercase; letter-spacing: 0.04em; }
+.cp-dirs { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.cp-thumb { display: flex; flex-direction: column; gap: 4px; align-items: center;
+  background: transparent; border: 1px solid var(--sep); border-radius: 10px;
+  padding: 6px; cursor: pointer; }
+.cp-thumb img { width: 100%; height: 72px; object-fit: cover; border-radius: 6px;
+  background: var(--sep); }
+.cp-thumb span { font-size: 11px; color: var(--text-2); max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.cover-body input[type="file"] { width: 100%; }
+.cover-body input[type="url"] { box-sizing: border-box; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--sep); background: var(--bg); color: var(--text); }
+
+/* Миниатюра обложки в списке очереди */
+.q-cover-btn { background: none; border: 0; padding: 0; margin: 0 8px 0 0; cursor: pointer;
+  flex: 0 0 auto; border-radius: 6px; }
+.q-cover { width: 36px; height: 48px; object-fit: cover; border-radius: 6px;
+  background: var(--sep); display: block; }
+.q-cover-empty { width: 36px; height: 48px; border: 1px dashed var(--sep); opacity: .55; }
+
+/* Компактная строка очереди: название сверху, ниже дата · время · значок сети */
+.q-row { align-items: flex-start; flex-wrap: nowrap; gap: 8px; }
+.q-row .q-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.q-row .q-title { flex: none; font-size: 14px; line-height: 1.25; font-weight: 600;
+  white-space: normal; overflow-wrap: anywhere; display: -webkit-box;
+  -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.q-row .q-meta { display: flex; align-items: center; gap: 8px; font-size: 12px;
+  color: var(--text-2); white-space: nowrap; }
+.q-row .q-meta .q-date { opacity: .8; }
+.q-row .q-plat { display: inline-flex; align-items: center; }
+
+/* ===== Очередь 2.0: чипы, дни, мультивыбор, крупная обложка, мягкий градиент ===== */
+.q-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--ctl-gap);
+  padding: 10px 14px 4px; flex-wrap: wrap; }
+.chips { display: flex; gap: var(--ctl-gap); flex-wrap: wrap; }
+/* P5: обрезанный у правого края чип читается как «список листается», а не как дефект:
+   мягкое затемнение маской. Классы ставит syncChipFade() только при реальном переполнении
+   (scrollWidth > clientWidth), поэтому на широком экране маски нет вовсе. */
+.chips.more-right { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent 100%); }
+.chips.more-left { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px);
+  mask-image: linear-gradient(90deg, transparent 0, #000 24px); }
+.chips.more-left.more-right { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-hv);
+  min-height: var(--ctl-hv); padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r);
+  border: 1px solid transparent; background: var(--ctl-fill); color: var(--text); font-size: var(--ctl-font);
+  font-weight: 600; cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out), border-color var(--dur-ui) var(--ease-out), color var(--dur-ui) var(--ease-out); }
+.chip .pico { width: var(--ico-mark); height: var(--ico-mark); }
+.chip .cnt { font-weight: 500; color: var(--text-2); }
+/* «Выбрано» — единственное отличие внутри семейства: акцентная заливка + её текст. */
+.chip.on { background: var(--ctl-on-fill); border-color: transparent; color: var(--ctl-on-fg); }
+/* 85% белого на акценте давали 4.0:1 — плотный текст токена держит ≥4.5:1 */
+.chip.on .cnt { color: var(--ctl-on-fg); }
+.chip:active { transform: scale(0.97); }
+.q-sel-btn { padding: 6px 12px; font-size: 12px; }
+
+.day-sep { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px 6px; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.day-sep .cnt { font-weight: 500; color: var(--text-3, var(--text-2)); }
+
+.q-row { flex-wrap: wrap; }
+.q-row .q-line { display: flex; gap: 8px; align-items: flex-start; width: 100%; min-width: 0; }
+.q-check { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border-strong);
+  background: var(--card); color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; margin-top: 0; cursor: pointer;
+  transition: background var(--dur-press) ease-out, transform var(--dur-press) var(--ease-out), border-color var(--dur-press) ease-out; }
+.q-check.on { background: var(--accent); border-color: transparent; }
+.q-check:active { transform: scale(0.94); }
+.row.q-row.picked { background: rgba(10, 132, 255, 0.06); }
+.q-row .q-cover, .q-row .q-cover-empty { width: 64px; height: 96px; }
+.q-row .q-cover-btn { margin-right: 2px; }
+.q-row .queue-col { min-width: 0; }
+
+/* P5: кнопка-иконка — то же семейство, что стрелки/чипы: 44×44, r=12, та же заливка,
+   то же нажатие (scale .97). */
+.icon-btn { width: var(--ctl-h); height: var(--ctl-h); border-radius: var(--ctl-r); border: 0;
+  background: var(--ctl-fill); color: var(--text); display: inline-flex; align-items: center;
+  justify-content: center; cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out), background var(--dur-ui) var(--ease-out); }
+.icon-btn:active { transform: scale(0.97); }
+.icon-btn.danger { color: var(--red); }
+.icon-btn[disabled], .btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+.bulk-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px;
+  border-bottom: 1px solid var(--sep); background: rgba(10, 132, 255, 0.05); }
+.bulk-tags { padding: 8px 14px 12px; border-bottom: 1px solid var(--sep); }
+.bulk-tags input { box-sizing: border-box; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--sep); background: var(--card); color: var(--text); margin-top: 4px; width: 100%; }
+.q-edit-panel { flex-basis: 100%; margin: 8px 0 4px; }
+
+.q-status .status-btn { min-height: 0; padding: 2px 8px; font-size: 11px; opacity: 0.92; }
+
+/* Мягкий градиент только у верхней полосы (меньше визуального шума) */
+.topbar { background: linear-gradient(180deg, rgba(10, 132, 255, 0.06), rgba(10, 132, 255, 0)); }
+
+/* Веб-фолбэк (без Telegram): резерв под «шапку» полноэкранного режима.
+   В самом Telegram углы учитывает contentSafeAreaInset (см. --sa-*). */
+body.tg-fs .sidebar { padding-top: calc(14px + var(--sa-top) + var(--chrome-top)); }
+body.tg-fs:not(.tg-native) .cover-overlay { padding-top: calc(56px + var(--sa-top)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .chip, .q-check, .icon-btn { transition: none; }
+}
+
+/* Поиск папок */
+.search-input { flex: 1 1 200px; min-width: 0; padding: 9px 12px; border-radius: 12px;
+  border: 1px solid var(--border-strong); background: var(--card); color: var(--text);
+  font-size: 14px; -webkit-appearance: none; }
+.search-input::placeholder { color: var(--text-3, var(--text-2)); }
+.search-list .row { padding: 8px 0; }
+
+/* ===== iOS-полировка: модалки, шторка, безопасные зоны ===== */
+.busy-box { padding: 16px 22px calc(16px + var(--sa-bottom)); }
+.busy-overlay { padding: var(--sa-top) 12px var(--sa-bottom); }
+
+/* Модалка выбора обложки — iOS-лист снизу: «ручка», safe-area, ровные табы */
+.cover-overlay { align-items: flex-end; justify-content: center;
+  padding: 0; }
+.cover-panel { width: min(700px, 100%); max-height: calc(var(--wa-h, 100dvh) - env(safe-area-inset-top) - 16px);
+  border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom);
+  animation: sheetUp 220ms var(--ease-out); }
+@keyframes sheetIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cover-panel { animation: none; } }
+.cover-grab { width: 38px; height: 5px; border-radius: 999px; background: var(--sep);
+  margin: 8px auto 0; flex: 0 0 auto; }
+.cover-head { position: sticky; top: 0; background: var(--card); z-index: 2; padding: 8px 12px 10px; }
+.cover-head strong { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.cover-x { width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--bg); color: var(--text-2); display: inline-flex; align-items: center;
+  justify-content: center; transition: transform 140ms var(--ease-out), background 160ms ease-out; }
+.cover-x:active { transform: scale(0.94); background: var(--sep); }
+.cover-body { padding-top: 4px; }
+
+/* iOS: не даём Safari зумить при фокусе на поле (шрифт полей ≥16px) + удобные тапы */
+@media (max-width: 640px) {
+  input[type="text"], input[type="search"], input[type="url"], input[type="date"],
+  input[type="time"], input[type="number"], textarea, select { font-size: 16px; } /* анти-zoom Safari */
+  /* высоты кнопок заданы токенами выше — здесь не перетираем */
+}
+
+/* Базовые правила: изображения не переполняют, фокус видим */
+img { max-width: 100%; height: auto; }
+
+/* ===== Корзина: заголовок, группы, пустое состояние, липкая панель (Emil/Apple) ===== */
+.trash-head .panel-head { margin-bottom: 2px; }
+.trash-actions {
+  display: flex; gap: var(--sp-2); justify-content: flex-end;
+  flex-wrap: wrap; padding-top: var(--sp-3);
+}
+.trash-group { margin-bottom: var(--sp-4); }
+.trash-group__head {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-2);
+}
+.trash-group__kind {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-3); white-space: nowrap;
+}
+.trash-group__title {
+  font-size: 13px; color: var(--text-2); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trash-group__body { padding: 0; overflow: hidden; }
+.trash-row:last-child { border-bottom: none; }
+.trash-bulk {
+  position: sticky; bottom: calc(var(--tabbar-h) + 10px + var(--sa-bottom)); z-index: 5;
+  background: var(--card); border: 1px solid var(--sep); border-radius: 14px;
+  box-shadow: var(--shadow); margin-top: var(--sp-2);
+}
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4); text-align: center;
+}
+.empty-state__ico {
+  display: inline-grid; place-items: center; width: 56px; height: 56px;
+  border-radius: 50%; background: rgba(120, 120, 128, 0.12); color: var(--text-3);
+}
+.empty-state__title { font-size: 15px; font-weight: 650; color: var(--text); }
+.empty-state__hint { font-size: 13px; line-height: 1.45; color: var(--text-3); max-width: 280px; }
+/* Версия приложения: подвал шторки «Ещё» и экрана «Справка» */
+.sheet-ver, .app-ver {
+  text-align: center; font-size: 11px; font-weight: 550; color: var(--text-3);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+}
+.sheet-ver { padding: 10px 16px calc(6px + var(--sa-bottom)); }
+.app-ver { padding: var(--sp-2) 0 var(--sp-1); }

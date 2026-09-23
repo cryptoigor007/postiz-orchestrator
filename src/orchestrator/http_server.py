@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import json
+import logging
+import os
+import threading
+from collections.abc import Callable
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
+
+# per-request nonce для CSP: webapp-слой выставляет, _send читает (тот же поток запроса)
+_webapp_nonce = threading.local()
+
+
+def start_http_server(
+    port: int,
+    get_health: Callable[[], dict[str, Any]],
+    webapp_handler: Callable[[str, str, dict, bytes], tuple[int, Any, str]] | None = None,
+) -> ThreadingHTTPServer | None:
+    if port <= 0:
+        return None
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code: int, payload: Any, ctype: str) -> None:
+            if isinstance(payload, (dict, list)):
+                body = json.dumps(payload, ensure_ascii=False).encode()
+                ctype = "application/json; charset=utf-8"
+            elif isinstance(payload, bytes):
+                body = payload
+                ctype = ctype
+            else:
+                body = str(payload).encode()
+                ctype = ctype or "text/plain; charset=utf-8"
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            # Q: CORS — only same-origin by default; allow explicit ORCH_CORS_ORIGIN
+            import os as _os
+            cors = _os.getenv("ORCH_CORS_ORIGIN", "").strip()
+            if cors:
+                self.send_header("Access-Control-Allow-Origin", cors)
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Webapp-Key, X-Health-Token, Authorization")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            if ctype.startswith("image/"):
+                # обложки/кадры — статичные: кэшируем, чтобы не «моргали» при перерисовке
+                self.send_header("Cache-Control", "public, max-age=604800, immutable")
+            else:
+                self.send_header("Cache-Control", "no-store")
+            if "html" in (ctype or ""):
+                # A2: строгий CSP — ни script, ни style не используют 'unsafe-inline'.
+                # Инлайн-блоки панели (скомпилированные CSS/JS) подписаны per-request nonce;
+                # динамика в UI ставится через CSSOM (element.style.* / setProperty) — CSP её не блокирует.
+                nonce = getattr(_webapp_nonce, "value", "") or ""
+                src = "script-src 'self' https://telegram.org"
+                sty = "style-src 'self'"
+                if nonce:
+                    src += f" 'nonce-{nonce}'"
+                    sty += f" 'nonce-{nonce}'"
+                self.send_header(
+                    "Content-Security-Policy",
+                    f"default-src 'self'; {src}; {sty}; img-src 'self' data: blob:; "
+                    "connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
+                )
+                self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _headers_dict(self) -> dict[str, str]:
+            return {k: v for k, v in self.headers.items()}
+
+        def do_GET(self):  # noqa: N802
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if path in ("/health", "/metrics", "/"):
+                # S18: optional token for metrics; /health stays open for probes if no token set
+                token = os.getenv("ORCH_HEALTH_TOKEN", "").strip()
+                if token and path != "/health":
+                    provided = (
+                        self.headers.get("X-Health-Token")
+                        or self.headers.get("Authorization")
+                        or ""
+                    )
+                    if provided.startswith("Bearer "):
+                        provided = provided[7:]
+                    import hmac
+                    if not hmac.compare_digest(provided, token):
+                        self._send(401, {"error": "unauthorized"}, "application/json")
+                        return
+                self._send(200, get_health(), "application/json")
+                return
+            if webapp_handler and path.startswith("/webapp"):
+                code, payload, ctype = webapp_handler("GET", self.path, self._headers_dict(), b"")
+                self._send(code, payload, ctype)
+                return
+            self._send(404, {"error": "not found"}, "application/json")
+
+        def do_OPTIONS(self):  # noqa: N802
+            self.send_response(204)
+            import os as _os
+            cors = _os.getenv("ORCH_CORS_ORIGIN", "").strip()
+            if cors:
+                self.send_header("Access-Control-Allow-Origin", cors)
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Webapp-Key, X-Health-Token, Authorization")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.end_headers()
+
+        def do_POST(self):  # noqa: N802
+            parsed = urlparse(self.path)
+            path = parsed.path
+            # P0.7: жёсткий кап до чтения тела (защита RAM/DoS); лимит согласован с webapp
+            try:
+                max_body = int(os.getenv("ORCH_MAX_BODY_BYTES", str(50 * 1024 * 1024)))
+            except ValueError:
+                max_body = 50 * 1024 * 1024
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                self._send(400, {"error": "bad content-length"}, "application/json")
+                return
+            if length < 0:
+                # P2-5: отрицательная длина проходила проверку `> max_body`, а read(-1)
+                # читал до EOF без таймаута — pre-auth зависание потока.
+                self._send(400, {"error": "bad content-length"}, "application/json")
+                return
+            if length > max_body:
+                self._send(413, {"error": "payload too large"}, "application/json")
+                return
+            body = self.rfile.read(length) if length else b""
+            if webapp_handler and path.startswith("/webapp"):
+                code, payload, ctype = webapp_handler("POST", self.path, self._headers_dict(), body)
+                self._send(code, payload, ctype)
+                return
+            self._send(404, {"error": "not found"}, "application/json")
+
+        def log_message(self, fmt, *args):
+            logger.debug("http: " + fmt, *args)
+
+    try:
+        # S18: bind configurable; default 127.0.0.1 for safety, 0.0.0.0 only if set
+        bind = os.getenv("ORCH_HTTP_BIND", "127.0.0.1").strip() or "127.0.0.1"
+        server = ThreadingHTTPServer((bind, port), Handler)
+    except OSError as e:
+        logger.warning("HTTP server not started: %s", e)
+        return None
+
+    t = threading.Thread(target=server.serve_forever, name="http", daemon=True)
+    t.start()
+    logger.info("HTTP server on %s:%s (health + webapp)", bind, port)
+    return server

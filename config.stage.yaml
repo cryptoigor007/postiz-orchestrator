@@ -1,0 +1,87 @@
+schedules:
+  long_video:
+    type: long_video
+    source: videomaker
+    days: [tue, fri]
+    time: "16:00"
+    is_cycle: true
+    exception_days: []
+  shorts_thematic:
+    type: shorts_thematic
+    source: videomaker
+    default_time: "20:30"
+  shorts_standalone:
+    type: shorts_standalone
+    source: shortsmaker
+    days: [mon, wed, thu, sat, sun]
+    times: ["12:00", "18:00"]
+    exception_days: []
+
+platforms:
+  telegram:
+    video_variant: vertical
+    audio_profile: default
+    enabled: true
+    daily_limit: 2
+    integration_id: ""
+  youtube:
+    video_variant: wide
+    audio_profile: youtube_safe
+    enabled: false
+    daily_limit: 2
+    integration_id: ""
+
+tail:
+  soft_enter_days: 5
+  series_end_question_ttl_days: 10
+  series_end_question_cooldown_days: 3
+  use_all_short_slots: true
+  pause_standalone_during_tail: true
+
+limits:
+  max_posts_per_distribute: 4
+  postiz_create_per_hour: 30
+  max_shorts_per_long_video: 4
+
+link_update:
+  release_url_timeout_min: 90
+  missing_url_dialog_ttl_hours: 12
+  missing_url_default_action: "post_without_link"
+  placeholder_text: "Полное видео на канале"
+
+description_templates:
+  thematic_short: "{description}\n\n▶ Полное видео: {link}"
+  thematic_short_no_link: "{description}\n\n▶ Полное видео на канале"
+  default: "{description}"
+
+safety:
+  min_interval_minutes: 25
+  jitter_seconds: 90
+  warmup_days: 12
+  warmup_daily_limit: 2
+  warmup_after_pause_hours: 24
+  on_serious_error:
+    action: pause_platform
+    pause_hours: 0
+    notify: true
+  serious_errors:
+    - "rate limit"
+    - "too many requests"
+    - "Unsupported file type"
+  auth_errors:
+    - "No API Key found"
+    - "Invalid API key"
+
+telegram:
+  allowed_chat_ids:
+    - 7004751908
+    - -5565497388
+
+backup:
+  enabled: true
+  interval_hours: 6
+  keep_days: 14
+  method: "VACUUM INTO"
+
+reconciliation_interval_hours: 24
+timezone: "Europe/Moscow"

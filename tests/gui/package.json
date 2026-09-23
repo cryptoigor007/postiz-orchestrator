@@ -1,0 +1,8 @@
+{
+  "name": "orchestrator-gui-check",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

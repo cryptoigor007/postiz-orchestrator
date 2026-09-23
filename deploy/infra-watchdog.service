@@ -1,0 +1,8 @@
+[Unit]
+Description=Orchestrator infra watchdog
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/opt/orchestrator/.env
+ExecStart=/opt/orchestrator/venv/bin/python /opt/orchestrator/scripts/infra_watchdog.py

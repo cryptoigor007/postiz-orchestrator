@@ -1,0 +1,17 @@
+[Unit]
+Description=Ночной бэкап конфигурации сервера (оркестратор, Proxmox, Postiz)
+Documentation=file:/opt/orchestrator/docs/BACKUP.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=idle
+# Серверная часть бэкапа лежит на сервере постоянно и не зависит от Mac
+ExecStart=/usr/local/lib/orch-backup/backup.sh
+Environment=REMOTE_DIR=/root/backups
+Environment=KEEP=7
+Environment=MONTHLY_KEEP=12
+Environment=BACKUP_PERSONAL=1
+Environment=BACKUP_WITH_BINARY=1
+TimeoutStartSec=3600

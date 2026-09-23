@@ -1,5 +1,5 @@
 [Unit]
-Description=Content Publish Orchestrator v7.3
+Description=Content Publish Orchestrator — публикации и панель
 After=network-online.target
 Wants=network-online.target
 

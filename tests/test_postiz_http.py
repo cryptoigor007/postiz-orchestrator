@@ -287,3 +287,56 @@ def test_retry_after_clamped():
     assert _retry_after_seconds(R("999")) == 60.0
     assert _retry_after_seconds(R("")) is None
     assert _retry_after_seconds(R("bogus")) is None
+
+
+# ---------- ссылка на опубликованный пост ----------
+
+
+def test_get_post_builds_youtube_url_from_release_id():
+    """Postiz отдаёт только releaseId (id видео) — собираем нормальную ссылку."""
+    def handler(request):
+        return httpx.Response(200, json={
+            "id": "p1", "state": "PUBLISHED", "releaseURL": None, "releaseId": "KFaFvDX7H4k",
+            "integration": {"providerIdentifier": "youtube"},
+        })
+
+    post = _client(handler).get_post("p1")
+    assert post.release_url == "https://www.youtube.com/watch?v=KFaFvDX7H4k"
+
+
+def test_get_post_prefers_ready_release_url():
+    def handler(request):
+        return httpx.Response(200, json={
+            "id": "p1", "state": "PUBLISHED", "releaseId": "KFaFvDX7H4k",
+            "releaseURL": "https://www.youtube.com/watch?v=KFaFvDX7H4k",
+            "integration": {"providerIdentifier": "youtube"},
+        })
+
+    assert _client(handler).get_post("p1").release_url == \
+        "https://www.youtube.com/watch?v=KFaFvDX7H4k"
+
+
+def test_get_post_does_not_pass_internal_id_as_link():
+    """Чужой внутренний id не должен стать «ссылкой» в панели и в Telegram."""
+    def handler(request):
+        return httpx.Response(200, json={
+            "id": "p1", "state": "ERROR", "releaseURL": None, "releaseId": "cmub475z00053",
+            "integration": {"providerIdentifier": "telegram"},
+        })
+
+    post = _client(handler).get_post("p1")
+    assert post.release_url is None
+
+
+def test_list_scheduled_reads_error_state_and_release_url():
+    def handler(request):
+        return httpx.Response(200, json={"posts": [
+            {"id": "p2", "state": "ERROR", "releaseURL": None, "releaseId": None,
+             "publishDate": "2026-09-23T09:00:00.000Z",
+             "integration": {"providerIdentifier": "youtube"}},
+        ]})
+
+    posts = _client(handler).list_scheduled()
+    assert len(posts) == 1
+    assert posts[0].status == "error"
+    assert posts[0].release_url is None

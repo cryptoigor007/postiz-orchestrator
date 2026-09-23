@@ -318,11 +318,6 @@ class Scheduler:
     def schedule_thematic_shorts(self, parent_id: int, platform: str,
                                  scope_roots: list | None = None) -> int:
         """Schedule thematic shorts for a published long video that has release_url."""
-        _pcfg = self.cfg.platforms.get(platform)
-        if _pcfg is not None and getattr(_pcfg, "post_mode", "media") == "link":
-            # B: link-платформа получает ссылку после YouTube (schedule_telegram_links),
-            # а не файлы тематических шортсов через Postiz.
-            return 0
         if not self._platform_ok(platform, etype="long_video", eid=parent_id):
             return 0  # серия другого проекта — в эту сеть не публикуем
         parent = self.db.fetchone(

@@ -21,9 +21,13 @@ fi
 echo ">> host: $HOST"
 
 echo ">> rsync -> $HOST:$DEST"
+# ВАЖНО: --exclude '.cache' обязателен. В /opt/orchestrator/.cache лежит кэш весов
+# faster-whisper (HF_HOME службы): без исключения `--delete` сносит его при каждом деплое,
+# и следующее голосовое снова тянет ~145 МБ с HuggingFace (падало по таймауту — аудит 2026-09-23).
 rsync -az --delete --no-owner --no-group \
-  --exclude venv --exclude .git --exclude __pycache__ --exclude '.pytest_cache' \
+  --exclude venv --exclude .git --exclude __pycache__ --exclude '.pytest_cache' --exclude '.ruff_cache' \
   --exclude data --exclude backups --exclude logs --exclude certs --exclude '.DS_Store' --exclude '.env' \
+  --exclude '.cache' \
   ./ "$HOST:$DEST/"
 
 echo ">> ownership + restart"

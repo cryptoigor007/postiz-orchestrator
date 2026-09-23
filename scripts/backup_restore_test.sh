@@ -75,7 +75,15 @@ set -euo pipefail
 C=restore-check
 docker rm -f $C >/dev/null 2>&1 || true
 docker run -d --name $C -e POSTGRES_PASSWORD=tmp -e POSTGRES_USER=postiz postgres:15-alpine >/dev/null
-cleanup() { docker rm -f $C >/dev/null 2>&1 || true; rm -f /tmp/restore-check.sql; }
+# Postgres объявляет VOLUME на каталог данных, поэтому docker создаёт анонимный том.
+# Раньше он оставался после теста (~80-90 МБ мусора на каждый прогон, найдено аудитом
+# 2026-09-23): контейнер удаляли, том — нет. Запоминаем том и убираем его в cleanup.
+VOL="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}' $C 2>/dev/null || true)"
+cleanup() {
+  docker rm -f $C >/dev/null 2>&1 || true
+  [ -n "${VOL:-}" ] && docker volume rm "$VOL" >/dev/null 2>&1 || true
+  rm -f /tmp/restore-check.sql
+}
 trap cleanup EXIT
 for _ in $(seq 1 40); do docker exec $C pg_isready -U postiz >/dev/null 2>&1 && break; sleep 1; done
 docker exec $C pg_isready -U postiz >/dev/null 2>&1 || { echo "  НЕТ  временный Postgres не поднялся"; exit 1; }

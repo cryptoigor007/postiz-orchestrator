@@ -1,0 +1,13 @@
+[Unit]
+Description=Проверка публичного адреса quick-туннеля Postiz (только предупреждение, ничего не меняет)
+Documentation=file:/opt/orchestrator/docs/PLATFORM_SETUP.md
+After=network-online.target cloudflared-postiz.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Скрипт лежит в репозитории и обновляется обычным деплоем — второй копии в /usr/local/bin нет
+# намеренно (иначе версии разъедутся, как это было с cloudflared_url_sync.sh).
+ExecStart=/bin/bash /opt/orchestrator/scripts/postiz_tunnel_sync.sh --check
+StandardOutput=journal
+StandardError=journal

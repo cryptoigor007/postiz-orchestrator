@@ -17,10 +17,36 @@ sudo systemctl enable --now orchestrator.service
 sudo systemctl enable --now orchestrator-watchdog.timer
 ```
 
+## Что лежит в deploy/ (юниты и скрипты)
+
+| Файл | Куда ставится | Зачем |
+|---|---|---|
+| `orchestrator.service` | `/etc/systemd/system/` | основная служба: публикация, панель, синхронизация |
+| `orchestrator-watchdog.{service,timer}` | туда же | сторож службы (проверка раз в 2 мин) |
+| `infra-watchdog.{service,timer}` | туда же | панель + токен-брокер + туннель, и защита от сетевого «спама» (раз в 5 мин) |
+| `orch-backup.{service,timer}` | туда же | ночной бэкап конфигурации и БД (04:00, `/usr/local/lib/orch-backup/backup.sh`) |
+| `token-broker.service` | туда же | брокер токенов Postiz |
+| `net-watchdog.{service,timer}` + `net-watchdog-safe.sh` | туда же + `/usr/local/sbin/net-watchdog.sh` | безопасное восстановление сети (без «войны маршрутов»), раз в 60 с |
+| `lan-fix.service` + `lan-fix.sh` | туда же + `/usr/local/sbin/` | маршрут до ВМ Postiz через Wi-Fi; от него зависит `cloudflared-postiz` и публикация |
+| `lan-default.sh` | `/usr/local/sbin/` | дефолтный LAN-маршрут (запускается udev-правилом на USB-сетевухе) |
+| `vm-nat.service` + `vm-nat.sh` | туда же | NAT/форвардинг для ВМ Postiz |
+| `cloudflared-url-sync.{service,timer}` + `cloudflared_url_sync.sh` | туда же + `/usr/local/bin/` | публичный URL панели → меню-кнопка Telegram (раз в минуту) |
+| `cloudflared-postiz.service` | туда же | quick tunnel к ВМ Postiz (`https://192.168.100.60`) — публичный доступ к панели Postiz |
+| `postiz-purge-drafts.{service,timer}` + `postiz_purge_drafts.sh` | **в ВМ 120**: `/etc/systemd/system/`, `/usr/local/bin/` | мягкое удаление черновиков Postiz старше часа, каждые 15 мин |
+| `logrotate-host-logs` | `/etc/logrotate.d/orchestrator-host-logs` | ротация `/var/log/{net-watchdog,lan-default,usb-net-restore,ssd_backup}.log` (5 МБ × 5, сжатие) |
+| `postiz_patch_streaming_upload.js`, `set_youtube_oauth.sh` | вручную | патч потоковой загрузки Postiz и разовая настройка YouTube OAuth |
+
+Установка логротации: `sudo cp deploy/logrotate-host-logs /etc/logrotate.d/orchestrator-host-logs`.
+Юниты `postiz-*` ставятся не на pve, а внутрь ВМ 120.
+
 ## WebApp (Telegram)
 - `WEBAPP_PUBLIC_URL=https://<public-https>/webapp/` (валидный TLS обязателен)
 - Menu Button бота → этот URL (BotFather или `setChatMenuButton`)
 - Публичный HTTPS: Tailscale Funnel (`tailscale funnel 8080`) либо Cloudflare Tunnel
+- **Ключ доступа намеренно остаётся в URL панели** (`…/webapp/b/<BUILD>/?key=<WEBAPP_ACCESS_KEY>`) —
+  осознанное решение от 2026-09-23: так открывается Mini App у владельца, ломать не нужно. Более старый
+  вариант «ключа в URL нет» (флаг `ORCH_WEBAPP_URL_WITH_KEY` в версии скрипта на 40 строк) не используется —
+  не «чинить» обратно.
 
 ## Health
 curl http://127.0.0.1:8080/health
@@ -36,8 +62,9 @@ systemctl start orchestrator.service
 
 ```bash
 rsync -az --delete --no-owner --no-group \
-  --exclude venv --exclude .git --exclude __pycache__ --exclude .pytest_cache \
+  --exclude venv --exclude .git --exclude __pycache__ --exclude .pytest_cache --exclude .ruff_cache \
   --exclude data --exclude backups --exclude logs --exclude .DS_Store --exclude .env \
+  --exclude .cache \
   ./ root@<pve>:/opt/orchestrator/
 ssh root@<pve> 'chown -R orchestrator:orchestrator /opt/orchestrator && \
   chmod 600 /opt/orchestrator/.env && systemctl restart orchestrator.service'

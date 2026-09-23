@@ -143,6 +143,17 @@ class StatusSync:
                         (msg, row["entity_type"], row["entity_id"], row["platform"]),
                     )
                     updated += 1
+                if post.release_url and not row.get("release_url"):
+                    # Postiz знает ссылку (видео реально загрузилось) — сохраняем её,
+                    # чтобы владелец видел, где искать пост, а не только ошибку.
+                    self.db.execute(
+                        "UPDATE entity_platform_status SET release_url=? "
+                        "WHERE entity_type=? AND entity_id=? AND platform=? "
+                        "AND (release_url IS NULL OR release_url='')",
+                        (post.release_url, row["entity_type"], row["entity_id"],
+                         row["platform"]),
+                    )
+                    updated += 1
                 continue
             # L29: treat released/completed as published; persist release_url when present
             if st == "published" and row["status"] != "published":

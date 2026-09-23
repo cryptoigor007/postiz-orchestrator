@@ -53,7 +53,14 @@ cd ~/orch-work && ./venv/bin/python tools/tg_voice.py --follow
 ssh root@100.95.225.71 'cd /opt/orchestrator && ./venv/bin/python tools/tg_inbox.py --ack 224 226'
 # расшифровать голосовые вручную (если нужно): tools/tg_voice.py --unread
 ```
-На сервере MLX нет: он только копит голосовые в `data/tg_voice/`, расшифровка — на Mac.
+На Mac расшифровка идёт MLX Whisper (large-v3-turbo, ru). **Уточнение от 2026-09-23 (проверено на сервере):**
+на сервере есть и свой резерв — `TG_VOICE_STT=1`, `TG_VOICE_STT_PYTHON=/opt/stt-venv/bin/python`,
+модель `base` (faster-whisper, CTranslate2), поэтому голосовые расшифровываются и без Mac.
+Веса лежат в `/opt/orchestrator/.cache/huggingface` (владелец `orchestrator`); при живом кэше загрузка
+модели и расшифровка идут offline (0.8 с и ~4 с). **Важно:** `scripts/deploy.sh` делает
+`rsync --delete` в `/opt/orchestrator`, поэтому `.cache` (и `.ruff_cache`) обязаны оставаться
+в списке исключений — иначе каждый деплой стирает веса и следующее голосовое тянет ~145 МБ с HF
+и падает по таймауту (инцидент 23.09, разобран в `docs/SESSION_LOG.md`).
 Правила: отвечать только по-русски; 👍 ставить ровно на то сообщение, на которое ответил;
 никогда не использовать `--react-last`; сообщение владельца цитировать в чат дословно.
 

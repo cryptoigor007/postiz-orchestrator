@@ -1249,3 +1249,107 @@
   Сторожа сняты, стек Postiz перезапущен (redis PONG), эндпоинт снова 200 за 0.05 с, поток ошибок
   прекратился. Разбор — `docs/INCIDENT-2026-09-23-battery-guard.md`.
 
+
+## 2026-09-23 — Публикации: обложка не должна топить пост, Telegram-ссылка вместо файла (A–D)
+
+Разбор по четырём дефектам одной цепочки: ошибка обложки помечала публикацию провалом →
+`release_url` не сохранялся → Telegram-пост навсегда «ждёт выхода на YouTube»; и «остаток серии»
+уходил в Telegram **файлом** (138 МБ → Bot API 413), хотя платформа в link-режиме.
+
+**Репро (прод, до правок).**
+- `Errors` Postiz для постов short 399/400 (`cmuder3mo…`, `cmuder3qi…`): «Your account is not verified,
+  we have uploaded your video but we could not set the thumbnail. Please verify your account and try again».
+- В нашей БД: youtube-строки 399/400 `status='error'`, `last_error='postiz_error'`, `release_url=NULL`;
+  telegram-строки — `status='ready'`, `last_error='waiting_for_youtube'` (висят).
+- Телеграм-пост short 270: `status='error'`, `last_error='telegram: файл 138 МБ > лимита Bot API 50 МБ'`;
+  журнал: `Backlog default action for telegram: distribute` → `publish failed (short / 270..277)`.
+- `GET /public/v1/posts` в этой сборке отдаёт только `state=ERROR` без причины; `GET /public/v1/posts/{id}` → 404.
+  Причина доступна в **`GET /public/v1/notifications`** («An error occurred while posting on youtube: …»).
+
+**A. Ошибка обложки — не провал.** `src/orchestrator/status_sync.py`: причина берётся из уведомлений
+Postiz (или из поля `error` поста), при ошибке «видео загружено, не встала обложка» пост переводится в
+`status='published'`, `release_url=COALESCE(ссылка_из_Postiz, release_url)`, `published_at`, а причина
+пишется предупреждением `Опубликовано без обложки: …`. Запись помечается в `publish_log`
+(`published_without_cover`) и идемпотентна (повторный цикл не переписывает пометку).
+Рядом: если у youtube-строки пусто, а Postiz ссылку знает, она сохраняется (в т.ч. для строк в `error`).
+Для случая «видео вышло, ссылки нет» добавлено `Scheduler._promote_waiting_without_url()` — telegram-строка
+после `link_update.release_url_timeout_min` уходит с плейсхолдером, а не висит вечно
+(`_safe_publish` её не считает «в прошлом»: `send_due_telegram_posts` берёт `postiz_scheduled_for <= now`).
+
+**B. Telegram + большой файл.** Причина: `schedule_backlog()` раскладывал остаток серии без оглядки на
+`post_mode` (в остальных путях — `schedule_long_videos`, `schedule_thematic_shorts`, `schedule_standalone_shorts` —
+проверка уже была). Добавлена проверка в `schedule_backlog` плюс страховка в `Publisher.publish`:
+для `post_mode='link'` медиа отбрасывается с предупреждением и записью `link_mode_media_skipped`
+(пост-ссылку отправляет Bot API — `TelegramPublisher.send_post`). Тесты: файл 138 МБ в link-режиме →
+в Postiz не загружается ничего, канал получает ссылку; в режиме `media` поведение прежнее.
+
+**C. Человекочитаемая причина в панели.** В `last_error` больше не «postiz_error», а
+`Ошибка Postiz: <причина>` (до 300 символов, одна строка). Новый модуль `postiz_errors.py`
+(разбор уведомлений + детект «только обложка»), `HttpPostizClient.list_error_notifications()`,
+поле `error` у `PostizPost`, поддержка в `MockPostizClient`. Панель не трогали: новый текст не начинается
+с известных кодов (`err_postiz_error` больше не подменяет причину).
+
+**D. Разовая починка** — `tools/fix_error_rows.py` (dry-run по умолчанию работает на **копии** БД,
+запись только с `--commit`; Postiz при dry-run не меняется). Команда для прода:
+`./venv/bin/python tools/fix_error_rows.py --commit --youtube 399,400 --telegram 270,399,400
+--link 399=https://youtu.be/7xbAkPUZ1Cc --link 400=https://youtu.be/XMl5D9msO5E`.
+Почему ссылки передаются явно: у обоих ERROR-постов Postiz отдаёт `releaseURL=null` **и** `releaseId=null`,
+восстановить ссылку из его API нечем (проверено живым запросом); ссылки дал владелец через YouTube API.
+Скрипт также снимает `link_updated_at`, чтобы цикл гарантированно взял строку, и удаляет старый файловый
+пост в Postiz, если он был.
+
+**Проверки.** Регресс-first: 13 новых тестов падают на старом коде и проходят на новом
+(`tests/test_postiz_error_reasons.py`, `tests/test_telegram_link_mode.py`, `tests/test_fix_error_rows.py`).
+Полный прогон: `scripts/check.sh` → **ALL CHECKS PASSED**, 519 тестов. `gui_check.sh` не требовался (webapp не менялся).
+Сценарий целиком проверен на копии прод-данных с подменённым Bot API: после починки один цикл
+(`refresh_telegram_links` → `send_due_telegram_posts`) отправляет три поста-ссылки (270, 399, 400),
+в Postiz ничего не создаётся, повторный цикл дублей не даёт, планировщики YouTube дублей не ставят
+(строки `published` исключаются).
+
+**Осталось (не мой участок).** Деплой и живой прогон `tools/fix_error_rows.py` — за родительским агентом.
+Владельцу: подтвердить аккаунт YouTube для кастомных обложек (иначе пометка «Опубликовано без обложки»
+будет появляться и дальше). Наблюдение для протокола: `platform_safety_state.last_post_at` хранит время
+**поставленного в план** поста (`safety.record_post(platform, scheduled_for)`), поэтому дата в будущем —
+это норма; поле нигде не читается (лимиты считаются по `entity_platform_status`), т.е. это только телеметрия,
+но имя колонки вводит в заблуждение.
+
+## 2026-09-23 (вечер) — 8.4.52 / b841: починка публикаций выложена и подтверждена живьём + контролы панели в одну семью
+
+**Репро (до правки).** Панель показывала три строки в `error`: telegram 270 («файл 138 МБ > лимита Bot API»)
+и youtube+telegram 399/400. В журнале Postiz — `state=ERROR` с единственной причиной
+«Your account is not verified, we have uploaded your video but we could not set the thumbnail».
+Видео при этом уже были публичны (`youtu.be/7xbAkPUZ1Cc`, `youtu.be/XMl5D9msO5E`), а `releaseURL`/`releaseId`
+у обоих постов были `null` (Postiz сохраняет их только после успешного `thumbnails.set`).
+
+**Правка.** Три направления (подробности — `CHANGELOG.md` 8.4.52): ошибка обложки больше не считается
+провалом публикации; link-режим Telegram не пытается отправить медиа; причина ошибки приходит в панель
+человеческим текстом. Разовая починка — `tools/fix_error_rows.py` (dry-run на копии БД, запись только
+по `--commit`).
+
+**Выкладка и живая проверка.** `scripts/check.sh` → **ALL CHECKS PASSED**, 525 тестов; `gui_check.sh` →
+**GUI-ПРОВЕРКА ПРОЙДЕНА**; `deploy.sh` → `>> done`, `service=active health=ok`.
+⚠️ Грабли при запуске починки: скрипт создаёт `HttpPostizClient()` **без аргументов** и берёт адрес/токен
+из окружения, поэтому при запуске «как есть» он падал `httpx.ConnectError: Connection refused` и причина
+из Postiz не забиралась (в dry-run это выглядело как «StatusSync обработал 0 строк»). Правильный запуск —
+с окружением службы: `set -a && . ./.env && set +a && ./venv/bin/python tools/fix_error_rows.py …`.
+После этого: 399/400 → `published` со ссылками, `last_error` = «Опубликовано без обложки: …», 270 → `ready`.
+Живой итог (журнал + БД): `telegram bot: отправлен short/270 -> tg:11`, `short/399 -> tg:12`, `short/400 -> tg:13`;
+в `entity_platform_status` **нет ни одной строки `error`** — telegram 7 published / 33 ready,
+youtube 7 published / 33 scheduled.
+
+**Панель (скиллы `mobile-native`, `emil-design-eng`, `apple-design`).** Все контролы сведены в одну семью:
+поверхность нажатия 44px при видимой 36, единый радиус 12, шрифт 13, зазоры 8 (в паре значков 4);
+контраст подписей поднят с 4.02:1 до 5.00:1 и выше (WCAG AA); убраны «призрачные» размеры иконок
+и мёртвые правила. Замеры — 4 ширины × 2 темы, скриншоты «до/после»: `/tmp/orch-cal3/shots`.
+
+**Аудит серверов (пункт 6 плана, тот же вечер).** Сняты мёртвые юниты, `lan-fix` оставлен включённым
+(от его маршрутов зависит туннель к Postiz — добавлен в `deploy/` с объяснением), поставлена ротация
+логов, docker-логи ограничены 10 МБ × 3, удалены 2 тома-сироты (169 МБ) и источник их появления исправлен
+в `scripts/backup_restore_test.sh`, `/root/legacy-logs` упакован в `/mnt/video/archive/`. Найдено и
+отложено на решение: `cloudflared_url_sync.sh` живёт в трёх версиях (юнит запускает не самую свежую),
+кэш весов STT у службы пуст (расшифровка тянет ~145 МБ с HF и падает по таймауту — веса лежат в
+`/root/.cache/huggingface`, куда служба не имеет доступа).
+
+**Открытые вопросы владельцу.** Почта для кабинета разработчика ТикТок (вход только по email) и код
+подтверждения Meta из СМС в момент регистрации. Расхождение в `AGENTS.md` («расшифровка на Mac») с фактом
+(`TG_VOICE_STT=1` на сервере, `faster_whisper` установлен и работает) — поправить в документации.

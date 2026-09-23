@@ -1,0 +1,12 @@
+[Unit]
+Description=VM NAT and forwarding via active uplink (vmbr0/wlp2s0)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/vm-nat.sh
+
+[Install]
+WantedBy=multi-user.target

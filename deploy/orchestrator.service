@@ -1,14 +1,16 @@
 [Unit]
 Description=Content Publish Orchestrator v7.3
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=orchestrator
+Group=orchestrator
 WorkingDirectory=/opt/orchestrator
 Environment=PYTHONPATH=/opt/orchestrator/src
 EnvironmentFile=-/opt/orchestrator/.env
-ExecStart=/opt/orchestrator/venv/bin/python -m orchestrator.main --config /opt/orchestrator/config.yaml --db /opt/orchestrator/data/data.sqlite --daemon --health-port 8080
+ExecStart=/opt/orchestrator/venv/bin/python -m orchestrator.main --config /opt/orchestrator/config.yaml --db /opt/orchestrator/data/data.sqlite --daemon --health-port 8080 --watch-roots /mnt/video /mnt/ssd_src
 Restart=always
 RestartSec=15
 StandardOutput=journal

@@ -125,13 +125,17 @@ html, body {
 .nav button .ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.92; }
 .nav button .ico svg { width: 18px; height: 18px; display: block; }
 .sidebar-footer { padding: 12px 12px 6px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--sep); margin-top: 8px; }
-.lang { display: inline-flex; gap: 6px; margin-top: 8px; }
+.lang { display: inline-flex; gap: var(--ctl-gap); margin-top: 8px; }
 .lang-btn {
-  all: unset; box-sizing: border-box; padding: 4px 10px; border-radius: 8px;
-  font-size: 12px; font-weight: 600; cursor: pointer;
-  background: rgba(120,120,128,0.14); color: var(--text);
+  all: unset; box-sizing: border-box; position: relative; display: inline-flex; align-items: center;
+  justify-content: center; min-height: var(--ctl-hv); padding: 0 var(--ctl-pad-x);
+  border-radius: var(--ctl-r); font-size: var(--ctl-font); font-weight: 600; cursor: pointer;
+  background: var(--ctl-fill); color: var(--text);
   transition: background var(--dur-press) var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
+/* как у чипов: видимая поверхность 36px, нажатие — 44px (невидимая накладка) */
+.lang-btn::after { content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  height: var(--ctl-h); transform: translateY(-50%); }
 .lang-btn:active { transform: scale(0.97); }
 .lang-btn.active { background: var(--accent-fill); color: var(--accent-text); }
 .lang-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -334,7 +338,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .sheet-item:last-child { border-bottom: none; }
 .sheet-item:active { background: rgba(0,0,0,0.05); transform: scale(0.995); }
 @media (prefers-color-scheme: dark) { .sheet-item:active { background: rgba(255,255,255,0.07); } }
-.sheet-item .ico, .sheet-item .ico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; color: var(--text-2); }
+.sheet-item .ico, .sheet-item .ico svg,
+.sheet-item .pico, .sheet-item .pico svg { width: var(--ico-nav); height: var(--ico-nav); display: block; color: var(--text-2); }
+/* .pico базово имеет margin-right: 4px — в строке шторки (flex + gap 12) он давал зазор 16px */
+.sheet-item .pico { margin-right: 0; }
 .sheet-item .chev { margin-left: auto; color: var(--text-3); }
 .sheet-lang { display: flex; gap: 8px; padding: 12px 16px 4px; }
 
@@ -457,7 +464,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .btn.danger-text:hover { background: rgba(255,59,48,0.14); }
   .btn.success-text:hover { background: rgba(52,199,89,0.16); }
 }
-.btn.sm { height: var(--btn-h-sm); min-height: var(--btn-h-sm); font-size: var(--btn-font-sm); padding: 0 12px; border-radius: 10px; }
+/* P5: компактная кнопка — та же семья, что и .btn: нажатие и поверхность 44px,
+   радиус --ctl-r, шрифт --ctl-font. Было 36/10px/12px — «мелкая» кнопка промахивалась
+   мимо тап-цели 44px и выбивалась из радиуса семьи (см. .cal-bar .btn.sm — плотная полоса). */
+.btn.sm { height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--ctl-font); font-weight: 600;
+  padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r); }
 
 /* Сетка «кнопка + пояснение» (экраны Действия/Расписание) */
 .act-grid { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
@@ -512,8 +523,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
    Было: 44×44 с r=12 и заливкой на всю кнопку — рядом с «Сегодня» (r=14) и чипами (pill) это
    выглядело тремя разными кнопками. */
 .btn.cal-step { width: var(--ctl-h); min-width: var(--ctl-h); height: var(--ctl-h); padding: 0;
-  position: relative; background: transparent; box-shadow: none; border: 0; border-radius: var(--ctl-r); }
-.btn.cal-step::before { content: ""; position: absolute; inset: var(--ctl-pad);
+  position: relative; isolation: isolate; background: transparent; box-shadow: none; border: 0;
+  border-radius: var(--ctl-r); }
+.btn.cal-step::before { content: ""; position: absolute; inset: var(--ctl-pad); z-index: -1;
   border-radius: var(--ctl-r); background: var(--ctl-fill); }
 /* Шеврон: 22px при штрихе 2.8 (та же доля поверхности 0.61, что 26px при 44px).
    Размер задан явно: общие .pico/.pico svg (16px) идут ниже по файлу и перебивают .pico-22. */
@@ -539,9 +551,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
    (r=12) и чипами (pill) это читалось как разные кнопки. Отрицательные поля возвращают полосе
    прежнюю высоту: 44px кнопки «выглядывают» в отступ полосы, а не растягивают её. */
 .cal-bar .btn.sm { height: var(--ctl-h); min-height: var(--ctl-h); margin: calc(-1 * var(--ctl-pad)) 0;
-  position: relative; padding: 0 var(--ctl-pad-x); background: transparent; border: 0;
+  position: relative; isolation: isolate; padding: 0 var(--ctl-pad-x); background: transparent; border: 0;
   border-radius: var(--ctl-r); font-size: var(--ctl-font); font-weight: 600; }
-.cal-bar .btn.sm::before { content: ""; position: absolute; inset: var(--ctl-pad) 0;
+.cal-bar .btn.sm::before { content: ""; position: absolute; inset: var(--ctl-pad) 0; z-index: -1;
   border-radius: var(--ctl-r); background: var(--ctl-fill); }
 @media (hover: hover) and (pointer: fine) {
   .cal-bar .btn.sm:hover { background: transparent; }
@@ -552,7 +564,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .cal-wcol.today .cal-whead { color: var(--accent); }
 .cal-whead { font-size: 11px; font-weight: 700; text-align: center; color: var(--text-2); }
 .cal-witem { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column;
-  align-items: center; gap: 2px; padding: 6px 2px; border-radius: 9px;
+  align-items: center; gap: 2px; padding: 6px 2px; border-radius: 10px;
   background: rgba(10,132,255,0.10); font-size: 11px; color: var(--text);
   transition: transform var(--dur-press) var(--ease-out); }
 .cal-witem:active { transform: scale(0.95); }
@@ -643,8 +655,6 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .row > .btn { flex: 0 0 auto; }
 .row .title { overflow-wrap: anywhere; line-height: 1.3; }
 .pico { flex: 0 0 auto; }
-.panel-header .q-plat .pico { width: 22px; height: 22px; }
-.panel-header .q-plat .pico svg { width: 22px; height: 22px; }
 
 /* Переносы: моно-текст (пути) переносится, время/дата — нет */
 .row .title.mono, .row .title { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
@@ -669,11 +679,12 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 
 /* Доступность и размеры касания */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
-/* Плотные области: одна согласованная высота 36px (не «пляшущие» кнопки) */
+/* Плотные области: кнопки строк — 44px (как .btn, тап-цель не меньше), плотные поверхности
+   чипов/вкладок/языка — 36px (--ctl-hv) внутри нажатия 44px (--ctl-h) */
 .q-row .btn, .queue-col .btn, .status-btn, .q-status .status-btn,
 .panel-header .btn, .search-list .btn {
-  height: var(--btn-h-sm); min-height: var(--btn-h-sm); font-size: var(--btn-font-sm);
-  padding: 0 12px; border-radius: 10px;
+  height: var(--ctl-h); min-height: var(--ctl-h); font-size: var(--ctl-font);
+  padding: 0 var(--ctl-pad-x); border-radius: var(--ctl-r);
 }
 .chip { min-height: var(--ctl-hv); }
 .icon-btn { width: var(--ctl-h); height: var(--ctl-h); }
@@ -774,12 +785,16 @@ button, a, [role="button"] { touch-action: manipulation; }
 
 .q-row { flex-wrap: wrap; }
 .q-row .q-line { display: flex; gap: 8px; align-items: flex-start; width: 100%; min-width: 0; }
-.q-check { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border-strong);
+.q-check { position: relative; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border-strong);
   background: var(--card); color: #fff; display: inline-flex; align-items: center; justify-content: center;
   flex: 0 0 auto; margin-top: 0; cursor: pointer;
   transition: background var(--dur-press) ease-out, transform var(--dur-press) var(--ease-out), border-color var(--dur-press) ease-out; }
 .q-check.on { background: var(--accent); border-color: transparent; }
 .q-check:active { transform: scale(0.94); }
+/* Тап-цель: круг 26px остаётся видимым, нажатие расширяется до 43×44 (слева 9px до полей строки,
+   справа впритык к обложке — шире нельзя, иначе накладка перекроет соседнюю кнопку обложки). */
+.q-check::after { content: ""; position: absolute; left: -9px; right: -8px; top: 50%;
+  height: var(--ctl-h); transform: translateY(-50%); }
 .row.q-row.picked { background: rgba(10, 132, 255, 0.06); }
 .q-row .q-cover, .q-row .q-cover-empty { width: 64px; height: 96px; }
 .q-row .q-cover-btn { margin-right: 2px; }

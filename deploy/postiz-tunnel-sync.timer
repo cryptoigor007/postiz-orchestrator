@@ -1,0 +1,11 @@
+[Unit]
+Description=Проверка адреса quick-туннеля Postiz (каждые 30 минут)
+
+[Timer]
+OnCalendar=*:0/30
+RandomizedDelaySec=120
+Persistent=true
+Unit=postiz-tunnel-sync.service
+
+[Install]
+WantedBy=timers.target

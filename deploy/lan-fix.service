@@ -1,0 +1,24 @@
+# ЗАЧЕМ ЭТОТ ЮНИТ (не отключать и не удалять без замены маршрута!)
+#
+# Маршрут до ВМ Postiz через Wi-Fi. После переноса диска /mnt/ssd_new часть пути до
+# ВМ 120 (192.168.100.60) идёт не по кабелю, а через wlp2s0: скрипт снимает
+# LAN-маршрут 192.168.100.0/24 с vmbr0, ставит host-маршрут 192.168.100.60/32 через
+# vmbr0 с src 192.168.100.50, вешает алиас 192.168.100.50/32 на wlp2s0 и включает
+# proxy_arp на этом интерфейсе.
+#
+# От этого маршрута зависит публичный туннель к Postiz: cloudflared-postiz.service
+# проксирует https://192.168.100.60, то есть публичная публикация материалов.
+# Если юнит отключить и сервер перезагрузится — ВМ и публикация отвалятся.
+#
+# Факт: юнит enabled (WantedBy=multi-user.target), применяется на каждой загрузке.
+# Проверено 2026-09-23 (аудит остатков, пункт 6).
+[Unit]
+Description=LAN routing fix (Wi-Fi primary, VM via bridge)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lan-fix.sh
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare quick tunnel for Postiz (social publishing)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+RestartSec=5
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --no-tls-verify --url https://192.168.100.60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

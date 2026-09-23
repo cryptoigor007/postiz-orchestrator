@@ -23,11 +23,26 @@ def test_tabbar_structure():
 
 
 def test_button_tokens():
-    """§3: единые токены высоты и плотные варианты 36px."""
-    for token in ("--btn-h: 44px", "--btn-h-sm: 36px", "--btn-pad-x", "--btn-radius: 12px"):
+    """§3: единые токены высоты и плотные варианты.
+
+    8.4.51 (P5): одна семья контролов. Кнопка (.btn, .btn.sm) — нажатие и поверхность
+    44px (--ctl-h); плотная поверхность 36px (--ctl-hv) остаётся только у чипов,
+    вкладок сегмента и переключателя языка (и рисуется внутри 44px нажатия).
+    Было: .btn.sm 36px с радиусом 10px — «мелкая» кнопка вне семьи.
+    """
+    for token in ("--btn-h: 44px", "--btn-h-sm: 36px", "--btn-pad-x", "--btn-radius: 12px",
+                  "--ctl-h: var(--btn-h)", "--ctl-hv: var(--btn-h-sm)", "--ctl-r: 12px"):
         assert token in CSS, f"нет токена {token}"
     assert "height: var(--btn-h)" in CSS
-    assert re.search(r"\.q-row \.btn.*height: var\(--btn-h-sm\)", CSS, re.S), "плотные кнопки очереди не 36px"
+    sm = _css_rule(".btn.sm")
+    assert "height: var(--ctl-h)" in sm, "компактная кнопка не 44px (тап-цель меньше 44px)"
+    assert "border-radius: var(--ctl-r)" in sm, "радиус компактной кнопки не из семьи"
+    # (мёртвые селекторы .q-row/.queue-col/.status-btn в CSS оставлены как есть — вне правки;
+    # проверяем живую часть того же правила: кнопки поиска папок и шапки панели)
+    assert "height: var(--ctl-h)" in _css_rule(".panel-header .btn, .search-list .btn"), \
+        "кнопки поиска папок/шапки панели выпали из семьи (не 44px)"
+    assert "border-radius: var(--ctl-r)" in _css_rule(".panel-header .btn, .search-list .btn"), \
+        "радиус кнопок поиска не из семьи"
 
 
 def test_mobile_fullbleed_and_safe_areas():

@@ -81,6 +81,29 @@ def _upload_path(data: dict) -> str | None:
     return _first(data, "path", "url")
 
 
+def _release_url(data: dict, platform: str = "") -> str | None:
+    """Ссылка на опубликованный пост.
+
+    `releaseURL` — готовая ссылка; у YouTube в `releaseId` лежит id видео
+    (KFaFvDX7H4k), поэтому собираем ссылку сами. Чужой внутренний id за ссылку
+    не выдаём: иначе в панели и в Telegram появится «ссылка», которая никуда не ведёт.
+    """
+    url = _first(data, "releaseURL", "releaseUrl", "release_url", "url")
+    if url:
+        return str(url)
+    rid = _first(data, "releaseId", "release_id")
+    if not rid:
+        return None
+    rid = str(rid).strip()
+    if not rid:
+        return None
+    if rid.startswith("http://") or rid.startswith("https://"):
+        return rid
+    if platform == "youtube":
+        return f"https://www.youtube.com/watch?v={rid}"
+    return None
+
+
 def _error_text(data: dict) -> str | None:
     """Человекочитаемая причина ошибки из ответа, если Postiz её там отдал."""
     raw = _first(data, "error", "errors", "failureReason", "failure_reason", "reason")
@@ -302,7 +325,7 @@ class HttpPostizClient:
             platform=platform,
             scheduled_for=scheduled_for,
             status=_first(data, "status", default="scheduled"),
-            release_url=_first(data, "releaseUrl", "releaseURL", "release_url", "url", "releaseId"),
+            release_url=_release_url(data, str(platform or "")),
             content=content,
         )
 
@@ -334,15 +357,16 @@ class HttpPostizClient:
             if isinstance(data, list):
                 data = data[0] if data else {}
             integration = data.get("integration") or {}
+            platform = str(_first(integration, "providerIdentifier", "name",
+                                 "platform", default=""))
             sched = _first(data, "publishDate", "scheduledFor", "scheduled_for", "date")
             status = _first(data, "state", "status", default="unknown")
             return PostizPost(
                 id=str(_first(data, "id", "postId") or post_id),
-                platform=_first(integration, "providerIdentifier", "name",
-                                "platform", default=""),
+                platform=platform,
                 scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
                 status=str(status).lower(),
-                release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
+                release_url=_release_url(data, platform),
                 content=({"text": data["content"]} if data.get("content") else None),
                 error=_error_text(data),
             )
@@ -385,7 +409,7 @@ class HttpPostizClient:
                 ),
                 scheduled_for=datetime.fromisoformat(sched.replace("Z", "+00:00")) if sched else None,
                 status=str(st).lower(),
-                release_url=_first(data, "releaseURL", "releaseUrl", "release_url", "url", "releaseId"),
+                release_url=_release_url(data, str(platform or "")),
                 content=({"text": content} if content else None),
                 error=_error_text(data),
             ))

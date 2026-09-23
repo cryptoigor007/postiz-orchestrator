@@ -260,3 +260,35 @@ def test_existing_bare_postiz_error_gets_reason_backfilled(tmp_path):
 
     StatusSync(db, postiz, clock, cfg).sync()
     assert "quota exceeded" in row(db, 399)["last_error"]
+
+
+# ---------- ссылка подтягивается из Postiz, если её не было у нас ----------
+
+
+def test_published_row_without_url_gets_url_from_postiz(tmp_path):
+    """Пост вышел (state=published), ссылка в Postiz есть, у нас пусто — забираем."""
+    db, cfg, clock, postiz = make(tmp_path)
+    post = postiz.create_post("youtube", None, {"title": "t"},
+                              datetime(2026, 9, 23, 9, 0, tzinfo=UTC))
+    postiz.mark_published(post.id, "https://www.youtube.com/watch?v=KFaFvDX7H4k")
+    seed(db, 399, status="published", pid=post.id, last_error=None)
+    db.execute("UPDATE entity_platform_status SET release_url=NULL WHERE entity_type='short' "
+               "AND entity_id=399 AND platform='youtube'")
+
+    StatusSync(db, postiz, clock, cfg).sync()
+    assert row(db, 399)["release_url"] == "https://www.youtube.com/watch?v=KFaFvDX7H4k"
+
+
+def test_error_row_also_keeps_url_from_postiz(tmp_path):
+    """Пост помечен ошибкой, но Postiz знает ссылку — сохраняем её (панель покажет видео)."""
+    db, cfg, clock, postiz = make(tmp_path)
+    post = postiz.create_post("youtube", None, {"title": "t"},
+                              datetime(2026, 9, 23, 9, 0, tzinfo=UTC))
+    postiz.mark_published(post.id, "https://youtu.be/uploaded")
+    postiz.set_status(post.id, "error")
+    seed(db, 402, status="error", pid=post.id, last_error="postiz_error")
+
+    StatusSync(db, postiz, clock, cfg).sync()
+    r = row(db, 402)
+    assert r["status"] == "error"          # статус не подменяем
+    assert r["release_url"] == "https://youtu.be/uploaded"

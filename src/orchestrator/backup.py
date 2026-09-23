@@ -70,10 +70,27 @@ def run_backup(db: Database, cfg: AppConfig, backup_dir: str | Path) -> Path | N
         return None
 
 
+#: Что подпадает под ретенцию keep_days. Кроме регулярных data_YYYYMMDD_HHMMSS.sqlite
+#: в ту же папку пишутся «именованные» снимки (ручные копии перед правками и миграциями) —
+#: раньше они не чистились вообще и копились вечно (аудит остатков 2026-09-23).
+#: `data.sqlite` (живая БД) под маски не попадает и не удаляется никогда.
+_CLEANUP_GLOBS = (
+    "data_*.sqlite",
+    "data*.sqlite.before*",
+    "data-before-*.sqlite",
+    "pre_migration_*.sqlite",
+)
+
+
 def _cleanup(backup_dir: Path, keep_days: int) -> None:
     import time
     cutoff = time.time() - keep_days * 86400
-    for f in backup_dir.glob("data_*.sqlite"):
-        if f.stat().st_mtime < cutoff:
-            f.unlink(missing_ok=True)
-            logger.info("Removed old backup %s", f)
+    seen: set[Path] = set()
+    for pattern in _CLEANUP_GLOBS:
+        for f in backup_dir.glob(pattern):
+            if f in seen or not f.is_file():
+                continue
+            seen.add(f)
+            if f.stat().st_mtime < cutoff:
+                f.unlink(missing_ok=True)
+                logger.info("Removed old backup %s", f)

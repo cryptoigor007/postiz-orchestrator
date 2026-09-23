@@ -421,3 +421,75 @@ def test_nav_icon_sizes_consistent():
     assert tabbar and sheet
     assert "var(--ico-nav)" in tabbar and "var(--ico-nav)" in sheet, \
         "размер значка навигации не из общего токена --ico-nav (было 23px в tabbar против 22px в шторке)"
+
+
+def test_sheet_nav_icon_actually_matches_tabbar():
+    """Значки шторки «Ещё» реально 22px, а не 16px: icon(x, 22) даёт .pico.pico-22,
+
+    который перебивается поздним базовым .pico { width: 16px } (одинаковая специфичность,
+    правило ниже по файлу). Замер в Chrome: tabbar 22px, шторка 16px — один смысл, два размера.
+    """
+    cell = _joined(".sheet-item .pico") + _joined(".sheet-item .pico svg")
+    assert "var(--ico-nav)" in cell, \
+        "значок шторки «Ещё» остаётся 16px (.pico перебивает .pico-22) — против 22px в tabbar"
+    assert "margin-right: 0" in _joined(".sheet-item .pico"), \
+        "у значка шторки остался margin-right: 4px — зазор до подписи 16px вместо 12px (gap строки)"
+
+
+def test_lang_switch_is_in_control_family():
+    """Переключатель RU/EN — член семьи: видимая поверхность 36px внутри нажатия 44px, r=12, шрифт 13."""
+
+    body = _rule(".lang-btn")
+    assert body, "нет правила .lang-btn"
+    assert "min-height: var(--ctl-hv)" in body, "переключатель языка не 36px (видимая поверхность)"
+    assert "border-radius: var(--ctl-r)" in body, "радиус переключателя языка не из семьи (было 8px)"
+    assert "font-size: var(--ctl-font)" in body, "шрифт переключателя языка не из семьи (было 12px)"
+    assert "background: var(--ctl-fill)" in body, "заливка переключателя не из общего токена"
+    assert "height: var(--ctl-h)" in _joined(".lang-btn::after"), \
+        "у переключателя языка нет тап-цели 44px (было 22px по содержимому)"
+    assert "gap: var(--ctl-gap)" in _rule(".lang"), "зазор в ряду переключателей не --ctl-gap (было 6px)"
+
+
+def test_calendar_day_cells_one_radius():
+    """Ячейка дня «Недели» и ячейка «Месяца» — один смысл → одно скругление (было 9 против 10px)."""
+    week = _rule(".cal-witem")
+    month = _rule(".cal-cell")
+    assert week and month
+    assert "border-radius: 10px" in week, "ячейка дня «Недели» выпала из скругления ячейки «Месяца»"
+    assert "border-radius: 10px" in month, "эталон скругления ячейки месяца изменился"
+
+
+def test_before_surface_does_not_paint_over_labels():
+    """Поверхность контрола нарисована ПОД текстом/значком: ::before с z-index:-1 внутри
+
+    isolation:isolate. Без этого заливка ложилась поверх подписи: замер в Chrome — самый тёмный
+    пиксель «Сегодня» (41,41,43) вместо цвета текста (28,28,30), т.е. подпись была под 14% серого.
+    """
+    for host, pseudo in ((".btn.cal-step", ".btn.cal-step::before"),
+                         (".cal-bar .btn.sm", ".cal-bar .btn.sm::before")):
+        assert "isolation: isolate" in _last(host), \
+            f"{host}: нет своего контекста наложения — поверхность уедет под фон родителя"
+        assert "z-index: -1" in _last(pseudo), \
+            f"{pseudo}: поверхность рисуется поверх подписи (текст темнеет на 14% серого)"
+    assert "position: relative" in _last(".btn.cal-step .pico"), \
+        "шеврон не поднят над поверхностью ::before"
+
+
+def test_checkbox_tap_target_is_44px():
+    """Кружок выбора в строке очереди/корзины: 26px видимых, 43×44 нажатия (было 26×26)."""
+    assert "position: relative" in _rule(".q-check"), "у кружка нет позиции для накладки нажатия"
+    after = _joined(".q-check::after")
+    assert "height: var(--ctl-h)" in after, "тап-цель кружка выбора меньше 44px"
+    assert "left: -9px" in after and "right: -8px" in after, \
+        "накладка кружка должна расширяться влево/вправо до края обложки, но не перекрывать её"
+
+
+def test_no_dead_platform_icon_size_rule():
+    """Мёртвое правило .panel-header .q-plat .pico (22px) убрано: в разметке нет такого сочетания,
+
+    иначе это третий размер одного значка платформы (12 — маркер, 26 — «аватар», 22 — призрак).
+    """
+    assert not _all_rules(CSS).get(".panel-header .q-plat .pico"), \
+        "мёртвое правило размера значка в .panel-header осталось"
+    pico = _joined(".sheet-item .pico")
+    assert pico, "нет правила размера значка шторки"

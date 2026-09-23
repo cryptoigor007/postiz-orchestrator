@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync webapp URL every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=cloudflared-url-sync.service
+
+[Install]
+WantedBy=timers.target

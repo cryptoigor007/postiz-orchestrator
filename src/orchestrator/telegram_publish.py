@@ -180,25 +180,6 @@ class TelegramPublisher:
             # повторное удаление/старый пост — не повод падать
             logger.warning("telegram deleteMessage %s: %s", mid, e)
 
-    def edit_text(self, post_id: str, text: str,
-                  buttons: list[dict[str, str]] | None = None) -> None:
-        mid = message_id_of(post_id)
-        if mid is None:
-            return
-        payload: dict[str, Any] = {
-            "chat_id": self.chat_id,
-            "message_id": mid,
-            "text": (text or "")[:MAX_TEXT],
-            "parse_mode": "HTML",
-            "link_preview_options": {
-                "show_above_text": self.show_above,
-                "prefer_large_media": self.prefer_large,
-            },
-        }
-        if buttons:
-            payload["reply_markup"] = {"inline_keyboard": [buttons]}
-        self._call("editMessageText", payload)
-
 
 def create_telegram_publisher(cfg: Any) -> TelegramPublisher | None:
     """Собрать издателя, если он включён в конфиге (иначе None — работает Postiz).

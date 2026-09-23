@@ -153,15 +153,6 @@ class Watcher:
             key=lambda p: natural_key(p.name),
         )
 
-    def _first_mp4(self, d: Path) -> Path | None:
-        files = self._mp4s(d)
-        if not files:
-            return None
-        for p in files:
-            if "final" in p.stem:
-                return p
-        return files[0]
-
     def _final_mp4(self, d: Path) -> Path | None:
         """Только финальный файл: master_* и прочее не берём (стандарт видео мейкера)."""
         if not d.is_dir():

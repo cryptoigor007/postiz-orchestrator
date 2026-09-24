@@ -1,0 +1,570 @@
+================================================================================
+  ТЗ МОДУЛЯ: THREADS  (orchestrator/platforms/threads)
+  Версия ТЗ: 1.0   |   Дата: 24.09.2026   |   Статус: проект к согласованию
+================================================================================
+Модуль публикует посты в Threads (Meta) от имени собственного Threads-профиля:
+текст, изображение, видео. Платформа text-first: основной сценарий — короткий
+текст (до 500 символов), медиа опционально. Публикация двухфазная
+(контейнер → threads_publish); отложенной публикации на стороне платформы НЕТ —
+ядро публикует в момент слота (режим at_slot). Цепочки (треды), карусели,
+инсайты и управление ответами — функции v2.
+
+Все лимиты и форматы — по официальной документации Threads API
+(developers.facebook.com/docs/threads), сверено 24.09.2026. Значения, которые
+Meta меняет часто, помечены «(проверить актуальность)».
+
+--------------------------------------------------------------------------------
+1. ОБЛАСТЬ РАБОТ (SCOPE)
+--------------------------------------------------------------------------------
+Входит (v1):
+  * OAuth-авторизация Threads (Meta) через токен-брокер, авто-refresh;
+  * публикация: TEXT / IMAGE / VIDEO (двухфазно: создание контейнера →
+    публикация контейнера);
+  * проверка контейнера (status, error_message) и опубликованного медиа
+    (permalink, timestamp);
+  * удаление постов; get_status; auth_status;
+  * проверки медиа (формат, размер, длительность, aspect, moov-атом) и текста
+    (500 символов, лимит ссылок);
+  * учёт квот через GET /{threads-user-id}/threads_publishing_limit
+    (250 постов / 24 ч, 1000 ответов, 100 удалений);
+  * маппинг ошибок Meta/Threads в таксономию ядра (02_MODULE_STANDARD §4).
+Не входит (в других модулях/ядре или v2):
+  * Telegram (отдельный модуль), планирование слотов, клейм-диалог (ядро);
+  * цепочки (треды) через reply_to_id, карусели, insights, управление ответами —
+    функции v2 (см. §6.5, §8);
+  * ПУБЛИЧНЫЙ ХОСТИНГ медиа — обязательное внешнее условие (см. §8.5), в v1
+    решается настройкой сервера/хранилища (см. §16, вопрос 1).
+
+--------------------------------------------------------------------------------
+2. API
+--------------------------------------------------------------------------------
+Платформа: Threads API (Meta), база: https://graph.threads.net/v1.0
+(документация допускает и graph.threads.com — changelog 06.06.2025; в проекте
+используем graph.threads.net; версия пути — v1.0, фиксируется в манифесте).
+
+Создание контейнера:
+  POST https://graph.threads.net/v1.0/{threads-user-id}/threads
+    media_type   = TEXT | IMAGE | VIDEO | CAROUSEL (обяз.)
+    text         ≤ 500 символов (обяз. для TEXT; эмодзи считаются как UTF-8 байты)
+    image_url    обяз. для IMAGE — ПУБЛИЧНЫЙ URL (Meta скачивает сама)
+    video_url    обяз. для VIDEO — ПУБЛИЧНЫЙ URL
+    reply_to_id  ответ на пост/ответ (основа цепочек, v2)
+    reply_control  everyone | accounts_you_follow | mentioned_only |
+                   parent_post_author_only | followers_only
+    topic_tag    1–50 символов, запрещены «.» и «&»
+    alt_text     ≤ 1000 символов
+    link_attachment   только для TEXT; лимит ссылок — 5 уникальных
+                      (с 22.12.2025; иначе THREADS_API__LINK_LIMIT_EXCEEDED)
+    text_attachment   plaintext ≤ 10 000 символов, только text-only посты
+    auto_publish_text=true  только текст: публикует контейнер сразу, минуя шаг 2
+    allowlisted_country_codes, is_ghost_post, enable_reply_approvals,
+    quote_post_id, location_id, crossreshare_to_ig (не входят в v1)
+  Ответ: {"id": "<CONTAINER_ID>"}
+Публикация контейнера:
+  POST https://graph.threads.net/v1.0/{threads-user-id}/threads_publish
+    creation_id = <CONTAINER_ID>
+  Ответ: {"id": "<MEDIA_ID>"} — ID опубликованного поста.
+  Документация рекомендует выждать в среднем ~30 с перед публикацией, чтобы
+  сервер обработал контейнер.
+Статус контейнера:
+  GET https://graph.threads.net/v1.0/{CONTAINER_ID}?fields=status,error_message
+    status: IN_PROGRESS | FINISHED | PUBLISHED | ERROR | EXPIRED
+    error_message (при ERROR): FAILED_DOWNLOADING_VIDEO,
+      FAILED_PROCESSING_AUDIO, FAILED_PROCESSING_VIDEO, INVALID_ASPECT_RATIO,
+      INVALID_BIT_RATE, INVALID_DURATION, INVALID_FRAME_RATE,
+      INVALID_AUDIO_CHANNELS, INVALID_AUDIO_CHANNEL_LAYOUT, UNKNOWN
+    EXPIRED = контейнер не опубликован в течение 24 ч (TTL контейнера).
+    Рекомендация документации: опрашивать раз в минуту, не дольше 5 минут.
+Чтение опубликованного медиа:
+  GET https://graph.threads.net/v1.0/{MEDIA_ID}?fields=id,permalink,media_type,
+      timestamp,shortcode,text,...
+    permalink МОЖЕТ отсутствовать (если контент помечен как нарушающий
+    авторские права) — учитывать в get_status/клеймах (см. §8, §9).
+Удаление:
+  DELETE https://graph.threads.net/v1.0/{MEDIA_ID}   (scope threads_delete)
+Профиль (для auth_status):
+  GET https://graph.threads.net/v1.0/me?fields=id,username,name
+Отладка токена (опционально):
+  GET https://graph.threads.net/v1.0/debug_token?input_token=...
+    (is_valid, expires_at, scopes; требует access_token Threads-тестера того же
+    приложения)
+Квоты:
+  GET https://graph.threads.net/v1.0/{threads-user-id}/threads_publishing_limit
+      ?fields=quota_usage,config,reply_quota_usage,reply_config,
+              delete_quota_usage,delete_config
+Инсайты (v2, опционально):
+  GET /{MEDIA_ID}/insights?metric=views,likes,replies,reposts,quotes,shares
+  GET /{threads-user-id}/threads_insights?metric=...   (scope threads_manage_insights)
+Цепочки/ответы (v2):
+  POST /{threads-user-id}/threads с reply_to_id + обычная публикация контейнера.
+Важно: отдельного эндпоинта загрузки файла (resumable/chunked) у Threads API НЕТ —
+только публичные URL (проверить актуальность при разработке). Параметра
+планирования (аналога publishAt) у API НЕТ (проверить актуальность).
+
+--------------------------------------------------------------------------------
+3. АВТОРИЗАЦИЯ
+--------------------------------------------------------------------------------
+Схема: OAuth 2.0 Authorization Code (Meta/Threads).
+Предусловие: Meta-приложение с use case «Threads» (у приложения ДВА app id/secret;
+использовать Threads App ID / Threads App secret). Для публикации от имени
+собственного аккаунта достаточно роли Threads Tester (приглашение в App Dashboard
+→ App roles → Roles → Add People → Threads Tester; принять в настройках Threads).
+Для сторонних аккаунтов нужны App Review и публикация приложения (вне v1).
+
+Поток:
+  1) Authorization Window:
+     https://threads.com/oauth/authorize?client_id=<THREADS_APP_ID>
+       &redirect_uri=<REDIRECT_URI>&scope=<scopes>&response_type=code&state=<STATE>
+     redirect_uri должен точно совпадать с валидным OAuth URI приложения.
+     Код авторизации: живёт 1 час, одноразовый.
+  2) Обмен кода на короткоживущий токен (1 час):
+     POST https://graph.threads.net/oauth/access_token
+       client_id, client_secret, code, grant_type=authorization_code, redirect_uri
+  3) Обмен на long-lived токен (60 дней):
+     GET https://graph.threads.net/access_token
+       ?grant_type=th_exchange_token&client_secret=<SECRET>&access_token=<SHORT>
+     expires_in ≈ 5 183 944 с (~60 дней)
+  4) Refresh long-lived токена (продлевает ещё на 60 дней):
+     GET https://graph.threads.net/refresh_access_token
+       ?grant_type=th_refresh_token&access_token=<LONG_LIVED>
+     Условие: токен старше 24 ч и не истёк. Токен, не обновлявшийся 60 дней,
+     истекает и refresh невозможен — владельцу нужно переподключить аккаунт.
+     Разрешения пользователя: для публичных профилей действуют 90 дней, refresh
+     продлевает и их; для приватных профилей refresh также поддерживается
+     (по документации 24.09.2026).
+
+Scopes (только необходимые; фиксируются в манифесте):
+  threads_basic              — все эндпоинты (обязателен)
+  threads_content_publish    — публикация
+  threads_delete             — удаление постов (нужен для delete())
+  threads_manage_replies     — POST-ответы (v2)
+  threads_read_replies       — GET-ответы (v2)
+  threads_manage_insights    — insights (v2, опционально)
+  (прочие threads_* — keyword_search, manage_mentions, location_tagging,
+   profile_discovery, share_to_instagram — не используются)
+
+Хранение: только токен-брокер (tokens/threads.json, 600), client_id/secret — в
+.env (600); в git и config.yaml не попадают (03_API_STANDARDS §1.2).
+auth_status(): GET /me?fields=id,username + expires_at из брокера; опционально
+debug_token для проверки is_valid/scopes. Watchdog: минимум раз в сутки, при
+ok=false — алерт «переподключите аккаунт».
+Refresh-политика: за 10 минут до истечения или при первой ошибке AUTH_EXPIRED
+(03_API_STANDARDS §1.3); одна повторная попытка после refresh.
+
+--------------------------------------------------------------------------------
+4. КВОТЫ И ЛИМИТЫ (проверить актуальность)
+--------------------------------------------------------------------------------
+Платформенные лимиты (документация Threads API, сверено 24.09.2026):
+  * публикации: 250 API-публикаций на профиль за скользящие 24 ч
+    (карусель считается за 1 пост); проверяется на threads_publish;
+  * ответы: 1 000 / 24 ч;
+  * удаления: 100 / 24 ч;
+  * поиск локаций: 500 / 24 ч (не используется);
+  * профильный discovery: 1 000 запросов / 24 ч (не используется);
+  * лимит вызовов приложения: «calls within 24 h = 4800 * impressions»
+    (impressions — показы контента аккаунта за 24 ч, минимум 10) + отдельные
+    лимиты total_cputime и total_time. Это НЕ простой RPM: при малых показах
+    запас вызовов небольшой, поэтому нужен консервативный внутренний троттлинг.
+
+Учёт: периодически (и перед публикацией) вызывать threads_publishing_limit и
+сличать quota_usage/quota_total (и reply_/delete_ при использовании). При
+исчерпании — QUOTA, пауза платформы до сброса (ядро: platform_safety_state).
+
+Предохранители ядра (рекомендация, не платформенные значения):
+  * platforms.threads.daily_limit: 3–5 постов/сутки (text-first, ручная
+    модерация не нужна, но частые однотипные посты выглядят спамно);
+  * rate.rpm: 30 (внутренний троттлинг модуля, не лимит платформы);
+  * min_interval между постами — из конфига ядра (safety).
+Запрещено обходить лимиты несколькими приложениями/аккаунтами
+(03_API_STANDARDS §3.3).
+
+--------------------------------------------------------------------------------
+5. МЕДИА-ТРЕБОВАНИЯ
+--------------------------------------------------------------------------------
+Текст:
+  * text: до 500 символов; эмодзи считаются как число UTF-8 байт (по документации);
+  * text_attachment: до 10 000 символов, только для text-only постов (v2-опция);
+  * ссылки: не более 5 уникальных URL (с 22.12.2025; нарушение —
+    THREADS_API__LINK_LIMIT_EXCEEDED); первый URL в text для text-only поста
+    сам становится превью-карточкой (link_attachment);
+  * topic_tag: 1–50 символов, без «.» и «&».
+
+Изображения:
+  * форматы: JPEG, PNG; размер ≤ 8 МБ;
+  * aspect ratio до 10:1; минимальная ширина 320 px (масштабируется вверх),
+    максимальная 1440 px (масштабируется вниз); цветовое пространство sRGB
+    (иное конвертируется).
+
+Видео:
+  * контейнер: MOV или MP4 (MPEG-4), БЕЗ edit lists, moov atom В НАЧАЛЕ файла;
+  * видео-кодек: H.264 или HEVC, progressive scan, closed GOP, 4:2:0;
+  * аудио-кодек: AAC, ≤ 48 кГц, 1–2 канала;
+  * частота кадров: 23–60 FPS;
+  * картинка: ширина ≤ 1920 px; допустимый aspect 0.01:1–10:1, рекомендуемый —
+    9:16 (без обрезки/полей);
+  * битрейт: VBR, ≤ 100 Мбит/с; аудио — 128 кбит/с;
+  * длительность: ≤ 300 секунд (5 минут), строго > 0;
+  * размер файла: ≤ 1 ГБ.
+Практическое следствие для проекта: длинные видео (VideoMaker long) в Threads
+НЕ публикуются — только Shorts до 5 минут. Перед публикацией модуль ОБЯЗАН
+проверить/исправить moov-атом (ffprobe; при необходимости remux:
+ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4) и параметры
+кодеков/длительности/aspect/размера — иначе Meta вернёт INVALID_* на статусе
+контейнера.
+
+Карусель (v2): 2–20 изображений/видео (или микс), считается одним постом.
+
+--------------------------------------------------------------------------------
+6. РЕЖИМЫ РАБОТЫ МОДУЛЯ
+--------------------------------------------------------------------------------
+6.1 at_slot (ОСНОВНОЙ и единственный в v1)
+    Ядро в момент слота вызывает publish(payload): модуль создаёт контейнер,
+    выжидает ~30 с (настраиваемо), проверяет статус и публикует контейнер.
+    Ссылка (permalink) появляется только ПОСЛЕ публикации — ядро использует
+    механизм ожидания ссылки (post-waiting) либо публикует Telegram-пост без
+    ссылки/с задержкой (решение ядра).
+6.2 early_upload / schedule_publish — NotSupported
+    У Threads API нет аналога publishAt; контейнер не виден до threads_publish и
+    живёт 24 ч, поэтому «ранняя скрытая публикация невозможна». Оба метода
+    контракта возвращают NotSupported; capabilities.early_upload=false,
+    capabilities.schedule_publish=false. Идемпотентность обеспечивается
+    сохранением container-id ДО публикации (см. §7, §12).
+6.3 test_publish
+    Публикация тестового поста (короткий текст) на тестовый аккаунт
+    (test_integration_ids) без медиа или с одним изображением.
+6.4 dry_run
+    Флаг ядра: пайплайн проходит без вызовов публикации; модуль логирует план.
+6.5 v2 (отдельными этапами, вне приёмки v1)
+    * цепочки (треды): второй и последующие посты создаются с
+      reply_to_id=<media_id предыдущего поста> (см. §8.4);
+    * карусели; insights; управление ответами (hide/approve).
+
+--------------------------------------------------------------------------------
+7. ПРОЦЕСС ПУБЛИКАЦИИ (шаги и данные)
+--------------------------------------------------------------------------------
+Шаг 1. Ядро создаёт строку entity_platform_status (platform=threads,
+       publish_mode=at_slot, scheduled_at=slot).
+Шаг 2. prepare(media, meta): проверка текста (≤500), медиа (формат, размер,
+       длительность, aspect, moov), подготовка публичного URL медиа и проверка
+       его доступности (HEAD/GET) — ДО создания контейнера.
+Шаг 3. publish(): POST /{threads-user-id}/threads → creation_id.
+       creation_id сохраняется в БД (entity_platform_status) ДО вызова
+       threads_publish — защита от потери при сбое (03_API_STANDARDS §2.4).
+Шаг 4. Пауза ~30 с (module.container_wait_sec) и опциональная проверка статуса
+       (раз в минуту, не дольше 5 минут): FINISHED — можно публиковать;
+       ERROR — маппинг §10; EXPIRED (только при повторном запуске) — создать
+       новый контейнер.
+Шаг 5. POST /{threads-user-id}/threads_publish (creation_id) → media_id.
+       Если media_id в ответе нет — опросить GET /{container-id}
+       (status,error_message) по §2 и §10.
+Шаг 6. GET /{media_id}?fields=permalink,timestamp → release_url; запись:
+       external_id=media_id, release_url=permalink, status=published,
+       publish_mode=at_slot.
+Шаг 7. (ядро) Telegram-пост со ссылкой.
+Идемпотентность (обязательно):
+  * повторный запуск после сбоя НЕ создаёт второй контейнер: если creation_id
+    сохранён и не истёк — повторяется публикация существующего контейнера;
+  * если threads_publish был вызван, а ответ потерян — НЕ публиковать повторно
+    вслепую: сверить GET /me/threads за последние минуты (по text/timestamp) и
+    восстановить media_id/permalink; при сомнении — пометить строку
+    «требует проверки» и алерт;
+  * уникальность (entity + слот) проверяется до создания контейнера;
+  * повторная публикация одного контейнера может дать ошибку/дубль — проверить
+    поведение на тестовом контуре и зафиксировать в README.
+
+--------------------------------------------------------------------------------
+8. ОСОБЕННОСТИ ПЛАТФОРМЫ
+--------------------------------------------------------------------------------
+8.1 Text-first
+    Текст — основной формат (500 символов), медиа вторично. Первый URL в
+    text-only посте автоматически становится превью-карточкой; лимит ссылок —
+    5 уникальных. Для длинных текстов — text_attachment (v2). Эмодзи считаются
+    как UTF-8 байты (важно для русских текстов и эмодзи в подготовке).
+
+8.2 Видео-посты
+    Видео принимается только по публичному URL и обрабатывается на стороне Meta
+    (статус IN_PROGRESS/FAILED_PROCESSING_*). Типовые причины сбоев: недоступный
+    URL (FAILED_DOWNLOADING_VIDEO), кодек/битрейт/кадры (INVALID_*), moov не в
+    начале файла, длительность > 5 мин. Поэтому prepare() проверяет медиа
+    локально, а URL — на доступность перед созданием контейнера.
+
+8.3 Контейнеры и TTL
+    Двухфазная модель: контейнер (черновик) → publish. Контейнер НЕ виден
+    зрителям; TTL — 24 ч (по истечении EXPIRED); публикация контейнера — не
+    позднее 24 ч после создания. Опрос статуса — раз в минуту, не дольше 5 мин.
+
+8.4 Цепочки (треды) — v2
+    Ответ/продолжение создаётся как отдельный контейнер с reply_to_id
+    (для собственного корневого поста владелец имеет право отвечать; иначе
+    нужны threads_keyword_search/threads_manage_mentions). Каждый пост цепочки —
+    отдельная публикация (квота ответов 1 000/24 ч). Цепочка НЕ атомарна: при
+    сбое посередине остаётся неполный тред — политика (дописать или удалить
+    опубликованное) фиксируется в ТЗ v2 (см. §16, вопрос 4).
+
+8.5 Публичный хостинг медиа (обязательное условие)
+    Meta скачивает image_url/video_url сама — URL должен быть публично доступен
+    в момент публикации. У Threads API нет загрузки файла. Значит, модулю нужен
+    публичный медиа-хост (варианты: static-каталог на сервере с публичным
+    адресом, объектное хранилище, медиа-хостинг Postiz). В v1 вводится секция
+    module.media_host {base_url, dir}: модуль кладёт подготовленный файл в dir и
+    формирует URL; URL проверяется перед созданием контейнера и остаётся живым
+    минимум до завершения публикации (≥ TTL контейнера на случай ретраев).
+    Без публичного хоста возможны только TEXT-посты.
+
+8.6 Прочее
+    * редактирование опубликованных постов API не поддерживает —
+      update_metadata = NotSupported;
+    * permalink может отсутствовать у опубликованного поста (пометка о
+      нарушении авторских прав) — не терять media_id, помечать предупреждение;
+    * вебхуки (publish/delete/reply) существуют, но в v1 не используются
+      (опционально для ускорения status_sync — решение ядра).
+
+--------------------------------------------------------------------------------
+9. КЛЕЙМЫ
+--------------------------------------------------------------------------------
+API: unsupported (публичного API клеймов у Threads нет). Как и для YouTube —
+ручной чекпойнт ядра: за K часов (по умолчанию 2 ч) до слота бот спрашивает
+владельца кнопками [✅ Клеймов нет — публикуем] [⚠️ Есть клейм — пропустить];
+при «есть клейм» — пропуск слота, claims_state=claimed, взять следующий
+кандидат из бэклога.
+Особенности Threads:
+  * для видео риск — музыка/аудио (может быть заглушено/ограничено);
+  * признак проблемы пост-фактум: у опубликованного поста ОТСУТСТВУЕТ permalink
+    либо контент исчез/недоступен. Рекомендация: get_status() проверяет
+    наличие permalink; при отсутствии — предупреждение в publish_log,
+    повторная проверка через N минут; при устойчивом отсутствии —
+    CLAIM_BLOCKED и уведомление владельцу.
+  * фактическое поведение Threads при claims официально не описано
+    (проверить актуальность/наблюдениями на тестовом контуре).
+
+--------------------------------------------------------------------------------
+10. ОШИБКИ И ИХ ОБРАБОТКА
+--------------------------------------------------------------------------------
+Код/симптом                                  → Таксономия        → Действие
+OAuthException 190 / HTTP 401 / 102 /        → AUTH_EXPIRED      → refresh + 1 retry
+  subcodes 463, 467
+190 после refresh / subcodes 458, 459,       → AUTH_REQUIRED     → пауза платформы +
+  460, 464, 492
+                                                                   алерт владельцу
+10, 200–299 (permission denied)              → AUTH_REQUIRED     → пауза + алерт;
+                                                                   проверить scopes
+                                                                   и App Review
+4, 17, 341 (throttling / app limit) / 429    → RATE_LIMIT        → backoff (jitter);
+                                                                   учесть формулу
+                                                                   вызовов (impressions)
+Исчерпан лимит публикаций 250/24 ч           → QUOTA             → пауза до сброса;
+  (точный код/сообщение уточнить;
+  определять по threads_publishing_limit)
+                                                                   контроль через
+                                                                   threads_publishing_limit
+Контейнер ERROR: INVALID_* /                 → MEDIA_INVALID     → ошибка + понятная
+  FAILED_PROCESSING_*
+                                                                   причина (кодек,
+                                                                   bitrate, duration...)
+Контейнер ERROR: FAILED_DOWNLOADING_VIDEO    → MEDIA_INVALID     → проверить публичный
+                                                                   URL/хостинг;
+                                                                   1 retry после
+                                                                   проверки URL
+Контейнер ERROR: UNKNOWN                     → TRANSIENT         → 1 retry, затем FATAL
+CONTAINER EXPIRED (24 ч)                     → (не ошибка)       → создать новый
+                                                                   контейнер и
+                                                                   опубликовать
+THREADS_API__LINK_LIMIT_EXCEEDED             → MEDIA_INVALID     → убрать лишние
+                                                                   ссылки (≤ 5)
+506 duplicate post                           → PLATFORM_REJECTED → не повторять;
+                                                                   проверить
+                                                                   идемпотентность
+368 blocked for policy violations            → PLATFORM_REJECTED → пауза + алерт
+1609005 error posting link                   → MEDIA_INVALID     → проверить
+                                                                   link_attachment
+5xx / timeout / connection error             → TRANSIENT         → backoff (1–16 с,
+                                                                   ≤5 попыток)
+permalink отсутствует у published            → (предупреждение)  → §9, возможный
+                                                                   CLAIM_BLOCKED
+  * коды 190/102/463/467, 4/17/341, 10, 200–299, 368, 506, 1609005 — из общей
+    таблицы ошибок Meta Graph API (docs/graph-api/guides/error-handling);
+    Threads использует тот же формат error {message, type, code, subcode,
+    fbtrace_id}. Отдельной публичной таблицы кодов Threads нет — уточнять по
+    факту на тестовом контуре (проверить актуальность).
+  * тексты ошибок — по-русски, с причиной и действием (03_API_STANDARDS §4).
+  * ВАЖНО: не терять артефакты при частичном успехе — creation_id при сбое
+    публикации, media_id при сбое чтения permalink; не переводить пост в
+    «ERROR без ID/URL», если контейнер/пост уже созданы (аналогия с кейсом
+    YouTube 24.09.2026).
+
+--------------------------------------------------------------------------------
+11. МАНИФЕСТ И КОНФИГ МОДУЛЯ
+--------------------------------------------------------------------------------
+manifest.yaml (обязательные поля — 02_MODULE_STANDARD §3; последние четыре
+capabilities — расширения для v2, ядро их игнорирует, пока не используются):
+  id:            threads
+  name:          Threads
+  api_version:   "Threads API v1.0"
+  module_version: "1.0.0"
+  core_min:      "8.5.0"
+  auth:
+    method:      oauth2_authorization_code
+    scopes:      ["threads_basic", "threads_content_publish", "threads_delete"]
+    broker_key:  threads
+  capabilities:
+    publish:            true
+    early_upload:       false
+    schedule_publish:   false
+    update_metadata:    false
+    delete:             true
+    thumbnail:          false
+    claims_check:       unsupported
+    video:              true
+    image:              true
+    text:               true
+    stories:            false
+    carousel:           false     # v2
+    replies:            false     # v2 (цепочки)
+    insights:           false     # v2
+  limits:
+    posts_per_day: 4                  # предохранитель ядра
+    rate:         { rpm: 30 }         # внутренний троттлинг
+    quota:        { posts_per_24h: 250, replies_per_24h: 1000, deletes_per_24h: 100 }
+  media:
+    video: { container: mp4, video_codec: h264, audio_codec: aac,
+             aspect: ["9:16"], max_mb: 1024, max_duration_sec: 300,
+             notes: "moov atom в начале; без edit lists; 23–60 FPS; ≤1920px" }
+    image: { formats: [jpg, png], max_mb: 8, max_width: 1440, min_width: 320 }
+    text:  { max_chars: 500, max_links: 5 }
+  docs: MODULE_THREADS.txt
+
+Пример конфига (config.yaml; согласован со стилем platforms.* в проекте):
+  platforms:
+    threads:
+      enabled: false                 # включать после тестового контура
+      video_variant: vertical        # Shorts ≤5 мин (long не поддерживается)
+      daily_limit: 4                 # предохранитель ядра
+      integration_id: ""             # для postiz-адаптера (совместимость)
+      module:
+        publish_mode: at_slot        # единственный режим (publishAt нет)
+        text_max_chars: 500
+        container_wait_sec: 30       # рекомендация Meta — в среднем ~30 с
+        container_poll_interval_sec: 60
+        container_poll_timeout_sec: 300
+        media_host:                  # ОБЯЗАТЕЛЬНО для IMAGE/VIDEO (§8.5)
+          base_url: "https://<публичный-хост>/media/threads"
+          dir: "/srv/media/threads"
+        link_strip: true             # не превышать лимит 5 ссылок
+        reply_control: everyone      # v2-совместимо (поле контейнера)
+        claims_checkpoint_hours: 2
+  engines:
+    threads: "module:threads"        # целевой режим (02_MODULE_STANDARD §5)
+
+--------------------------------------------------------------------------------
+12. ТЕСТЫ
+--------------------------------------------------------------------------------
+Unit (моки HTTP, injectable http):
+  * создание контейнера: корректные параметры для TEXT/IMAGE/VIDEO,
+    обязательность image_url/video_url, сохранение creation_id до publish;
+  * публикация: threads_publish(creation_id), пауза/timing, парсинг media_id;
+  * статус контейнера: IN_PROGRESS/FINISHED/PUBLISHED/ERROR/EXPIRED,
+    error_message → §10;
+  * ошибки: 190/102/463/467 → AUTH_EXPIRED (refresh+retry); 10/200–299 →
+    AUTH_REQUIRED; 4/17/341/429 → RATE_LIMIT (backoff, Retry-After если есть);
+    лимит 250 → QUOTA; THREADS_API__LINK_LIMIT_EXCEEDED → MEDIA_INVALID;
+    506 → PLATFORM_REJECTED; 5xx → TRANSIENT; отсутствие permalink →
+    предупреждение;
+  * медиа: текст >500; >5 ссылок; видео >300 с; видео >1 ГБ; отсутствующий
+    moov-atom; недоступный media_url;
+  * get_status/delete/auth_status; validate_config.
+Contract (тестовый аккаунт):
+  * текст: контейнер → publish → permalink; повторный запуск не создаёт дубль;
+  * изображение: JPEG/PNG в пределах лимитов → publish;
+  * видео: вертикальный ролик ≤5 мин, mp4 c faststart → IN_PROGRESS → FINISHED →
+    PUBLISHED → permalink;
+  * негативные: видео 6+ мин или с moov в конце → ожидаемая INVALID_/FAILED_*;
+  * удаление; проверка threads_publishing_limit после публикаций.
+Dry-run: без реальных публикаций; журнал «что было бы отправлено».
+Идемпотентность: повторный вызов publish при сохранённом creation_id не создаёт
+второй контейнер; восстановление после потери ответа threads_publish (сверка
+GET /me/threads).
+
+--------------------------------------------------------------------------------
+13. КРИТЕРИИ ПРИЁМКИ
+--------------------------------------------------------------------------------
+[ ] Манифест заполнен; capabilities честные (early_upload/schedule_publish=false,
+    update_metadata=false, claims_check=unsupported)
+[ ] validate_config + пример конфига (platforms.threads + engines.threads)
+[ ] auth_status(): GET /me + expires_at; refresh long-lived токена работает без
+    владельца; алерт при AUTH_REQUIRED
+[ ] publish(): TEXT/IMAGE/VIDEO — контейнер → publish → external_id + permalink
+[ ] get_status(): статусы контейнера и поста; permalink; отсутствие permalink —
+    предупреждение (©)
+[ ] delete(): работает (scope threads_delete), учитывается лимит 100/24 ч
+[ ] media-проверки: 500 символов, ≤5 ссылок, 8 МБ/JPEG-PNG, ≤5 мин/1 ГБ/moov
+[ ] квоты: threads_publishing_limit учитывается; QUOTA → пауза + алерт
+[ ] ошибки маппятся по §10; сообщения по-русски
+[ ] идемпотентность: повторный запуск не создаёт дубль
+[ ] тесты: unit + contract + dry-run зелёные; публикация на тестовом аккаунте
+    подтверждена
+[ ] наблюдаемость: publish_log (module.*), метрики, алерты
+[ ] README.txt модуля + этот ТЗ актуальны
+[ ] откат: engines.threads вернуть в прежнее значение → платформа disabled,
+    ядро и данные не ломаются
+
+--------------------------------------------------------------------------------
+14. ПЛАН ВНЕДРЕНИЯ
+--------------------------------------------------------------------------------
+1) API-клиент + OAuth через токен-брокер (authorize → code → short → long-lived,
+   refresh), auth_status; Meta-приложение с use case Threads + Threads Tester
+2) Подготовка медиа-хостинга (media_host) и проверок медиа/текста (§5, §8.5)
+3) TEXT-публикация: контейнер → publish → permalink; тесты ошибок и
+   идемпотентности
+4) IMAGE и VIDEO (poll статуса, коды INVALID_*); тесты на тестовом аккаунте
+5) Интеграция в ядро (publisher/scheduler через контракт, at_slot + post-waiting)
+6) Прогон на тестовом контуре (текст+изображение+видео, негативные кейсы),
+   dry-run, проверка квот
+7) Боевое включение (engines.threads=module:threads), мониторинг 3 дня
+8) v2 (отдельные этапы): цепочки, карусели, insights, управление ответами
+
+--------------------------------------------------------------------------------
+15. ССЫЛКИ
+--------------------------------------------------------------------------------
+* Threads API (обзор, лимиты, медиа): https://developers.facebook.com/docs/threads/overview
+* Get Started (приложение, scopes, токены):  https://developers.facebook.com/docs/threads/get-started
+* Получение токенов/Authorization Window:   https://developers.facebook.com/docs/threads/get-started/get-access-tokens-and-permissions
+* Long-lived токены и refresh:               https://developers.facebook.com/docs/threads/get-started/long-lived-tokens
+* Посты (TEXT/IMAGE/VIDEO, контейнеры):      https://developers.facebook.com/docs/threads/posts
+* Справка по публикации (все параметры):    https://developers.facebook.com/docs/threads/reference/publishing
+* Troubleshooting (статусы/ошибки контейнера, квоты):
+                                             https://developers.facebook.com/docs/threads/troubleshooting
+* Чтение постов/медиа:                       https://developers.facebook.com/docs/threads/retrieve-and-discover-posts/retrieve-posts
+* Ответы (reply_to_id, v2):                  https://developers.facebook.com/docs/threads/reply-management
+* Создание ответов:                          https://developers.facebook.com/docs/threads/retrieve-and-manage-replies/create-replies
+* Удаление постов:                           https://developers.facebook.com/docs/threads/posts/delete-posts
+* Профиль:                                   https://developers.facebook.com/docs/threads/threads-profiles
+* Инсайты (v2):                              https://developers.facebook.com/docs/threads/insights
+* Отладка токена:                            https://developers.facebook.com/docs/threads/troubleshooting/debug-access-token
+* Ошибки Meta Graph API (коды):              https://developers.facebook.com/docs/graph-api/guides/error-handling
+* Changelog Threads API (следить):           https://developers.facebook.com/docs/threads/changelog
+* Официальный sample app:                    https://github.com/fbsamples/threads_api
+Документация переезжает на developers.facebook.com/documentation/threads —
+старые /docs/threads ссылки продолжают работать (проверить при разработке).
+Версию API и форматы фиксировать в манифесте и перепроверять раз в квартал
+(03_API_STANDARDS §5.2).
+
+--------------------------------------------------------------------------------
+16. ОТКРЫТЫЕ ВОПРОСЫ
+--------------------------------------------------------------------------------
+1) Публичный хостинг медиа: где размещаем (static на сервере / объектное
+   хранилище / медиа-хостинг Postiz)? Есть ли у сервера публично доступный
+   адрес? БЕЗ ЭТОГО доступны только TEXT-посты (ключевой вопрос для v1).
+2) Видео: все ли наши Shorts проходят по moov-atom/кодекам/битрейту ≤100 Мбит/с
+   и длительности ≤5 мин? Нужен ли автоматический remux (faststart) на этапе
+   VideoMaker или в prepare() модуля?
+3) Включать ли insights (scope threads_manage_insights) уже в v1 или отложить?
+4) Цепочки v2: нужны ли треды-цепочки, какая длина, и что делать при сбое
+   посередине (дописать черновик или удалить опубликованное)?
+5) Стартовый контент: начинаем с TEXT-постов (без медиа) или сразу с
+   изображением/видео?
+6) Тестовый контур: отдельный Threads-профиль под тесты или основной аккаунт в
+   роли Threads Tester?
+7) Предохранитель daily_limit: 3–5 постов/сутки — согласовать значение.
+8) Нужны ли вебхуки Threads (publish/delete) для status_sync или достаточно
+   опроса?
+================================================================================

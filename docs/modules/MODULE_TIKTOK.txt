@@ -1,0 +1,476 @@
+================================================================================
+  ТЗ МОДУЛЯ: TIKTOK  (orchestrator/platforms/tiktok)
+  Версия ТЗ: 1.0   |   Дата: 24.09.2026   |   Статус: проект (к согласованию)
+================================================================================
+Модуль публикует вертикальные видео (9:16) в TikTok через Content Posting API:
+загрузка черновика в inbox (MVP, до аудита приложения) или прямая публикация
+(Direct Post, после аудита), статусы, лимиты, маппинг ошибок. Источник контента —
+папки VideoMaker (tiktok/shorts/, вариант vertical).
+ВАЖНО: все точные лимиты/версии в этом ТЗ помечены «(проверить актуальность)» и
+сверены с официальной документацией developers.tiktok.com на 24.09.2026.
+
+--------------------------------------------------------------------------------
+1. ОБЛАСТЬ РАБОТ (SCOPE)
+--------------------------------------------------------------------------------
+Входит:
+  * OAuth-авторизация аккаунта TikTok (Login Kit, через токен-брокер),
+    авто-refresh access_token (24 ч) и refresh_token (365 дней);
+  * загрузка видео на серверы TikTok чанками (FILE_UPLOAD, upload_url);
+  * режим inbox (черновик в уведомлениях TikTok) — основной в MVP;
+  * режим direct (Direct Post) — после аудита приложения (см. §10);
+  * запрос creator_info перед Direct Post (privacy_level_options,
+    max_video_post_duration_sec, флаги комментариев/duet/stitch);
+  * статусы публикации: polling /v2/post/publish/status/fetch/ (+ опция webhooks);
+  * отмена незавершённой загрузки (/v2/post/publish/cancel/, best-effort);
+  * данные пользователя (open_id, display_name, avatar) — для auth_status/панели;
+  * маппинг ошибок TikTok (spam_risk_*, access_token_invalid, rate_limit_exceeded).
+Не входит (ядро/другие компоненты):
+  * слоты и расписание, очередь/бэклог, чекпойнт клеймов — ядро;
+  * Telegram-посты и напоминания — ядро;
+  * генерация/монтаж видео — VideoMaker;
+  * музыка из библиотеки TikTok — через API для видео недоступна (см. §5).
+
+--------------------------------------------------------------------------------
+2. API
+--------------------------------------------------------------------------------
+Платформа: TikTok Content Posting API v2 (open.tiktokapis.com) + Login Kit.
+База API: https://open.tiktokapis.com
+  OAuth authorize:   https://www.tiktok.com/v2/auth/authorize/
+  OAuth token:       POST https://open.tiktokapis.com/v2/oauth/token/
+                     (grant_type=authorization_code | refresh_token)
+  OAuth revoke:      POST https://open.tiktokapis.com/v2/oauth/revoke/
+  User info:         GET  /v2/user/info/?fields=open_id,union_id,avatar_url,display_name
+                     scope user.info.basic
+  Creator info:      POST /v2/post/publish/creator_info/query/   scope video.publish
+  Direct Post init:  POST /v2/post/publish/video/init/           scope video.publish
+  Inbox upload init: POST /v2/post/publish/inbox/video/init/     scope video.upload
+  Файл (чанки):      PUT  {upload_url}   (Content-Range; правила в §5)
+  Статус:            POST /v2/post/publish/status/fetch/   scope video.upload/publish
+  Отмена:            POST /v2/post/publish/cancel/  (best-effort, для незавершённых)
+  Webhooks (опция):  post.publish.failed/complete/inbox_delivered/
+                     publicly_available/no_longer_publicaly_available
+Ошибки: struct {code, message, log_id} + HTTP-код. ВАЖНО: часть ошибок приходит
+  с HTTP 200 и error.code != "ok" (например, spam_risk_* у creator_info) —
+  модуль ОБЯЗАН проверять error.code, а log_id сохранять (нужен для поддержки).
+Версия API: v2 (проверить актуальность раз в квартал; фиксируется в манифесте).
+
+--------------------------------------------------------------------------------
+3. АВТОРИЗАЦИЯ
+--------------------------------------------------------------------------------
+Схема: Login Kit Web, OAuth 2.0 Authorization Code (new generation).
+  * authorize: client_key, scope, response_type=code, redirect_uri, state,
+    disable_auto_auth (0 — пропускать экран для живых сессий);
+  * callback: code, scopes, state, error/error_description;
+  * обмен кода: POST /v2/oauth/token/ (client_key, client_secret, code,
+    grant_type=authorization_code, redirect_uri).
+PKCE: code_verifier обязателен для mobile/desktop; в web-flow (наш случай)
+  TikTok использует client_secret. (проверить актуальность)
+Scopes (минимум):
+  user.info.basic   — профиль (open_id, display_name, avatar) для auth_status;
+  video.upload      — черновик в inbox (MVP);
+  video.publish     — Direct Post (после аудита).
+  Scope approval — в кабинете разработчика; пользователь авторизует их отдельно.
+Токены:
+  * access_token — 24 часа (expires_in 86400);
+  * refresh_token — 365 дней (refresh_expires_in 31536000); при refresh TikTok
+    может выдать НОВЫЙ refresh_token — сохранять новый (требование документации);
+  * хранение — только токен-брокер (tokens/tiktok.json, 600);
+    client_key/client_secret — в .env (600), не в git.
+Refresh: автоматически (по стандарту 03 — за 10 мин до истечения) и при
+  access_token_invalid (401) → refresh + 1 повтор запроса.
+Ошибки: invalid_grant (refresh-токен истёк/отозван) → AUTH_REQUIRED → пауза
+  платформы + алерт владельцу «переподключите TikTok».
+auth_status(): GET /v2/user/info/ (display_name/open_id) + срок жизни токена;
+  watchdog проверяет минимум раз в сутки (стандарт 03 §1.4).
+Отключение: POST /v2/oauth/revoke/ (при отзыве доступа владельцем).
+Требования к аккаунту (до аудита): аккаунт должен быть private, посты — SELF_ONLY
+  (см. §10); после аудита — privacy_level_options из creator_info.
+
+--------------------------------------------------------------------------------
+4. КВОТЫ И ЛИМИТЫ (проверить актуальность)
+--------------------------------------------------------------------------------
+RPM (на user access_token, окно 1 мин):
+  video/init (direct)     — 6 запросов/мин
+  inbox/video/init        — 6 запросов/мин
+  creator_info/query      — 20 запросов/мин
+  status/fetch            — 30 запросов/мин
+  user/info               — 600 запросов/мин
+  Превышение → HTTP 429 rate_limit_exceeded → RATE_LIMIT (backoff).
+Суточные лимиты:
+  * inbox: не более 5 незавершённых черновиков («pending shares») в любые 24 ч
+    на пользователя → иначе 403 spam_risk_too_many_pending_share;
+  * Direct Post: суточный лимит постов на аккаунт (в документации —
+    «typically around 15 posts per day/creator account»; точное число зависит
+    от аккаунта и ОБЩЕЕ для всех API-клиентов Direct Post);
+  * Direct Post, клиентские caps: 24-часовой лимит активных создателей
+    (reached_active_user_cap) — по данным заявки на аудит; до аудита —
+    не более 5 пользователей в 24 ч и только SELF_ONLY.
+  Точные числа клиентских caps не публикуются — уточнять в кабинете/при аудите.
+Наш предохранитель: platforms.tiktok.daily_limit (safety). Рекомендация 4–5
+  (запас к официальным потолкам; в config.yaml сейчас 7 — снизить при включении).
+Запрещено обходить лимиты несколькими приложениями/аккаунтами (стандарт 03 §3.3).
+
+--------------------------------------------------------------------------------
+5. МЕДИА-ТРЕБОВАНИЯ
+--------------------------------------------------------------------------------
+Видео (официальные ограничения TikTok):
+  форматы:      MP4 (рекомендуется), WebM, MOV
+  видеокодеки:  H.264 (рекомендуется), H.265, VP8, VP9
+  кадры:        23–60 FPS
+  разрешение:   от 360 до 4096 px по каждой стороне; наш вариант — 1080×1920 (9:16)
+  длительность: 3 мин — всем; 5/10 мин — отдельным аккаунтам; максимум, который
+                можно отправить через API, — 10 мин. Модуль ОБЯЗАН проверять
+                max_video_post_duration_sec из creator_info и не отправлять длиннее.
+  размер:       до 4 ГБ
+  звук:         отдельного списка аудиокодеков в официальных ограничениях нет;
+                используем AAC (дорожка MP4 из VideoMaker) — проверить при тесте.
+                Выбор музыки из библиотеки TikTok через API для видео недоступен;
+                звучит дорожка файла (auto_add_music есть только у фото-постов).
+Обложка: только кадр по таймкоду video_cover_timestamp_ms (отдельной загрузки нет).
+Чанки (FILE_UPLOAD):
+  * 5–64 МБ на чанк; последний — до 128 МБ; файл < 5 МБ — одним чанком;
+    файл > 64 МБ — обязательно чанками; от 1 до 1000 чанков;
+  * чанки строго последовательно; total_chunk_count = video_size // chunk_size;
+  * PUT {upload_url}: Content-Type: video/mp4, Content-Length,
+    Content-Range: bytes {first}-{last}/{total};
+  * ответы: 206 — чанк принят, 201 — всё загружено; upload_url живёт 1 час
+    (если не успели — новый init);
+  * ответ PUT содержит Content-Range: bytes 0-{uploaded}/{total} — прогресс.
+Watermark-политика (Content Sharing Guidelines): нельзя накладывать брендинг,
+  лого, ссылки и промо-текст на контент, публикуемый в TikTok. Проверить, что
+  пресеты VideoMaker для tiktok не добавляют вотермарку/лого/подпись-промо.
+Подпись: post_info.title ≤ 2200 символов UTF-16; хэштеги и @упоминания
+  распознаются автоматически.
+
+--------------------------------------------------------------------------------
+6. РЕЖИМЫ РАБОТЫ МОДУЛЯ
+--------------------------------------------------------------------------------
+6.1 inbox (ОСНОВНОЙ В MVP, до аудита приложения)
+    upload(media, meta):
+      POST /v2/post/publish/inbox/video/init/ → publish_id + upload_url
+      → PUT чанками → статус SEND_TO_USER_INBOX.
+    Видео попадает в уведомления (inbox) аккаунта TikTok; владелец открывает
+    приложение, редактирует и публикует сам. API не публикует за него.
+    Особенности:
+      * отложенная публикация «в момент слота» невозможна: к слоту уходит
+        ЧЕРНОВИК, публикация — ручное действие владельца; ядро напоминает ему
+        (Telegram) и ждёт PUBLISH_COMPLETE;
+      * по текущей документации в inbox-эндпоинте передаётся только source_info:
+        подпись/приватность/интеракции владелец задаёт в приложении TikTok
+        (проверить актуальность);
+      * публичной ссылки до публикации нет; post_id появляется после того, как
+        владелец опубликует черновик (может создать несколько постов из одного
+        черновика);
+      * лимит: ≤ 5 незавершённых черновиков/24 ч (см. §4).
+6.2 direct (целевой, ПОСЛЕ аудита приложения — см. §10)
+    publish(media, meta) в момент слота:
+      creator_info/query → video/init → PUT чанками → status polling.
+    Особенности:
+      * публикует сразу; параметра отложенной публикации (publishAt) в API нет
+        → publish_mode=at_slot (ядро держит слот и вызывает publish() в момент);
+      * post_info: title, privacy_level (только из privacy_level_options,
+        полученных в creator_info), disable_comment/duet/stitch,
+        video_cover_timestamp_ms, brand_content_toggle/brand_organic_toggle
+        (по документации обязательны; для обычного контента false — проверить
+        при реализации), is_aigc;
+      * без аудита privacy_level ограничен SELF_ONLY, аккаунт — private.
+    UX-требования TikTok к Direct Post (обязательны для аудита): показать ник
+      аккаунта; приватность выбирает пользователь вручную и БЕЗ значения по
+      умолчанию; интеракции (комментарии/duet/stitch) по умолчанию выключены;
+      согласие перед отправкой; disclosure коммерческого контента.
+      Для нашего оркестратора это означает шаг подтверждения владельцем перед
+      публикацией (бот-кнопки с privacy) — см. §8/§16.
+6.3 self_only (тестовый режим до аудита)
+    Direct Post с privacy_level=SELF_ONLY на тестовом аккаунте (не публично).
+6.4 test_publish
+    Тестовый пост на тестовом аккаунте (SELF_ONLY или inbox) — test_integration_ids.
+
+--------------------------------------------------------------------------------
+7. ПРОЦЕСС ПУБЛИКАЦИИ (direct, at_slot; шаги и данные)
+--------------------------------------------------------------------------------
+Шаг 1. Ядро резервирует строку entity_platform_status (platform=tiktok,
+       publish_mode=at_slot, scheduled_at=slot).
+Шаг 2. prepare(media): проверки формата/размера/длительности/9:16/звука; при
+       direct — creator_info (кэш ≤ creator_info_ttl_minutes), проверка
+       max_video_post_duration_sec и privacy_level_options.
+Шаг 3. init: FILE_UPLOAD (video_size, chunk_size, total_chunk_count) →
+       publish_id + upload_url. publish_id СРАЗУ пишем в БД (защита от дублей).
+Шаг 4. PUT чанков последовательно (Content-Range); 206 → следующий; 201 → всё
+       загружено; 5xx → ретрай чанка; 403/404 (upload_url истёк) → новый init
+       (не более 1 раза), старый publish_id помечаем superseded.
+Шаг 5. status/fetch polling: PROCESSING_UPLOAD → PUBLISH_COMPLETE | FAILED.
+       Ориентиры: 512 МБ — < 30 с, 1 ГБ — ~1 мин, 4 ГБ — > 2 мин; для публичных
+       постов TikTok проводит модерацию (обычно < 1 мин, иногда часы); post_id
+       не выдаётся до завершения модерации (status_timeout_minutes — настраиваемо).
+Шаг 6. Запись: external_id=publish_id, post_id (если есть) и
+       release_url=https://www.tiktok.com/@<username>/video/<post_id>
+       (только для публичных постов; у SELF_ONLY/inbox публичной ссылки нет),
+       status. (post_id предлагается хранить отдельным полем — см. §16.)
+Шаг 7. (ядро) Telegram-пост со ссылкой; для inbox — напоминание владельцу
+       «завершите черновик в приложении TikTok».
+Идемпотентность: при живом publish_id повторный init запрещён (CAS-резерв, как
+       в publisher._reserve_publish); после рестарта — продолжить polling или
+       дозагрузку; повторный запуск не создаёт дубль.
+
+--------------------------------------------------------------------------------
+8. КЛЕЙМЫ И МОДЕРАЦИЯ
+--------------------------------------------------------------------------------
+Клеймы: API TikTok не отдаёт информацию о музыкальных претензиях/клеймах →
+  claims_check = unsupported (честно в манифесте).
+Стратегия (ядро, как у YouTube):
+  * ручной чекпойнт за K часов до слота (claims_checkpoint_hours, по умолчанию 2):
+    бот спрашивает владельца [✅ Клеймов нет — публикуем] [⚠️ Есть — пропустить];
+  * «есть клейм» → пропуск слота, claims_state=claimed, следующий кандидат
+    из бэклога;
+  * для inbox-режима дополнительный чекпойнт не обязателен: владелец видит
+    черновик в приложении и сам решает, публиковать ли.
+Модерация TikTok: пост может быть отклонён/скрыт ПОСЛЕ публикации
+  (fail_reason spam_risk_text / spam_risk / spam_risk_user_banned_from_posting).
+  Модуль фиксирует финальный статус и алертит владельцу (§9).
+
+--------------------------------------------------------------------------------
+9. ОШИБКИ И ИХ ОБРАБОТКА
+--------------------------------------------------------------------------------
+Код TikTok (HTTP)                          → Таксономия        → Действие
+access_token_invalid (401)                 → AUTH_EXPIRED      → refresh + retry
+scope_not_authorized (401)                 → AUTH_REQUIRED     → пауза + алерт
+                                               «переподключите TikTok (scopes)»
+scope_permission_missed (400)              → AUTH_REQUIRED     → как выше (scope)
+invalid_param / invalid_params (400)       → MEDIA_INVALID     → ошибка + message
+                                               (если не про медиа — FATAL)
+invalid_file_upload (400)                  → MEDIA_INVALID     → ошибка + причина
+rate_limit_exceeded (429)                  → RATE_LIMIT        → backoff, пауза
+spam_risk_too_many_posts (403, direct)     → QUOTA             → пауза до сброса
+                                               (сутки) + алерт
+spam_risk_too_many_pending_share (403,     → QUOTA             → пауза + напоминание
+  inbox)                                       завершить черновики в приложении
+spam_risk_user_banned_from_posting (403)   → PLATFORM_REJECTED → пауза + алерт,
+                                               без ретраев
+reached_active_user_cap (403)              → QUOTA             → пауза + алерт
+                                               (клиентский cap/нужен аудит)
+unaudited_client_can_only_post_to_          → PLATFORM_REJECTED → переключить режим
+  private_accounts (403)                       на inbox/SELF_ONLY + алерт
+url_ownership_unverified (403)             → FATAL             → конфиг-ошибка
+                                               (PULL_FROM_URL не используем)
+privacy_level_option_mismatch (403)        → PLATFORM_REJECTED → взять privacy из
+                                               creator_info, 1 повтор; снова —
+                                               FATAL + алерт
+internal_error (5xx)                       → TRANSIENT         → ретраи (backoff)
+PUT чанк:
+  400 (byte size не совпал)                → FATAL             → баг расчёта чанков
+  403 (upload_url истёк) / 404             → (не таксономия)   → новый init (1 раз)
+  416 (Content-Range не совпал)            → FATAL             → ошибка
+  5xx                                      → TRANSIENT         → ретрай чанка
+Status FAILED + fail_reason:
+  file_format_check_failed                 → MEDIA_INVALID     → ошибка + причина
+  duration_check_failed                    → MEDIA_INVALID     → ошибка + причина
+  frame_rate_check_failed                  → MEDIA_INVALID     → ошибка + причина
+  picture_size_check_failed                → MEDIA_INVALID     → ошибка + причина
+  internal                                 → TRANSIENT         → ретраи (документация
+                                               называет ошибку retryable)
+  video_pull_failed                        → TRANSIENT         → (у нас FILE_UPLOAD)
+  publish_cancelled                        → —                 → информационно
+  auth_removed                             → AUTH_REQUIRED     → пауза + алерт,
+                                               без ретраев
+  spam_risk_too_many_posts                 → QUOTA             → пауза до сброса
+  spam_risk_user_banned_from_posting       → PLATFORM_REJECTED → пауза + алерт
+  spam_risk_text / spam_risk               → PLATFORM_REJECTED → ошибка + текст
+                                               владельцу, без ретраев
+OAuth (callback/token):
+  access_denied                            → AUTH_REQUIRED     → владелец отказал
+                                               в доступе → алерт
+  invalid_grant                            → AUTH_REQUIRED     → refresh-токен
+                                               истёк/отозван → переподключение
+  invalid_client                           → FATAL             → проверить
+                                               client_key/secret (.env)
+  server_error / temporarily_unavailable   → TRANSIENT         → ретраи
+Правила: проверять error.code ВСЕГДА (ошибки бывают при HTTP 200); сохранять
+  log_id в publish_log; человекочитаемый русский текст для панели/бота.
+
+--------------------------------------------------------------------------------
+10. ПРИМЕЧАНИЯ ПО OAuth-ПРИЛОЖЕНИЮ И АУДИТУ
+--------------------------------------------------------------------------------
+Приложение (developers.tiktok.com): продукты Login Kit + Content Posting API;
+  scopes: user.info.basic, video.upload, video.publish; client_key/client_secret.
+Redirect URI: https, абсолютный, статический (без параметров и #), до 10 URI,
+  каждый < 512 символов. Нужен СВОЙ стабильный redirect URI модуля (не Postiz);
+  учесть проблему смены адреса quick-туннеля (инцидент 23.09) — см. §16.
+Scope approval: video.upload/video.publish одобряются в кабинете; Direct Post
+  дополнительно требует audit (Content Posting API).
+Аудит (https://developers.tiktok.com/application/content-posting-api):
+  * ДО аудита: все посты — только SELF_ONLY; аккаунт должен быть private;
+    не более 5 пользователей/24 ч; публичный просмотр включается вручную
+    владельцем в приложении.
+  * ПОСЛЕ аудита: доступны публичные privacy_level_options из creator_info.
+КРИТИЧНО (Content Sharing Guidelines): аудит рассчитан на приложения «для
+  широкой аудитории», а не внутренние инструменты; прямо названо неприемлемым:
+  «a utility tool to help upload contents to the account(s) you or your team
+  manages ❌». Наш оркестратор — инструмент владельца для своих аккаунтов,
+  поэтому аудит Direct Post может быть НЕ одобрен. Развилка — в §16:
+  остаёмся на inbox (черновики) / готовим публичное приложение / Postiz.
+client_secret: не публиковать, не коммитить (требование Guidelines);
+  хранить в .env (600).
+Требования UX для Direct Post (проверка перед аудитом): ник аккаунта,
+  ручной выбор privacy без дефолта, интеракции выключены по умолчанию,
+  согласие перед отправкой («By posting, you agree to TikTok's Music Usage
+  Confirmation»), disclosure коммерческого контента (branded content не может
+  быть private), проверка max_video_post_duration_sec — см. §6.2.
+
+--------------------------------------------------------------------------------
+11. КОНФИГ МОДУЛЯ (пример секции config.yaml)
+--------------------------------------------------------------------------------
+platforms:
+  tiktok:
+    enabled: false
+    video_variant: vertical
+    audio_profile: tiktok_safe
+    daily_limit: 5                  # предохранитель safety; см. §4
+    integration_id: ""              # для postiz-адаптера (совместимость)
+    module:
+      mode: inbox                   # inbox (MVP) | direct (после аудита)
+      privacy_level: SELF_ONLY      # только из privacy_level_options;
+                                    # без аудита допустим только SELF_ONLY
+      allow_comment: false          # по умолчанию выключено (UX TikTok)
+      allow_duet: false
+      allow_stitch: false
+      brand_content: false          # brand_content_toggle (платное партнёрство)
+      brand_organic: false          # brand_organic_toggle (свой бренд)
+      is_aigc: false                # маркировка AI-контента
+      creator_info_ttl_minutes: 60  # кэш privacy options / max duration
+      chunk_size_mb: 10             # правила чанков: 5–64 МБ (§5)
+      status_poll_seconds: 15
+      status_timeout_minutes: 30
+      claims_checkpoint_hours: 2
+      inbox_reminder_minutes: 30    # напомнить владельцу дослать черновик
+      default_title: ""             # ≤ 2200 UTF-16; редактируется владельцем
+engines:
+  tiktok: "module:tiktok"           # или "postiz" (совместимость)
+
+--------------------------------------------------------------------------------
+12. ТЕСТЫ
+--------------------------------------------------------------------------------
+Unit (моки HTTP):
+  * OAuth: обмен кода; refresh (в т.ч. смена refresh_token); access_denied/
+    invalid_grant → AUTH_REQUIRED;
+  * init: расчёт chunk_size/total_chunk_count (границы: < 5 МБ, ровно 64 МБ,
+    > 64 МБ, последний чанк до 128 МБ); парсинг publish_id/upload_url;
+  * PUT чанков: порядок, Content-Range, 206/201, ретрай 5xx, повтор init
+    при 403/404;
+  * status: PROCESSING_* → PUBLISH_COMPLETE/FAILED; парсинг
+    publicaly_available_post_id (в документации именно так); FAILED по
+    fail_reason → таксономия §9;
+  * creator_info: privacy_level_options, max_video_post_duration_sec; ошибка
+    в теле при HTTP 200;
+  * маппинг ошибок 401/403 (spam_risk_*)/429/400/5xx;
+  * идемпотентность: повторный запуск не создаёт второй init при живом publish_id.
+Contract (тестовый аккаунт):
+  * inbox: черновик → SEND_TO_USER_INBOX (владелец завершает в приложении)
+    → PUBLISH_COMPLETE;
+  * direct (после аудита): SELF_ONLY → PUBLISH_COMPLETE; публичный пост →
+    модерация → post_id и ссылка;
+  * отмена: cancel во время загрузки.
+Dry-run: без реальных загрузок (флаг конфига).
+
+--------------------------------------------------------------------------------
+13. КРИТЕРИИ ПРИЁМКИ
+--------------------------------------------------------------------------------
+Манифест (ожидаемые значения):
+  api_version: "Content Posting API v2"; module_version: "1.0.0"
+  auth.method: oauth2_authorization_code; broker_key: tiktok
+  auth.scopes: ["user.info.basic", "video.upload", "video.publish"]
+  capabilities: publish=true, early_upload=false, schedule_publish=false,
+    update_metadata=false, delete=false, thumbnail=false,
+    claims_check=unsupported, video=true, image=false, text=false, stories=false
+  limits: posts_per_day=5, rate={rpm: 6} (самый строгий из эндпоинтов, §4)
+  media.video: mp4, h264, aac, aspect ["9:16"], max_mb 4096,
+    max_duration_sec 600 (и не больше creator_info.max_video_post_duration_sec)
+  statuses: published=[PUBLISH_COMPLETE],
+    pending=[PROCESSING_UPLOAD, PROCESSING_DOWNLOAD, SEND_TO_USER_INBOX],
+    failed=[FAILED]
+Чек-лист:
+[ ] Манифест заполнен; capabilities честные (см. выше)
+[ ] auth_status() корректен; refresh без владельца; invalid_grant → алерт
+[ ] Чанковая загрузка по правилам TikTok (5–64 МБ, ≤ 1000, последовательно),
+    повтор init при истёкшем upload_url
+[ ] inbox: черновик доходит до аккаунта (SEND_TO_USER_INBOX); владелец получает
+    напоминание; PUBLISH_COMPLETE фиксируется
+[ ] direct (после аудита): публикация в момент слота; ссылка сохранена; privacy
+    только из privacy_level_options
+[ ] max_video_post_duration_sec учитывается (слишком длинное видео → MEDIA_INVALID
+    ДО отправки)
+[ ] Лимиты учтены; QUOTA/RATE_LIMIT ведут к паузам и алертам
+[ ] Ошибки маппятся в таксономию; log_id сохраняется
+[ ] Тесты зелёные; прогон на тестовом аккаунте подтверждён
+[ ] README.txt + этот ТЗ обновлены; наблюдаемость (publish_log/метрики/алерты)
+[ ] Откат: engines.tiktok=postiz/disabled; данные не теряются
+
+--------------------------------------------------------------------------------
+14. ПЛАН ВНЕДРЕНИЯ
+--------------------------------------------------------------------------------
+1) Приложение TikTok (владелец): Login Kit + Content Posting API, scopes,
+   свой redirect URI; получить client_key/secret (см. §10)
+2) API-клиент + OAuth через брокер (refresh, auth_status, revoke)
+3) Чанковая загрузка + inbox-режим + статусы; unit-тесты
+4) Интеграция в ядро (publisher/scheduler через контракт; at_slot; напоминания)
+5) Тестовый черновик на тестовом аккаунте (contract)
+6) Решение владельца по аудиту Direct Post (§10, §16) — заявка или inbox
+7) direct-режим (если аудит одобрен): privacy-чекпойнт, боевое включение,
+   мониторинг 3 дня
+
+--------------------------------------------------------------------------------
+15. ССЫЛКИ
+--------------------------------------------------------------------------------
+* Content Posting API — Get Started (Direct Post):
+  https://developers.tiktok.com/doc/content-posting-api-get-started
+* Get Started — Upload (inbox):
+  https://developers.tiktok.com/doc/content-posting-api-get-started-upload-content
+* Media Transfer Guide (чанки, ограничения видео):
+  https://developers.tiktok.com/doc/content-posting-api-media-transfer-guide
+* Direct Post reference:
+  https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
+* Upload reference:
+  https://developers.tiktok.com/doc/content-posting-api-reference-upload-video
+* Query Creator Info:
+  https://developers.tiktok.com/doc/content-posting-api-reference-query-creator-info
+* Get Post Status:
+  https://developers.tiktok.com/doc/content-posting-api-reference-get-video-status
+* User Access Token Management:
+  https://developers.tiktok.com/doc/oauth-user-access-token-management
+* Login Kit Web: https://developers.tiktok.com/doc/login-kit-web
+* User Info: https://developers.tiktok.com/doc/tiktok-api-v2-get-user-info
+* Rate Limits: https://developers.tiktok.com/doc/tiktok-api-v2-rate-limit
+* Error Handling: https://developers.tiktok.com/doc/tiktok-api-v2-error-handling
+* OAuth Error Handling: https://developers.tiktok.com/doc/oauth-error-handling
+* Scopes Reference: https://developers.tiktok.com/doc/tiktok-api-scopes
+* Content Sharing Guidelines (UX/аудит):
+  https://developers.tiktok.com/doc/content-sharing-guidelines
+* Аудит Content Posting API:
+  https://developers.tiktok.com/application/content-posting-api
+Последняя сверка фактов: 24.09.2026 (страницы официальной документации, помечены
+как обновлённые в августе 2026). При разработке проверять актуальность; версию
+API фиксировать в манифесте.
+
+--------------------------------------------------------------------------------
+16. ОТКРЫТЫЕ ВОПРОСЫ
+--------------------------------------------------------------------------------
+1) Аудит Direct Post vs inbox навсегда: Guidelines прямо называют внутренние
+   утилиты неприемлемыми (§10) — нужен выбор владельца: остаться на inbox
+   (черновики + ручная публикация), подавать заявку на аудит или Postiz.
+2) Свой redirect URI для модуля: где размещаем (webapp/брокер) и как делаем его
+   стабильным при смене quick-туннеля.
+3) UX-чекпойнт перед Direct Post: подтверждение владельцем через бот (privacy
+   без дефолта + согласие + disclosure) — согласовать с требованиями аудита.
+4) FILE_UPLOAD vs PULL_FROM_URL: Guidelines рекомендуют PULL_FROM_URL для
+   серверных файлов; у нас файлы на сервере — нужен ли публичный HTTPS и
+   верификация домена, или остаёмся на FILE_UPLOAD (работает, уточнить при аудите).
+5) Что считать «опубликовано» в inbox-режиме: после SEND_TO_USER_INBOX (черновик
+   доставлен) или после PUBLISH_COMPLETE (владелец завершил)? Влияет на статусы,
+   Telegram-посты и ссылки.
+6) Ежедневный лимит: daily_limit 4–5? (официальные точные caps не публикуются).
+7) Хэштеги/подпись: шаблон и правила (лимит 2200 UTF-16); нужны ли @упоминания.
+8) Webhooks vs polling: поднимать ли приём post.publish.* (устойчивее статусы)
+   или хватит polling status/fetch.
+9) AI-маркировка (is_aigc): включать ли для сгенерированного контента.
+10) post_id: хранить отдельным полем entity_platform_status (аддитивная миграция)
+    или в release_url/логах?
+================================================================================

@@ -1,0 +1,517 @@
+================================================================================
+  ТЗ МОДУЛЯ: INSTAGRAM  (orchestrator/platforms/instagram)
+  Версия ТЗ: 1.0   |   Дата: 24.09.2026   |   Статус: черновик (на согласование)
+================================================================================
+Модуль публикует Reels (видео 9:16) в Instagram Professional-аккаунт
+(Business/Creator), привязанный к Facebook Page, через Instagram Graph API
+(Content Publishing). Платформа НЕ умеет отложенную публикацию (нет publishAt):
+модуль публикует в момент слота, а контейнер медиа готовит заранее.
+Источник контента — пакет instagram/shorts из VideoMaker (vertical 9:16).
+
+Обязательные документы-родители: 02_MODULE_STANDARD.txt (контракт, манифест,
+таксономия ошибок), 03_API_STANDARDS.txt (OAuth, ретраи, лимиты, тесты).
+Сверка фактов — только по официальным докам Meta (см. §15).
+
+--------------------------------------------------------------------------------
+1. ОБЛАСТЬ РАБОТ (SCOPE)
+--------------------------------------------------------------------------------
+Входит:
+  * OAuth-авторизация IG-аккаунта через Facebook Login for Business
+    (через токен-брокер), авто-refresh;
+  * контейнерная модель публикации: создать контейнер → дождаться статуса
+    FINISHED → опубликовать (POST /media_publish);
+  * публикация Reels «в момент слота» (at_slot) — основного режима;
+  * ограниченная ранняя загрузка: контейнер можно подготовить заранее,
+    но не более чем на 24 ч (контейнеры истекают — EXPIRED);
+  * статусы контейнера и медиа, получение permalink (release_url);
+  * маппинг ошибок Graph API в таксономию проекта;
+  * ручной чекпойнт клеймов (copyright) — общий механизм ядра;
+  * (v2, опция) фото и карусели; (v3) Stories — только business-аккаунты.
+Не входит (ядро/другие модули/отдельные решения):
+  * хостинг медиа: Meta скачивает файл по ПУБЛИЧНОМУ URL — способ раздачи
+    выбирается отдельно (docs/STORAGE-OPTIONS.md), см. §5;
+  * Telegram (отдельный модуль), планирование слотов (ядро), клейм-диалог
+    (ядро), реклама/boosting, комментарии, инсайты.
+
+--------------------------------------------------------------------------------
+2. API
+--------------------------------------------------------------------------------
+Платформа: Instagram Graph API — Content Publishing (host: graph.facebook.com).
+Версия API: v25.0 (проверить актуальность; на 24.09.2026 — актуальная;
+зафиксировать в манифесте; deprecation проверять раз в квартал —
+03_API_STANDARDS §5).
+
+Эндпоинты (полный список, используемый модулем):
+  Создать контейнер:   POST /v25.0/<IG_USER_ID>/media
+                       (video_url + media_type=REELS; caption; cover_url или
+                        thumb_offset; share_to_feed; collaborators; location_id;
+                        audio_name; is_ai_generated; upload_type=resumable)
+  Опубликовать:        POST /v25.0/<IG_USER_ID>/media_publish
+                       (creation_id=<IG_CONTAINER_ID>)
+  Статус контейнера:   GET  /v25.0/<IG_CONTAINER_ID>
+                       ?fields=status_code,copyright_check_status
+                       status_code: EXPIRED | ERROR | FINISHED | IN_PROGRESS |
+                                    PUBLISHED
+  Лимит публикаций:    GET  /v25.0/<IG_USER_ID>/content_publishing_limit
+                       ?fields=quota_usage,config (фактический расход)
+  Resumable-загрузка:  POST https://rupload.facebook.com/ig-api-upload/
+                       v25.0/<IG_CONTAINER_ID> (offset, file_size; или file_url)
+  Медиа/ссылка:        GET  /v25.0/<IG_MEDIA_ID>
+                       ?fields=permalink,media_type,media_product_type,timestamp
+  Удаление:            DELETE /v25.0/<IG_MEDIA_ID>
+                       (только Facebook Login; scope instagram_manage_contents)
+  Подключение:         GET  /v25.0/me/accounts
+                       ?fields=name,instagram_business_account{id,username},
+                        access_token  (страница → IG-аккаунт → page token)
+  IG-аккаунт:          GET  /v25.0/<IG_USER_ID>?fields=username,id
+                       (для auth_status, без публикаций)
+
+Ключевые свойства платформы (учитываются в реализации):
+  * Media on a public server: Meta САМА скачивает медиа по video_url/image_url
+    в момент создания контейнера; ссылка нужна только на время скачивания;
+  * публикация асинхронная: после создания контейнера видео обрабатывается,
+    статус FINISHED означает готовность к публикации;
+  * контейнеры НЕ переживают 24 часа (EXPIRED) — см. §6, §8;
+  * у платформы НЕТ publishAt/отложенной публикации на стороне Instagram.
+Альтернатива (не наш путь): Instagram API with Instagram Login
+  (host graph.instagram.com, scopes instagram_business_*). У нашего аккаунта
+  есть привязанная Facebook Page, поэтому выбран Facebook Login for Business
+  (даёт page token, copyright-поля и удаление; см. §10).
+
+--------------------------------------------------------------------------------
+3. АВТОРИЗАЦИЯ
+--------------------------------------------------------------------------------
+Схема: Facebook Login for Business (OAuth 2.0 Authorization Code).
+Поток (по официальному обзору платформы):
+  1) владелец один раз проходит логин → authorization code (живёт 1 час);
+  2) обмен кода на short-lived user token (~1 час);
+  3) обмен на long-lived user token (~60 дней; можно обновлять до истечения);
+  4) page access token: GET /me/accounts (токен страницы уникален для пары
+     страница/пользователь/приложение);
+  5) IG_USER_ID: поле instagram_business_account у нужной страницы.
+  ВАЖНО (нюанс доков): гайд Content Publishing указывает токен СТРАНИЦЫ
+  (Facebook Page access token), а справочники эндпоинтов — User access token.
+  Решение: основным считаем page token (по гайду), user token — fallback;
+  проверить фактом на тестовом аккаунте при подключении.
+
+Scopes (минимально необходимые; фиксируются в манифесте auth.scopes):
+  instagram_basic             — базовые данные IG-аккаунта;
+  instagram_content_publish   — создание контейнеров и публикация;
+  pages_read_engagement       — чтение страницы/IG (требуется эндпоинтами);
+  pages_show_list             — перечисление страниц (/me/accounts) при подключении.
+  Условно (только если нужно):
+  instagram_manage_contents   — для delete() (v1: включать по решению, см. §16);
+  business_management, ads_management, ads_read — если роль на страницу выдана
+  через Business Manager (по докам Meta; проверить актуальность при подключении).
+
+Токены: ТОЛЬКО токен-брокер (tokens/instagram.json, права 600). Хранить:
+  user_token (long-lived), page_token, page_id, ig_user_id, expires_at, scopes.
+  client_id/app_secret — в .env (600), в git не попадают; app_secret — только
+  server-side.
+
+Обновление (refresh):
+  * автоматически за 10 минут до истечения или при первой AUTH_EXPIRED:
+    обмен long-lived user token (grant_type=fb_exchange_token) + перевыпуск
+    page token; refresh-токен не логируется;
+  * refresh не удался → AUTH_REQUIRED → пауза платформы + алерт владельцу.
+auth_status(): GET /<IG_USER_ID>?fields=username,id + проверка срока токена
+  (debug/expires_at) — без публикаций; watchdog вызывает раз в сутки.
+
+--------------------------------------------------------------------------------
+4. КВОТЫ И ЛИМИТЫ (проверить актуальность)
+--------------------------------------------------------------------------------
+Публикации (на аккаунт, rolling period; проверить актуальность):
+  * в доках Meta расхождение: Content Publishing guide — 100 публикаций/24 ч,
+    а справочник media_publish и раздел каруселей — 50/24 ч;
+  * источник истины — GET /content_publishing_limit (quota_usage / config:
+    на момент проверки quota_total=50, quota_duration=86400);
+  * карусель считается за одну публикацию.
+Контейнеры: не более 400 контейнеров за 24 ч (на аккаунт; проверить
+  актуальность).
+API-лимит (BUC, тип instagram): Calls within 24h = 4800 * Number of Impressions
+  (на пару приложение+пользователь); при превышении — код 80002; смотреть
+  заголовок X-Business-Use-Case-Usage (call_count,
+  estimated_time_to_regain_access — аналог Retry-After).
+Опрос статуса: по докам — не чаще 1 раза в минуту и не дольше 5 минут подряд
+  (наш предохранитель container_ready_timeout_min, см. §11).
+Предохранители ядра (safety):
+  * platforms.instagram.daily_limit (по умолчанию 2–3/сутки — наш запас;
+    платформенный лимит в десятки раз выше, но для нового аккаунта публикуем
+    умеренно);
+  * warmup / min_interval — общий механизм ядра;
+  * QUOTA/RATE_LIMIT → пауза платформы (platform_safety_state) + алерт.
+Запрещено обходить лимиты несколькими приложениями/аккаунтами — это нарушение
+политик платформы (03_API_STANDARDS §3.3).
+
+--------------------------------------------------------------------------------
+5. МЕДИА-ТРЕБОВАНИЯ
+--------------------------------------------------------------------------------
+Значения — по официальным докам Meta (проверить актуальность при разработке).
+Reels (основной формат v1; источник — instagram/shorts, vertical 9:16):
+  контейнер: MOV или MP4, без edit lists, moov atom в начале файла;
+  видео: H.264 или HEVC, progressive scan, closed GOP, 4:2:0;
+  аудио: AAC, ≤48 кГц, 1–2 канала; битрейт аудио ≤128 kbps;
+  кадры: 23–60 FPS; не более 1920 px по горизонтали;
+  соотношение: от 0.01:1 до 10:1 (рекомендуется 9:16 — без кропа и полей);
+  битрейт видео: VBR, ≤25 Mbps;
+  длительность: от 3 секунд до 15 минут;
+  размер файла: ≤300 МБ.
+Обложка Reels:
+  JPEG ≤8 МБ, sRGB, рекомендуется 9:16; задаётся cover_url (публичный URL)
+  или thumb_offset (мс; по умолчанию 0 — первый кадр); если заданы оба —
+  приоритет у cover_url.
+Фото/карусели (v2, только если включаем):
+  фото: ТОЛЬКО JPEG ≤8 МБ, соотношение 4:5–1.91:1, ширина 320–1440, sRGB;
+  карусель: до 10 элементов (фото/видео), Reels в карусель нельзя;
+  все элементы кропятся по первому (по умолчанию 1:1).
+Caption: ≤2200 символов, ≤30 хэштегов, ≤20 @-упоминаний.
+
+Публичный URL (обязательное условие платформы):
+  * Meta скачивает файл сама по video_url/image_url; URL должен отдавать файл
+    напрямую (HTTP 200, content-type video/mp4, без HTML-страниц);
+  * ссылка нужна только на время скачивания (создание контейнера);
+  * хостинг — по решению из docs/STORAGE-OPTIONS.md (свой nginx+DuckDNS,
+    Backblaze B2, Supabase, Cloudflare R2); модуль берёт базу из конфига
+    (public_base_url);
+  * URL — только US-ASCII (рекомендация доков);
+  * перед публикацией — проверка фактом: curl -I (200 + content-type).
+
+--------------------------------------------------------------------------------
+6. РЕЖИМЫ РАБОТЫ МОДУЛЯ
+--------------------------------------------------------------------------------
+6.1 at_slot (ОСНОВНОЙ; нативного publishAt у Instagram НЕТ)
+    Контейнер создаётся за container_lead_minutes до слота (по умолчанию 45),
+    публикация — POST /media_publish в момент слота.
+    Почему так: у платформы нет отложенной публикации, а контейнер живёт
+    только 24 ч — держать его дольше нельзя.
+    upload(media, meta, when) для этого режима не используется; вызывается
+    publish(payload) в момент слота (см. §7).
+6.2 early_upload (ОГРАНИЧЕННО; опция, выключена по умолчанию)
+    Контейнер можно создать заранее, но:
+      * контейнер истекает через 24 ч (EXPIRED) — предохранитель
+        container_max_age_hours (по умолчанию 20);
+      * медиа-URL должен оставаться доступным до момента публикации;
+      * если слот сдвинулся за пределы 24 ч — контейнер пересоздать;
+      * скрытого «черновика» в профиле нет: неопубликованный контейнер никому
+        не виден и истекает сам (чистить/удалять не нужно).
+    upload() возвращает external_id=container_id, state='uploaded';
+    после публикации external_id заменяется на media_id (см. §7).
+6.3 schedule_publish — NotSupported (false): платформа не умеет publishAt;
+    ядро использует publish() в момент слота (как для платформ без отложки).
+6.4 test_publish — публикация на тестовом IG-аккаунте (test_integration_ids).
+
+Capabilities (честные):
+  publish: true; early_upload: true (ОГРАНИЧЕННО 24 ч); schedule_publish: false;
+  update_metadata: false (caption после публикации не меняется; доступно только
+    включение/выключение комментариев); delete: true (нужен scope
+    instagram_manage_contents); thumbnail: true (обложка Reels);
+  claims_check: manual (см. §8); video: true; image: false (v2);
+  text: false; stories: false (v3; только business).
+
+--------------------------------------------------------------------------------
+7. ПРОЦЕСС ПУБЛИКАЦИИ (at_slot; шаги и данные)
+--------------------------------------------------------------------------------
+Шаг 0. Ядро/хранилище: файл выложен на публичный URL (проверка curl -I).
+Шаг 1. Ядро создаёт строку entity_platform_status (platform=instagram,
+       publish_mode=at_slot, scheduled_at=NULL — publishAt у платформы нет).
+Шаг 2. prepare(media): проверки ffprobe (контейнер/кодеки/FPS/AR/длительность/
+       размер/обложка) + доступность URL. Ошибка → MEDIA_INVALID с причиной.
+Шаг 3. За container_lead_minutes до слота: POST /media (media_type=REELS,
+       video_url, caption, cover_url|thumb_offset, share_to_feed) → container_id.
+       СРАЗУ сохранить container_id (идемпотентность: повторный запуск не
+       создаёт второй контейнер, если старый жив).
+Шаг 4. Опрос GET /<container_id>?fields=status_code,copyright_check_status
+       (интервал 30–60 с; не дольше container_ready_timeout_min, по умолч. 15):
+       IN_PROGRESS → ждать; FINISHED → к публикации; ERROR/EXPIRED → §9.
+Шаг 5. В момент слота: POST /media_publish (creation_id=container_id) → media_id.
+Шаг 6. GET /<media_id>?fields=permalink,... → release_url (permalink доступен
+       сразу после публикации). Запись: external_id=media_id,
+       release_url=permalink, status='published'.
+Шаг 7. Ядро: Telegram-пост со ссылкой (ожидания ссылки нет).
+Ошибки на любом шаге → маппинг §9, last_error, алерты.
+Правило (урок YouTube): media_id НИКОГДА не теряется — если публикация прошла,
+а permalink не получен, сохранить media_id и пометить «опубликовано, ссылка не
+получена»; добрать позже через get_status.
+Отмена/скип до публикации: контейнер не публикуем — он истечёт сам (24 ч);
+в профиле ничего не появляется.
+get_status(external_id): для медиа — GET /<IG_MEDIA_ID>?fields=permalink,...;
+для контейнера (до публикации) — GET /<container_id>?fields=status_code.
+Где хранить container_id: стандарт полей БД этого не описывает — предложение
+ядру: новое поле (module_container_id) или publish_log/details (см. §16, п.1).
+
+--------------------------------------------------------------------------------
+8. КЛЕЙМЫ И ОСОБЕННОСТИ ПЛАТФОРМЫ
+--------------------------------------------------------------------------------
+Клеймы (copyright):
+  * у контейнера есть поле copyright_check_status (matches_found true/false;
+    status: not_started|in_progress|completed|error) — потенциальный AUTO-чек
+    ДО публикации (доступность проверить на нашем аккаунте; актуализировать);
+  * у опубликованного медиа есть copyright_check_information (то же по смыслу);
+  * v1: capabilities.claims_check = manual — ручной чекпойнт ядра (за K часов,
+    по умолчанию 2, бот-кнопки: [клеймов нет — публикуем] / [есть клейм —
+    пропустить]); при «есть клейм» — не публиковать, взять следующий кандидат
+    из бэклога (механика ядра);
+  * v2 (если поле доступно): переключить на auto.
+Особенности платформы (учесть в реализации):
+  * контейнеры живут 24 ч (EXPIRED) — влияет на раннюю загрузку и повторы;
+  * публичный URL — часть публикации: недоступен → 9004/2207052;
+  * aspect ratio: рекомендуем строго 9:16; вне 0.01:1–10:1 — отказ;
+  * музыка: используем только оригинальный звук (ORIGINAL_SOUND); licensed
+    music не добавляем; audio_name — переименование оригинального аудио
+    (доступно один раз); при клейме на музыку media_url может не отдаваться;
+  * Reels vs Feed: share_to_feed=true (по умолчанию) — ролик виден и в ленте,
+    и в Reels; определять Reels по media_product_type (=REELS), НЕ по
+    media_type (для Reels API возвращает VIDEO);
+  * Reels нельзя в карусель; карусель кропится по первому элементу;
+  * PPA (Page Publishing Authorization): если у страницы требуется — публикация
+    не пройдёт до её прохождения; 2FA страницы → FB-пользователь тоже должен
+    пройти 2FA (проверить при подключении);
+  * аккаунт должен быть Professional (Business/Creator) и привязан к странице;
+  * caption после публикации не редактируется (update_metadata=false); можно
+    включать/выключать комментарии (POST /<media_id>?comment_enabled=);
+  * «Duplicate Post» (код 506): не ретраить вслепую — сначала проверить, не
+    опубликовано ли уже (идемпотентность).
+
+--------------------------------------------------------------------------------
+9. ОШИБКИ И ИХ ОБРАБОТКА
+--------------------------------------------------------------------------------
+Код/сообщение (Graph API)                 → Таксономия       → Действие
+401 / 190 / 102 (OAuthException)          → AUTH_EXPIRED     → refresh + retry 1x
+subcodes 463/467 (token invalid)          → AUTH_EXPIRED     → refresh + retry
+10 / 200–299 (permission denied)          → AUTH_REQUIRED    → пауза + алерт
+458 (app not installed), 492              → AUTH_REQUIRED    → пауза + алерт
+4 (app rate), 17 (user rate)              → RATE_LIMIT       → backoff по
+32 (page rate), 613 (custom rate)                            X-Business-Use-Case
+80002 (Instagram BUC), 341 (app limit)                       (estimated_time_
+                                                             to_regain_access)
+9 / 2207042 (daily publish limit)         → QUOTA            → пауза до сброса
+368 (policies), 4 / 2207051 (spam)        → PLATFORM_REJECTED → ошибка + пауза,
+                                                             алерт владельцу
+25 / 2207050 (account restricted)         → PLATFORM_REJECTED → пауза + алерт
+                                                             (действия в прил.)
+100 / 2207023 (unknown media type)        → MEDIA_INVALID    → ошибка + причина
+100 / 2207028 (carousel count)            → MEDIA_INVALID    → ошибка
+352 / 2207026 (video format)              → MEDIA_INVALID    → ошибка
+36000 / 2207004 (image too large)         → MEDIA_INVALID    → ошибка
+36001 / 2207005 (image format)            → MEDIA_INVALID    → ошибка
+36003 / 2207009 (image aspect ratio)      → MEDIA_INVALID    → ошибка
+36004 / 2207010 (caption too long)        → MEDIA_INVALID    → ошибка
+1 / 2207057 (thumb_offset out of range)   → MEDIA_INVALID    → ошибка
+9004 / 2207052 (media not fetched)        → MEDIA_INVALID*   → проверить URL;
+                                                             при сетевом сбое
+                                                             хранилища — TRANSIENT
+9007 / 2207027 (media not ready)          → TRANSIENT        → ждать FINISHED,
+                                                             повторить publish
+24 / 2207006 (media not found)            → FATAL            → ошибка строки
+24 / 2207008 (container expired/unknown)  → TRANSIENT        → retry 1–2 раза,
+                                                             затем новый контейнер
+-2 / 2207003 (download timeout)           → TRANSIENT        → retry
+-2 / 2207020 (media expired)              → MEDIA_INVALID    → новый контейнер
+-1 / 2207001, 2207032, 2207053            → TRANSIENT        → retry/новый контейнер
+506 (duplicate post)                      → FATAL            → проверить дубль,
+                                                             не ретраить
+5xx / timeout / connection                → TRANSIENT        → ретраи (backoff)
+container status_code=ERROR               → PLATFORM_REJECTED → ошибка + причина
+                                                             (status/error_subcode)
+container status_code=EXPIRED             → MEDIA_INVALID    → пересоздать контейнер
+  * 9004: если URL недоступен/отдаёт HTML — MEDIA_INVALID; если сетевой сбой
+    хранилища — TRANSIENT.
+Тексты для владельца — по-русски: что случилось и что делать; сохранять
+fbtrace_id (для обращений в поддержку Meta).
+
+--------------------------------------------------------------------------------
+10. ПРИМЕЧАНИЯ ПО ПРИЛОЖЕНИЮ META
+--------------------------------------------------------------------------------
+* Тип приложения: Business; продукты: Facebook Login for Business +
+  Instagram → API setup with Facebook login (см. docs/PLATFORM_SETUP.md).
+* Access level: Standard Access достаточно, пока публикуем только в СВОИ
+  аккаунты (у владельца роль в приложении/бизнес-портфеле). App Review и
+  Business Verification нужны только для Advanced Access (чужие аккаунты) —
+  для нас не требуются (проверить при подключении).
+* Redirect URI: точное совпадение в настройках Facebook Login приложения;
+  callback — эндпоинт панели/бота, доступный снаружи. Туннель Postiz для
+  нашего модуля НЕ нужен (модуль ходит в Meta напрямую с сервера).
+* IG-аккаунт: Professional (Business/Creator), привязан к странице
+  «Точка наблюдения»; у FB-пользователя — роль с правами CREATE_CONTENT/
+  MANAGE (в API — PROFILE_PLUS_*), иначе scopes не выдаются.
+* PPA/2FA страницы — см. §8.
+* Токены: short-lived ~1 ч → long-lived ~60 дней (Meta: «не полагаться на
+  точный срок»); page token — производный; обновление автоматическое, см. §3.
+* Секреты: app_secret — только server-side; в логи и чат не попадает.
+
+--------------------------------------------------------------------------------
+11. КОНФИГ МОДУЛЯ (пример секции config.yaml + манифест)
+--------------------------------------------------------------------------------
+platforms:
+  instagram:
+    enabled: false                     # включаем на этапе боевого прогона
+    project: tochka
+    video_variant: vertical
+    daily_limit: 2                     # предохранитель ядра (safety)
+    integration_id: ""                 # только для postiz-адаптера (совм.)
+    module:
+      ig_user_id: ""                   # заполняется при подключении
+      page_id: ""                      # страница, к которой привязан IG
+      public_base_url: "https://..."   # база публичных URL для Meta (§5)
+      container_lead_minutes: 45       # создать контейнер за N мин до слота
+      container_max_age_hours: 20      # предохранитель (лимит 24 ч)
+      poll_interval_sec: 30            # опрос status_code
+      container_ready_timeout_min: 15  # ждать FINISHED не дольше
+      share_to_feed: true              # Reels: показывать и в ленте
+      cover_mode: thumb_offset         # thumb_offset | cover_url
+      thumb_offset_ms: 0
+      claims_checkpoint_hours: 2       # ручной чекпойнт клеймов
+      early_upload: false              # ограниченная ранняя загрузка (§6.2)
+engines:
+  instagram: "module:instagram"        # или "postiz" (совместимость)
+
+manifest.yaml модуля (ориентир; заполнить по 02_MODULE_STANDARD §3):
+  id:            instagram
+  name:          Instagram
+  api_version:   "Graph API v25.0 (Content Publishing)"
+  module_version: "1.0.0"
+  core_min:      "8.5.0"
+  auth:
+    method:      oauth2_authorization_code
+    scopes:      ["instagram_basic", "instagram_content_publish",
+                  "pages_read_engagement", "pages_show_list"]
+    # + "instagram_manage_contents" — если включаем delete
+    broker_key:  instagram
+  capabilities:
+    publish:            true
+    early_upload:       true      # ОГРАНИЧЕННО: контейнер живёт 24 ч (§6.2)
+    schedule_publish:   false     # publishAt у платформы нет
+    update_metadata:    false     # caption после публикации не меняется
+    delete:             true      # нужен scope instagram_manage_contents
+    thumbnail:          true      # обложка Reels (cover_url/thumb_offset)
+    claims_check:       manual    # auto — см. §8 (проверить доступность поля)
+    video:              true
+    image:              false     # v2 (фото/карусели)
+    text:               false
+    stories:            false     # v3 (только business)
+  limits:
+    posts_per_day: 2
+    rate:          { rpm: 60 }
+    quota:         { unit: "posts", per_day: 50, cost_publish: 1 }  # проверить
+  media:
+    video:     { container: mp4, video_codec: h264, audio_codec: aac,
+                 aspect: ["9:16"], max_mb: 300, max_duration_sec: 900 }
+    thumbnail: { formats: [jpg], max_mb: 8 }
+  statuses:
+    published: [published]
+    pending:   [in_progress, finished]
+    failed:    [error, expired]
+  docs: MODULE_INSTAGRAM.txt
+
+--------------------------------------------------------------------------------
+12. ТЕСТЫ
+--------------------------------------------------------------------------------
+Unit (моки HTTP):
+  * создание контейнера: параметры (media_type=REELS, video_url, caption,
+    cover_url/thumb_offset, share_to_feed), парсинг container_id;
+  * опрос статуса: IN_PROGRESS → FINISHED; ERROR; EXPIRED;
+  * media_publish: creation_id, парсинг media_id; 9007 → retry;
+  * идемпотентность: повторный запуск не создаёт второй контейнер/дубль;
+  * маппинг ошибок: 190/4/17/32/613/80002/9-2207042/9004/9007/506/5xx;
+  * refresh токена: AUTH_EXPIRED → refresh → retry; fail → AUTH_REQUIRED;
+  * media_id сохраняется, даже если permalink не получен.
+Contract (тестовый IG-аккаунт):
+  * полный цикл: публичный URL → контейнер → FINISHED → publish → permalink;
+  * отмена: контейнер не опубликован → истекает (EXPIRED), в профиле нет;
+  * delete (если включён scope) — удаление тестового поста;
+  * auth_status() на реальном токене.
+Dry-run: пайплайн без реальных публикаций (флаг конфига).
+Проверка URL: curl -I публичного URL перед публикацией (в тестах — мок).
+
+--------------------------------------------------------------------------------
+13. КРИТЕРИИ ПРИЁМКИ
+--------------------------------------------------------------------------------
+[ ] Манифест заполнен; capabilities честные (early_upload ограниченно,
+    schedule_publish=false, claims_check=manual)
+[ ] validate_config + пример конфига в ТЗ
+[ ] auth_status() понятен владельцу; refresh работает без участия человека
+[ ] Публикация Reels проходит в момент слота: контейнер → FINISHED → publish
+[ ] permalink сохранён; Telegram-пост уходит со ссылкой без ожидания
+[ ] media_id не теряется при сбое на шаге получения permalink
+[ ] Контейнер не создаётся раньше предохранителя (container_max_age_hours)
+[ ] Лимиты учтены; QUOTA/RATE_LIMIT → пауза + алерт
+[ ] Ошибки маппятся в таксономию §9; тексты по-русски
+[ ] Ручной чекпойнт клеймов работает (skip → следующий кандидат)
+[ ] Тесты зелёные; публикация на тестовом IG-аккаунте подтверждена
+[ ] README.txt + это ТЗ обновлены
+[ ] Наблюдаемость: события publish_log, метрики, алерты
+[ ] Откат: выключение модуля (engines.instagram=postiz / enabled=false)
+    не ломает ядро и данные
+
+--------------------------------------------------------------------------------
+14. ПЛАН ВНЕДРЕНИЯ
+--------------------------------------------------------------------------------
+1) Владелец: приложение Meta (Business), продукты Facebook Login for Business
+   + Instagram API setup; redirect URI; логин; long-lived токен в брокер;
+   проверить /me/accounts → ig_user_id, PPA/2FA, права на страницу.
+2) API-клиент модуля: OAuth/refresh, auth_status, маппинг ошибок; unit-тесты.
+3) Публикация at_slot: prepare → контейнер → опрос → publish → permalink;
+   dry-run + тесты.
+4) Интеграция в ядро через контракт (publisher/scheduler); поля БД — по
+   02_MODULE_STANDARD §6 (миграция аддитивная).
+5) Ручной чекпойнт клеймов (бот-кнопки) + skip → следующий кандидат.
+6) Тестовая публикация на тестовом IG-аккаунте; боевое включение
+   (engines.instagram=module:instagram, platforms.instagram.enabled=true);
+   мониторинг 3 дня.
+7) v2: фото/карусели; auto-клеймы (copyright_check_status, если доступно).
+8) v3: Stories (только business), collaborators и прочие поля.
+
+--------------------------------------------------------------------------------
+15. ССЫЛКИ (только официальные доки Meta; проверять актуальность)
+--------------------------------------------------------------------------------
+* Instagram Platform — обзор:
+  https://developers.facebook.com/docs/instagram-platform/overview
+* Content Publishing (гайд):
+  https://developers.facebook.com/docs/instagram-platform/content-publishing
+* Instagram API with Facebook Login:
+  https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login
+* Создание контейнера (IG User Media):
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+* Публикация (media_publish):
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media_publish
+* Контейнер (status_code, copyright_check_status):
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-container
+* Лимит публикаций (content_publishing_limit):
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/content_publishing_limit
+* Медиа (permalink, copyright_check_information):
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/instagram-media
+* Коды ошибок Instagram:
+  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/error-codes
+* Обработка ошибок Graph API:
+  https://developers.facebook.com/docs/graph-api/guides/error-handling
+* Rate limits (BUC, X-Business-Use-Case-Usage):
+  https://developers.facebook.com/docs/graph-api/overview/rate-limiting
+* Access tokens (60 дней, page token):
+  https://developers.facebook.com/docs/facebook-login/guides/access-tokens
+* Long-lived токены:
+  https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived
+* PPA — справка Meta:
+  https://www.facebook.com/business/m/one-sheeters/page-publishing-authorization
+(Сторонние источники для сверки лимитов/полей не использовать.)
+
+--------------------------------------------------------------------------------
+16. ОТКРЫТЫЕ ВОПРОСЫ
+--------------------------------------------------------------------------------
+1) Где хранить container_id (идемпотентность): новое поле в
+   entity_platform_status (module_container_id) или publish_log/details?
+2) Хостинг медиа для Meta: какой вариант выбираем (docs/STORAGE-OPTIONS.md)?
+   Влияет на надёжность 9004/2207052 и на окно ранней загрузки.
+3) Точный лимит публикаций: 100 (гайд) vs 50 (media_publish, endpoint) —
+   какой считать пределом? Источник истины — content_publishing_limit.
+4) Ранняя загрузка: включаем ли вообще; за сколько создавать контейнер
+   (45 мин по умолчанию или раньше, в пределах 24 ч)?
+5) delete: включать ли scope instagram_manage_contents (нужен для удаления)?
+6) Клеймы: проверить copyright_check_status на нашем аккаунте — переводить ли
+   claims_check в auto (v2)?
+7) Фото/карусели: включать ли в v1 (нужны image-пакеты; сейчас контент —
+   видео)?
+8) Stories: нужны ли вообще (только business-аккаунты; живут 24 ч)?
+9) Тайминги: container_lead_minutes и container_ready_timeout_min для
+   больших файлов — уточнить на тестовом аккаунте.
+10) Тестовый IG-аккаунт для contract-тестов (test_integration_ids) — какой?
+================================================================================

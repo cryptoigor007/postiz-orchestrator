@@ -1,0 +1,621 @@
+================================================================================
+  ТЗ МОДУЛЯ: FACEBOOK (Страница)  (orchestrator/platforms/facebook)
+  Версия ТЗ: 1.0   |   Дата: 24.09.2026   |   Статус: черновик (эталон — MODULE_YOUTUBE)
+================================================================================
+Модуль публикует видео на Facebook-Страницу (Page) от имени Страницы:
+Reels (9:16) и обычные видео (16:9/1:1), с ранней загрузкой и публикацией по
+расписанию средствами самой Meta. Обычные посты (текст/фото) — вне MVP.
+Наша Страница: «Точка наблюдения», ID 61594683901231
+(см. docs/POSTIZ_SOCIAL_SETUP_STATUS.md).
+Все ссылки на документацию Meta — в §15. Всё, что требует проверки, помечено
+«(проверить актуальность)»; версии/лимиты Meta меняются ежеквартально.
+
+--------------------------------------------------------------------------------
+1. ОБЛАСТЬ РАБОТ (SCOPE)
+--------------------------------------------------------------------------------
+Входит (MVP):
+  * Facebook Login + получение Page Access Token через токен-брокер,
+    перевыпуск Page-токена из долгоживущего user-токена;
+  * публикация Reels на Страницу (video_reels: start → upload → finish);
+  * публикация обычного видео на Страницу (/videos, Resumable Upload API);
+  * ранняя загрузка: Reels — video_state=SCHEDULED (или DRAFT — см. §16);
+    видео — published=false + scheduled_publish_time;
+  * статусы: обработка/загрузка/публикация/ошибки; release_url поста;
+  * удаление контента; правка метаданных (набор полей — проверить);
+  * маппинг ошибок Graph API и лимитов (включая BUC) в таксономию §4 стандарта;
+  * check_claims: Reels — авто (copyright_check_information), обычное видео —
+    ручной чекпойнт ядра (как у YouTube).
+Не входит (по другим ТЗ/ядру):
+  * посты с фото (POST /{page-id}/photos) и текстовые посты (/feed) — v1.1
+    модуля (эндпоинты описаны в §2 для контекста);
+  * обложка (кастомный thumbnail) — v1.1, нужны доп. scopes (см. §3);
+  * Instagram/Threads (отдельные модули), комментарии, инсайты, реклама;
+  * расписание слотов, ручной клейм-диалог (ядро).
+
+--------------------------------------------------------------------------------
+2. API
+--------------------------------------------------------------------------------
+Платформа: Graph API (developers.facebook.com/docs/graph-api).
+Хосты:
+  * graph.facebook.com         — все вызовы Graph API;
+  * rupload.facebook.com       — ТОЛЬКО загрузка файла Reels;
+  * graph-video.facebook.com   — УСТАРЕЛ (официальное предупреждение Meta:
+                                  «graph-video.facebook.com host for video
+                                  uploads has been deprecated»). Не использовать.
+Версия API: latest на 24.09.2026 — v26.0 (в примерах доков Meta местами ещё
+  v25.0). Версия фиксируется в пути (/v26.0/...) и в манифесте; каждая версия
+  живёт ≥ 2 лет (проверить актуальность). Апгрейд — по changelog, отдельным
+  коммитом с регресс-тестами (03_API_STANDARDS §5).
+
+Reels (MVP):
+  start:   POST https://graph.facebook.com/v26.0/{page-id}/video_reels
+           JSON/form: upload_phase=start, access_token={page-token}
+           → { video_id, upload_url: https://rupload.facebook.com/video-upload/{video-id} }
+           (в примерах доков Meta — .../video-upload/v25.0/{video-id}; брать
+            upload_url из ответа, при необходимости подставить версию —
+            (проверить на практике))
+  upload:  POST https://rupload.facebook.com/video-upload/v26.0/{video-id}
+           Headers: Authorization: OAuth {page-token}, offset, file_size
+           Body: application/octet-stream (файл); либо file_url = публичный URL
+           → { "success": true }
+           Возобновление: GET /v26.0/{video-id}?fields=status →
+             uploading_phase.bytes_transfered → повторить POST с offset=это значение
+  status:  GET  https://graph.facebook.com/v26.0/{video-id}?fields=status
+  finish:  POST https://graph.facebook.com/v26.0/{page-id}/video_reels
+           video_id={id}, upload_phase=finish,
+           video_state=PUBLISHED|SCHEDULED|DRAFT, title, description;
+           scheduled_publish_time (UNIX) — только при SCHEDULED: > 10 минут от
+           текущего времени и < 29 дней.
+           (в таблице полей документации опечатка «complete» вместо finish,
+            в примерах используется finish)
+  список:  GET  /{page-id}/video_reels
+
+Обычное видео Страницы (MVP):
+  Загрузка — Resumable Upload API (User token, а не Page token!):
+    POST /v26.0/{app-id}/uploads?file_name={name}&file_length={bytes}
+         &file_type=video/mp4&access_token={user-token}
+         → { id: "upload:<session-id>" }
+    POST /v26.0/upload:{session-id}
+         Headers: Authorization: OAuth {user-token}, file_offset: 0
+         Body: --data-binary @file.mp4
+         → { "h": "<uploaded-file-handle>" }
+    GET  /v26.0/upload:{session-id} → { file_offset }  (возобновление)
+  Публикация:
+    POST /v26.0/{page-id}/videos (Page token)
+         fbuploader_video_file_chunk={handle}, title, description,
+         published=false (ранняя загрузка) | true, scheduled_publish_time
+         (окно: от 10 минут до 6 месяцев)
+         → { id: "<video-id>" }
+  В reference также есть source=файл (multipart) и file_url=URL, а также
+  chunked-сессия (upload_phase=start/transfer/finish, video_file_chunk,
+  upload_session_id) — целевой путь для модуля: handle (без публичных URL).
+
+Обложка (v1.1): POST /v26.0/{video-id}/thumbnails?is_preferred=true&source=@img
+  (изображение ≤ 10 МБ; только для видео, связанных со Страницей; рекомендуется
+  соотношение как у видео; для Reels — «custom cover photo»).
+Статус/чтение: GET /v26.0/{video-id} (Video node: id, created_time, description,
+  picture, source, updated_time; статус — fields=status, см. §7).
+Правка/удаление: POST /{video-id} | DELETE /{video-id} (Video node; набор
+  изменяемых полей — проверить).
+Страница/токены: GET /me/accounts; GET /{page-id}?fields=id,name,category,tasks;
+  GET /debug_token.
+Посты (v1.1, не входят в MVP): POST /{page-id}/feed (message; published=false +
+  scheduled_publish_time — окно 10 минут–30 дней), POST /{page-id}/photos (url;
+  ответ {id, post_id}); правка POST /{post-id}; удаление DELETE /{post-id};
+  permalink: https://www.facebook.com/{post_id}.
+
+--------------------------------------------------------------------------------
+3. АВТОРИЗАЦИЯ
+--------------------------------------------------------------------------------
+Схема: Facebook Login (OAuth 2.0, authorization code) + производный Page Access
+Token. Для бизнес-сценариев Meta рекомендует Facebook Login for Business; наш
+случай (своё приложение + своя Страница, владелец — админ приложения)
+покрывается классическим Facebook Login (проверить актуальность).
+
+Поток получения токенов:
+  1) Диалог: https://www.facebook.com/v26.0/dialog/oauth
+       ?client_id={app-id}&redirect_uri={https-url}&state=...&scope={scopes}
+  2) code → GET /v26.0/oauth/access_token?client_id&redirect_uri
+       &client_secret&code → short-lived user token (~1–2 часа).
+  3) Обмен на долгоживущий: GET /v26.0/oauth/access_token
+       ?grant_type=fb_exchange_token&client_id={app-id}
+       &client_secret={secret}&fb_exchange_token={token}
+       → long-lived user token (~60 дней; только server-side).
+  4) Page token: GET /v26.0/{user-id}/accounts?access_token={long-lived user token}
+       → data[]: { access_token (Page token), id (page id), name, tasks[] }
+  5) Хранение — только токен-брокер: tokens/facebook.json (600):
+       user_token (+expires_at), page_token, page_id, scopes, получено_at.
+       client_id/client_secret — в .env (600); в git/конфиг не попадают.
+
+Scopes (минимум для MVP):
+  * pages_show_list      — список страниц и получение Page token (/me/accounts);
+  * pages_read_engagement— чтение контента Страницы и статусов;
+  * pages_manage_posts   — публикация контента от имени Страницы.
+  * publish_video        — указан в Pages API (Posts) как необходимый «if you are
+                           publishing a video to the Page»; в Video API-гайде не
+                           упомянут. Запросить и проверить в App Dashboard
+                           (проверить актуальность).
+  * pages_read_user_content + pages_manage_engagement — требуются для создания
+                           кастомной обложки (POST /{video-id}/thumbnails) —
+                           только если обложка входит в MVP.
+  * pages_manage_engagement — для публикации НЕ нужен; без необходимости
+                           не запрашивать (минимизация прав, 03_API_STANDARDS §1.6).
+
+Срок жизни токенов (официально):
+  * short-lived user token — ~1–2 часа;
+  * long-lived user token — ~60 дней;
+  * long-lived Page token (полученный из long-lived user token) — НЕ имеет срока
+    истечения («do not have an expiration date») и может быть инвалидирован
+    только по событиям: смена пароля, отзыв приложения пользователем, снятие
+    роли/задач на Странице и т. п. (см. debugging-and-error-handling).
+    ВАЖНО: формулировка «не истекает, пока жив user-токен» неточна — Page token
+    живёт сам по себе, но перевыпустить его можно только из живого user-токена;
+    иначе — переавторизация владельца.
+
+Page token vs User token:
+  * Page token — Reels start/upload/finish, /videos, /feed, /photos, thumbnails,
+    GET /{video-id}?fields=status (действия от имени Страницы);
+  * User token — /me/accounts (перевыпуск Page token) и Resumable Upload API
+    (POST /{app-id}/uploads для обычных видео);
+  * Page token уникален для пары (Страница, админ, приложение).
+
+Права Страницы (Page tasks): для публикации пользователь должен иметь задачу
+CREATE_CONTENT (админ Страницы в UI имеет все задачи). auth_status() проверяет
+tasks и предупреждает владельца, если CREATE_CONTENT нет.
+
+auth_status():
+  * Page token и user token — GET /v26.0/debug_token
+      ?input_token={token}&access_token={app-id}|{app-secret}
+      → { is_valid, expires_at (для токена без срока — 0; проверить на практике),
+          data_access_expires_at, scopes[], granular_scopes[], type, user_id };
+  * доп. проверка Страницы: GET /{page-id}?fields=id,name,tasks (Page token);
+  * результат: { ok, expires_at, scopes, account: {page_id, page_name} }.
+  * watchdog вызывает минимум раз в сутки; ok=false → AUTH_REQUIRED →
+    пауза платформы + алерт владельцу (03_API_STANDARDS §1.4).
+
+Business / Meta Business Suite:
+  * Страница может быть привязана к бизнес-портфелю (business.facebook.com);
+    владелец уже работает в Meta Business Suite.
+  * Альтернатива Page token — System User access token
+    (Business settings → System Users → Assign assets → Generate token):
+    официально не требует повторной авторизации пользователя. Для MVP —
+    обычный Page token; System User — резерв/развитие (решение владельца).
+  * Режим приложения: Development Mode позволяет запрашивать permissions у
+    пользователей с ролью на приложении (наш случай), App Review не нужен.
+    Standard Access — то же ограничение (только role users). Advanced Access
+    (для чужих страниц/пользователей) требует Business Verification +
+    App Review — нам не требуется (проверить актуальность).
+
+--------------------------------------------------------------------------------
+4. КВОТЫ И ЛИМИТЫ (проверить актуальность)
+--------------------------------------------------------------------------------
+Graph API различает Platform и BUC (Business Use Case) лимиты. Для Pages API
+с Page/System User token применяется BUC; с user/app token — Platform.
+
+Platform Rate Limits (приложение/пользователь):
+  * приложение: Calls within 1 hour = 200 × Number of Users;
+  * пользователь: персональный лимит (значения Meta не публикует);
+  * заголовок X-App-Usage: { call_count, total_cputime, total_time } — проценты;
+  * ошибки: 4 (лимит приложения), 17 (лимит пользователя), 613 (кастомный
+    лимит, в т.ч. subcode 1996), 341 (application limit reached).
+
+BUC Rate Limits (Pages API с Page/System User token):
+  * Calls within 24 hours = 4800 × Number of Engaged Users (по Странице);
+  * заголовок X-Business-Use-Case-Usage: type=pages, call_count, total_cputime,
+    total_time, estimated_time_to_regain_access (минуты до снятия блокировки);
+  * ошибки: 80001 (Page/System user token), 32 (Page-вызовы с User token).
+  * Модуль обязан читать эти заголовки каждого ответа и передавать остаток/
+    время восстановления ядру (platform_safety_state) → пауза платформы.
+
+Лимиты публикаций:
+  * Reels API: 30 API-публикаций за скользящие 24 часа (enforced на
+    POST /{page_id}/video_reels) — жёсткий лимит Meta;
+  * обычные видео/посты: публичного числового лимита в доках нет; действуют
+    общие спам-политики Meta. Наш предохранитель — platform.facebook.daily_limit
+    (сейчас 5) + safety.min_interval_minutes;
+  * окна scheduled_publish_time: Reels — 10 минут–29 дней; обычное видео —
+    10 минут–6 месяцев; посты (/feed) — 10 минут–30 дней.
+Best practices Meta: при упоре — прекратить вызовы, размазать равномерно,
+использовать фильтры; батч-вызовы считаются по количеству ID.
+Запрещено обходить квоты несколькими приложениями/токенами (03_API_STANDARDS §3.3).
+
+--------------------------------------------------------------------------------
+5. МЕДИА-ТРЕБОВАНИЯ
+--------------------------------------------------------------------------------
+Reels (официальные требования Meta):
+  контейнер:      mp4 (рекомендуется);
+  соотношение:    9:16;
+  разрешение:     рекомендовано 1080×1920, минимум 540×960;
+  кадры:          24–60 fps, фиксированная частота, прогрессивная развёртка;
+  длительность:   3–90 секунд;
+  видео:          H.264 или H.265 (VP9, AV1 также поддерживаются);
+                  closed GOP 2–5 с; chroma subsampling 4:2:0;
+  аудио:          AAC Low Complexity, ≥ 128 kbps, стерео, 48 kHz;
+  обложка:        POST /{video-id}/thumbnails (≤ 10 МБ; желательно 9:16).
+  Несоответствия отбиваются кодами 1363040 (aspect), 1363127 (resolution),
+  1363128 (duration), 1363129 (fps) — см. §9.
+
+Обычное видео Страницы:
+  контейнер:      mp4, H.264 + AAC (предпочтительно);
+  соотношения:    16:9 и 1:1 (варианты VideoMaker); вертикаль (9:16) для ленты
+                  Meta поддерживает, но у нас вертикаль идёт в Reels-flow;
+  длительность/размер: в Graph API-доках верхние лимиты НЕ нормированы
+                  (есть только ошибка 382 «файл слишком маленький»).
+                  Практические пределы Meta для видео в ленте — уточнить в
+                  Meta Business Help Center (раздел Video specs)
+                  (проверить актуальность);
+  окно отложки:   10 минут–6 месяцев.
+Наши предохранители (ядро/конфиг, не лимиты Meta; значения подтвердить):
+  * обычное видео: ≤ 2 ГБ, ≤ 20 минут;
+  * Reels: строго 9:16 и 3–90 секунд;
+  * prepare() проверяет через ffprobe (соотношение, длительность, кодеки,
+    размер) и до загрузки возвращает MEDIA_INVALID с причиной по-русски.
+
+Текст: title и description (Reels поддерживает хэштеги; для видео — title,
+  description). Лимитов длины в документации Meta нет — ограничиваем на стороне
+  ядра (значения из конфига; согласовать, см. §16).
+
+--------------------------------------------------------------------------------
+6. РЕЖИМЫ РАБОТЫ МОДУЛЯ
+--------------------------------------------------------------------------------
+6.1 early_upload (ОСНОВНОЙ, целевой)
+    Reels:  start → upload → finish с video_state=SCHEDULED,
+            scheduled_publish_time = слот (если слот ≥ 10 минут вперёд).
+            video_id известен сразу; публикует Meta; вариант DRAFT — «держать
+            без расписания» (механику публикации драфта уточнить, §16).
+    Видео:  Resumable Upload → handle → POST /{page-id}/videos с published=false
+            и scheduled_publish_time = слот (окно до 6 месяцев).
+    До наступления времени допускается: delete(); update_metadata (набор полей
+    — проверить); снятие/перенос времени — если API не позволит менять
+    scheduled_publish_time после загрузки (проверить), ядро работает в режиме
+    at_slot или пересоздаёт публикацию.
+    Плюсы: release_url известен заранее (Telegram не ждёт), окно для клеймов.
+6.2 at_slot (совместимость/фолбэк)
+    publish(media, meta) в момент слота: Reels — finish сразу с
+    video_state=PUBLISHED; видео — published=true. Применяется, если до слота
+    < 10 минут или платформа не даёт отложить.
+6.3 test_publish
+    Публикация тестового поста на тестовую Страницу (test_integration_ids).
+6.4 Reels vs обычное видео (сводка отличий)
+    |                | Reels                        | Обычное видео            |
+    | endpoint       | /{page-id}/video_reels       | /{page-id}/videos        |
+    | загрузка       | rupload.facebook.com         | Resumable Upload (handle)|
+    | формат         | строго 9:16, 3–90 с          | 16:9 / 1:1 (+вертикаль)  |
+    | отложка        | SCHEDULED, 10 мин–29 дней    | published=false, 10 мин– |
+    |                |                              | 6 месяцев                |
+    | лимит          | 30 API-публикаций/24 ч       | общий BUC                |
+    | клеймы         | copyright_check_information  | публичного API нет       |
+    |                | доступен (см. §8)            | (ручной чекпойнт)        |
+    | дистрибуция    | лента + вкладка Reels        | лента Страницы           |
+6.5 Манифест (фрагмент manifest.yaml; согласовать перед реализацией)
+    id: facebook
+    name: Facebook Page
+    api_version: "Graph API v26.0 (проверить актуальность)"
+    module_version: "1.0.0"
+    core_min: "8.5.0"
+    auth:
+      method: oauth2_authorization_code
+      scopes: ["pages_show_list", "pages_read_engagement", "pages_manage_posts"]
+      broker_key: facebook
+    capabilities:
+      publish: true
+      early_upload: true
+      schedule_publish: true      # время задаётся при загрузке; перенос после —
+                                  # проверить (§16), иначе at_slot
+      update_metadata: partial    # набор полей проверить
+      delete: true
+      thumbnail: false            # v1.1 (доп. scopes)
+      claims_check: auto          # Reels: auto; обычное видео: supported=false
+                                  # → ручной чекпойнт (согласовать с ядром)
+      video: true
+      image: false                # v1.1
+      text: false                 # v1.1
+      stories: false
+    limits:
+      posts_per_day: 5            # наш предохранитель (Meta Reels API — 30/24 ч)
+      rate: { rpm: 30 }           # предохранитель ядра, не лимит Meta
+      quota: { unit: "reels_posts", per_day: 30, source: "meta" }
+    media:
+      video: { container: mp4, video_codec: "h264/h265", audio_codec: aac,
+               aspect: ["16:9", "1:1"], max_mb: 2048, max_duration_sec: 1200 }
+      reel:  { container: mp4, video_codec: "h264/h265", audio_codec: aac,
+               aspect: ["9:16"], min_duration_sec: 3, max_duration_sec: 90,
+               min_resolution: "540x960", recommended_resolution: "1080x1920" }
+      thumbnail: { formats: [jpg, png], max_mb: 10 }
+    statuses:
+      published: [published]
+      pending:   [processing, uploading, upload_complete, scheduled, draft]
+      failed:    [error, upload_failed, expired]
+    docs: MODULE_FACEBOOK.txt
+
+--------------------------------------------------------------------------------
+7. ПРОЦЕСС ПУБЛИКАЦИИ (шаги и данные)
+--------------------------------------------------------------------------------
+Шаг 0. Ядро определяет тип публикации (publish_kind: auto): 9:16 и ≤ 90 с →
+       Reels, иначе обычное видео (или явно из конфига).
+Шаг 1. Ядро создаёт строку entity_platform_status (platform=facebook,
+       publish_mode=early_upload, scheduled_at=слот).
+Шаг 2. prepare(media): проверки §5 (ffprobe), выбор варианта файла
+       (video_variant: vertical/wide).
+Шаг 3a. Reels:
+       start → upload (offset=0, file_size; при обрыве — resume по
+       uploading_phase.bytes_transfered) → опрос GET /{video-id}?fields=status
+       до video_status=ready → finish с video_state=SCHEDULED
+       (scheduled_publish_time=слот) или PUBLISHED (at_slot).
+Шаг 3b. Обычное видео:
+       POST /{app-id}/uploads (user token) → POST /upload:{session}
+       (file_offset=0) → handle → POST /{page-id}/videos
+       (fbuploader_video_file_chunk={handle}, published=false,
+        scheduled_publish_time=слот, title/description) → video_id.
+Шаг 4. БД: external_id=<video_id>, release_url=https://www.facebook.com/{video_id}
+       (формат permalink проверить, §16), scheduled_at=слот, status='scheduled',
+       publish_mode='early_upload', module='facebook'.
+Шаг 5. (ядро) чекпойнт клеймов за K часов (§8).
+Шаг 6. get_status(): video_status (uploading/processing/upload_complete/ready/
+       error/upload_failed/expired) + publishing_phase.publish_status
+       (draft/scheduled/published/error) + publish_time → маппинг в состояние
+       ядра (uploaded/processing/published/failed). Опрос с backoff
+       (например, 10 с → 30 с → 60 с; потолок — параметр конфига).
+Шаг 7. (ядро) Telegram-пост: release_url уже есть — ожидание ссылки не требуется.
+Ошибки на любом шаге → §9, запись last_error, алерты при необходимости.
+Идемпотентность (03_API_STANDARDS §2.4): сохранять video_id/handle ДО финального
+вызова; повторный finish/publish по тому же video_id не создаёт дубль; ошибка
+506 «Duplicate Post» не ретраится — сверить, не опубликовано ли уже (external_id/
+publish_log).
+
+--------------------------------------------------------------------------------
+8. КЛЕЙМЫ
+--------------------------------------------------------------------------------
+Reels — auto (частично):
+  * GET /v26.0/{video-id}?fields=copyright_check_information (Page token;
+    право pages_read_engagement);
+  * проверка запускается Meta автоматически при загрузке; результат может
+    появиться через несколько минут: status in_progress → complete;
+    matches_found=false → клеймов нет; true → copyright_matches (владелец,
+    policy action: TRACK/BLOCK…, сегменты audio/video);
+  * ограничения: работает только для загрузок через Reels API; данные видит
+    только владелец Страницы (официально).
+  * check_claims(): supported=true, status: none|claimed|unknown
+    (unknown = in_progress/ошибка запроса).
+Обычное видео — manual:
+  * публичного copyright-API нет; check_claims() → supported=false;
+  * ядро использует РУЧНОЙ чекпойнт (как у YouTube): за K часов бот спрашивает
+    владельца [✅ Клеймов нет — публикуем] [⚠️ Есть клейм — пропустить];
+  * при «есть клейм»: удалить/снять публикацию (delete; либо DRAFT — если
+    доступно), claims_state=claimed, взять следующий кандидат на слот.
+Rights Manager API (полный контроль копирайта) — только для партнёров Meta;
+для нашей Страницы недоступен (проверить актуальность).
+Примечание: манифест объявляет claims_check=auto (для Reels); для обычных видео
+модуль честно возвращает supported=false — согласовать с ядром фолбэк на ручной
+чекпойнт (§16).
+
+--------------------------------------------------------------------------------
+9. ОШИБКИ И ИХ ОБРАБОТКА
+--------------------------------------------------------------------------------
+Код/статус                          → Таксономия       → Действие
+190 OAuthException (истёк/невалиден) → AUTH_EXPIRED      → перевыпуск Page token из
+                                                          user token, retry 1 раз;
+                                                          иначе AUTH_REQUIRED
+190 + 458 (app not installed)        → AUTH_REQUIRED     → алерт «подключите
+                                                          Facebook заново»
+190 + 460 (password changed)         → AUTH_REQUIRED     → алерт владельцу
+190 + 463 (expired)                  → AUTH_EXPIRED      → перевыпуск/реавторизация
+190 + 464 (unconfirmed user)         → AUTH_REQUIRED     → владельцу: подтвердить аккаунт
+190 + 467 (invalid access token)     → AUTH_EXPIRED      → перевыпуск токена
+190 + 492 (нет роли на Странице)     → AUTH_REQUIRED     → права Страницы; алерт
+102 API Session                      → AUTH_EXPIRED      → перевыпуск токена
+4 / 17 (Platform: app/user)          → RATE_LIMIT        → backoff; пауза по
+32 (Page вызовы с User token)                             X-App-Usage / X-Business-
+613 (custom limit, +1996)                                 Use-Case-Usage и
+341 (application limit)                                   estimated_time_to_regain_access
+80001 (Page/System token, BUC)       → RATE_LIMIT        → пауза Страницы до восстановления
+10 / 200–299 / 283 (нет permission)  → AUTH_REQUIRED     → переподключить с нужными
+3 (API Method)                                            scopes; не помогло → FATAL
+100 invalid parameter                → MEDIA_INVALID     → ошибка с деталями параметра
+1363040 (aspect) / 1363127 (res)     → MEDIA_INVALID     → «файл не соответствует
+1363128 (duration) / 1363129 (fps)                        требованиям Reels» + причина
+382 (file too small) / 6000          → MEDIA_INVALID     → заменить файл
+389 (не смогли скачать видео по URL) → MEDIA_INVALID     → для file_url; у нас handle
+210 (user not visible)               → FATAL             → ошибка + алерт
+1 / 2 (API unknown/service)          → TRANSIENT         → ретраи backoff
+6001 (проблема загрузки видео)       → TRANSIENT         → 1–2 ретрая, затем MEDIA_INVALID
+5xx / timeout / connection           → TRANSIENT         → ретраи 1,2,4,8,16 с (max 5)
+368 (temporary block, policy)        → PLATFORM_REJECTED → ошибка + ПАУЗА платформы
+                                                          + алерт владельцу
+506 (duplicate post)                 → PLATFORM_REJECTED → НЕ ретраить; проверить
+                                                          external_id: возможно,
+                                                          уже опубликовано
+1609005 (link scrape, посты v1.1)    → PLATFORM_REJECTED → ошибка ссылки
+status=error (video_status /        → PLATFORM_REJECTED  → сохранить video_id, причину,
+processing_phase.error /             (или MEDIA_INVALID  показать владельцу
+upload_failed)                        по тексту)
+copyright matches_found=true         → CLAIM_BLOCKED     → пропуск слота, следующий
+                                                          кандидат (backlog)
+Ошибки авторизации: 401/invalid_token → refresh → retry 1 раз; не удалось →
+  AUTH_REQUIRED → пауза + алерт (03_API_STANDARDS §1.5).
+Спецкейс (аналог YouTube, инцидент 24.09): если сбой произошёл ПОСЛЕ появления
+  video_id (finish/publish/thumbnails/статус), модуль ОБЯЗАН сохранить video_id
+  и release_url, повторить идемпотентный шаг и не переводить строку в «ERROR без
+  URL». Статус досчитывается через GET /{video-id}?fields=status.
+Модерация Meta: контент проходит автоматические проверки; при нарушении правил —
+  368 (временная блокировка), скрытие/ограничение поста, ограничение Страницы.
+  API не отдаёт полную картину модерации: при 368 — пауза + алерт, обход
+  (новые токены/приложения) ЗАПРЕЩЁН.
+Тексты для владельца — по-русски: что случилось, что делать (03_API_STANDARDS §4).
+
+--------------------------------------------------------------------------------
+10. ПРИМЕЧАНИЯ ПО ПРИЛОЖЕНИЮ META
+--------------------------------------------------------------------------------
+* Тип приложения: Business (Meta for Developers); продукт — Facebook Login.
+* Владелец — админ приложения → достаточно Development Mode: permissions
+  выдаются пользователю с ролью на приложении, App Review не нужен. Advanced
+  Access / Business Verification / App Review — только для чужих страниц
+  (проверить актуальность).
+* Наша Страница: «Точка наблюдения», ID 61594683901231; перед боем проверить
+  tasks в /me/accounts: должен быть CREATE_CONTENT (и MANAGE для отладки).
+* Redirect URI: HTTPS-адрес сервиса авторизации оркестратора; App Domains
+  заполнить; для локальных тестов допустим localhost (проверить).
+* App Secret — только .env (600). Рекомендуется appsecret_proof для вызовов
+  (усиление запросов, официальный механизм; см. Secure Requests) — включаем,
+  если не мешает отладке.
+* Токены — только токен-брокер (600), маскирование в логах, аудит в publish_log
+  (03_API_STANDARDS §6).
+* Meta Business Suite: Страница в аккаунте владельца; при желании — привязка к
+  бизнес-портфелю и System User token (см. §3).
+* Data Use Checkup — ежегодная процедура для приложений с Advanced Access;
+  нам не требуется, пока работаем в Standard/Development (проверить).
+
+--------------------------------------------------------------------------------
+11. КОНФИГ МОДУЛЯ (пример секции config.yaml)
+--------------------------------------------------------------------------------
+platforms:
+  facebook:
+    enabled: false                 # включаем после приёмки на тестовой Странице
+    video_variant: vertical        # vertical (Reels 9:16) | wide (видео 16:9);
+                                   # сейчас в config.yaml стоит wide — сменить
+                                   # при переключении основного контента на Reels
+    audio_profile: meta_safe       # reserved
+    daily_limit: 5                 # предохранитель ядра (Meta Reels API — 30/24 ч)
+    integration_id: ""             # для postiz-адаптера (совместимость)
+    page_id: "61594683901231"      # «Точка наблюдения»
+    module:                        # НОВЫЕ поля модуля
+      publish_kind: auto           # auto | reel | video
+                                   # auto: 9:16 и ≤90 с → reel, иначе video
+      early_upload: true
+      early_upload_hours: 24       # за сколько грузить до слота
+      claims_checkpoint_hours: 2   # за сколько до слота спросить про клеймы
+                                   # (только для обычных видео; Reels — auto)
+      hold_state: scheduled        # scheduled | draft (Reels при early_upload)
+      poll_interval_sec: 30        # опрос processing → ready
+      default_description: ""      # при необходимости (шаблоны — в ядре)
+engines:
+  facebook: "module:facebook"      # или "postiz" (совместимость)
+Примечания:
+  * тестовый контур: добавить ID тестовой Страницы в
+    test_publish.test_integration_ids, иначе fail-closed запретит тестовую
+    публикацию;
+  * при включении facebook без модуля ядро обязано упасть fail-fast
+    (02_MODULE_STANDARD §5) — engines.facebook задать вместе с enabled: true.
+
+--------------------------------------------------------------------------------
+12. ТЕСТЫ
+--------------------------------------------------------------------------------
+Unit (моки HTTP, injectable transport):
+  * Reels: start (парсинг video_id/upload_url), upload (заголовки Authorization/
+    offset/file_size), resume по bytes_transfered, finish (SCHEDULED/PUBLISHED,
+    конвертация времени в UNIX, окно 10 мин–29 дней);
+  * видео: POST /{app-id}/uploads → upload:{session} → handle → /videos с
+    fbuploader_video_file_chunk, published=false + scheduled_publish_time;
+  * prepare(): 16:9 → Reels (MEDIA_INVALID), длительность > 90 с, разрешение
+    < 540×960, кодеки/аудио (ffprobe-фикстуры);
+  * маппинг ошибок: 190(+458/460/463/467/492), 102, 4/17/32/613/341/80001,
+    10/200–299/283, 100/1363040/1363127/1363128/1363129/382/389/6000, 6001,
+    368, 506, 210, 1/2, 5xx/timeout; тексты ошибок по-русски;
+  * auth_status: debug_token is_valid true/false, expires_at=0; отсутствие
+    CREATE_CONTENT в tasks → предупреждение; перевыпуск Page token из user token;
+  * идемпотентность: повторный finish/publish не создаёт второй объект;
+    обработка 506 (проверка external_id);
+  * check_claims: copyright_check_information in_progress/complete,
+    matches_found true/false, supported=false для обычного видео;
+  * чтение X-App-Usage / X-Business-Use-Case-Usage → пауза/backoff.
+Contract (тестовая Страница):
+  * полный цикл Reel: start → upload → finish SCHEDULED (+2 мин) →
+    get_status → published; release_url открывается;
+  * полный цикл обычного видео: uploads → handle → /videos (published=false,
+    слот +2 мин) → published;
+  * удаление и снятие публикации (по возможности — проверить);
+  * лимит/пауза: имитация 80001 (unit).
+Dry-run: без реальных вызовов (флаг конфига).
+
+--------------------------------------------------------------------------------
+13. КРИТЕРИИ ПРИЁМКИ
+--------------------------------------------------------------------------------
+[ ] Манифест заполнен; capabilities честные (claims_check: auto для Reels,
+    supported=false для обычных видео — согласовано с ядром)
+[ ] validate_config + пример конфига из §11 валидны
+[ ] auth_status() (debug_token + tasks) понятен владельцу; перевыпуск Page
+    token из user token; AUTH_REQUIRED → пауза + алерт
+[ ] Reels: start/upload/finish (SCHEDULED и PUBLISHED), возобновление загрузки,
+    video_id и release_url сохранены
+[ ] Видео: Resumable Upload (handle) + /videos (published=false + scheduled)
+[ ] Публикация происходит в назначенное время БЕЗ участия системы (проверено
+    на тестовой Странице)
+[ ] get_status/update/delete работают; video_id не теряется при частичных ошибках
+[ ] check_claims: Reels — auto; обычные видео — ручной чекпойнт (честный
+    supported=false)
+[ ] Ошибки маппятся в таксономию §9; 368/506/80001 не ретраятся вслепую
+[ ] Лимиты: X-App-Usage / X-Business-Use-Case-Usage читаются; 4/17/32/613/80001
+    → пауза + алерт
+[ ] Тесты зелёные; контракт на тестовой Странице пройден
+[ ] Наблюдаемость: module.* в publish_log, метрики, алерты (03_API_STANDARDS §7)
+[ ] README.txt модуля + этот документ обновлены
+[ ] Откат проверен: engines.facebook → "postiz" (или enabled: false) не ломает
+    ядро и данные
+
+--------------------------------------------------------------------------------
+14. ПЛАН ВНЕДРЕНИЯ
+--------------------------------------------------------------------------------
+1) API-клиент Graph API + OAuth через брокер + auth_status (debug_token)
+2) Reels: start/upload/finish + SCHEDULED + get_status; unit-тесты
+3) Обычное видео: Resumable Upload (handle) + /videos + тесты
+4) Интеграция в ядро через контракт (publisher/scheduler), запись external_id/
+   release_url/scheduled_at
+5) check_claims: Reels auto + ручной чекпойнт для обычных видео
+6) Тестовый контур: полный цикл на тестовой Странице, dry-run
+7) Боевое включение (engines.facebook=module:facebook), мониторинг 3 дня
+8) v1.1 (по решению владельца): обложка, фото/текст-посты, правка метаданных
+
+--------------------------------------------------------------------------------
+15. ССЫЛКИ
+--------------------------------------------------------------------------------
+Graph API (общий обзор, версия):     https://developers.facebook.com/docs/graph-api
+Версионирование API (≥2 года):       https://developers.facebook.com/docs/graph-api/guides/versioning
+Changelog/версии:                    https://developers.facebook.com/docs/graph-api/changelog
+Reels Publishing (start/upload/finish): https://developers.facebook.com/docs/video-api/guides/reels-publishing
+Публикация видео на Страницу:        https://developers.facebook.com/documentation/video-api/guides/publishing
+Resumable Upload API:                https://developers.facebook.com/docs/graph-api/guides/upload
+Page Videos (reference):             https://developers.facebook.com/docs/graph-api/reference/page/videos
+Video Thumbnails (обложка):          https://developers.facebook.com/docs/graph-api/reference/video/thumbnails
+Pages API — посты (/feed, /photos):  https://developers.facebook.com/docs/pages-api/posts
+Pages API — обзор и Tasks:           https://developers.facebook.com/docs/pages-api/overview
+Access Tokens:                       https://developers.facebook.com/docs/facebook-login/access-tokens
+Long-lived Page token:               https://developers.facebook.com/documentation/facebook-login/guides/access-tokens/get-long-lived
+Ошибки токенов/debug_token:          https://developers.facebook.com/docs/facebook-login/access-tokens/debugging-and-error-handling
+Handle Errors (коды Graph API):      https://developers.facebook.com/docs/graph-api/guides/error-handling
+Rate Limits (Platform/BUC):          https://developers.facebook.com/docs/graph-api/overview/rate-limiting
+Уровни доступа (Standard/Advanced):  https://developers.facebook.com/docs/graph-api/overview/access-levels
+Video API — обзор требований:        https://developers.facebook.com/docs/video-api/overview
+Secure Requests (appsecret_proof):   https://developers.facebook.com/docs/graph-api/guides/secure-requests
+System User token:                   https://developers.facebook.com/docs/marketing-api/businessmanager/systemuser
+Спецификации видео (лента):          https://www.facebook.com/business/help  (раздел Video specs)
+(Все ссылки — официальные Meta; проверены 24.09.2026. Лимиты и версии
+перепроверять не реже 1 раза в квартал — 03_API_STANDARDS §5.2.)
+
+--------------------------------------------------------------------------------
+16. ОТКРЫТЫЕ ВОПРОСЫ
+--------------------------------------------------------------------------------
+1) Routing контента: шортсы → Reels, длинные видео → обычное видео? Reels
+   ограничены 3–90 с — длинные в них не пройдут. Предлагается: shorts→Reels,
+   long→video (уточнить у владельца).
+2) Перенос/снятие времени после загрузки (schedule_publish post-upload):
+   документировано не полностью — проверить на практике; если нельзя —
+   at_slot либо delete+пересоздание.
+3) DRAFT-механика Reels: как публиковать черновик позже (повторный finish?
+   отдельный вызов?) — проверить; до выяснения используем SCHEDULED.
+4) Обложка: включать ли в MVP; нужны доп. scopes (pages_read_user_content/
+   pages_manage_engagement) — расширяет запрашиваемые права.
+5) publish_video: противоречие в официальных доках (Video API — не упоминает;
+   Pages API Posts — требует для видео) — проверить в App Dashboard и запросить
+   при подключении.
+6) Верхние лимиты обычных видео (длительность/размер) — уточнить в Meta
+   Business Help Center (Video specs).
+7) Формат release_url (permalink видео/Reels): facebook.com/{video_id} или
+   /watch/?v={id} (может понадобиться GET /{video-id}?fields=permalink_url) —
+   проверить на тестовой Странице.
+8) Фолбэк claims_check: согласовать с ядром поведение «auto в манифесте, но
+   supported=false для обычных видео» (ручной чекпойнт для них).
+9) Нужен ли System User token (устойчивость к отзывам user-токена) — решение
+   владельца; для MVP не требуется.
+10) Ограничения длины title/description (Meta в доках не нормирует) — задать
+    конфигом ядра.
+================================================================================

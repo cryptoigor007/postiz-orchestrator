@@ -1,0 +1,190 @@
+================================================================================
+  01. АРХИТЕКТУРА СИСТЕМЫ (AS-IS, версия 8.4.55)
+================================================================================
+Документ описывает систему «как есть» на 24.09.2026, чтобы разработчик понимал,
+на что накладывается модульная организация (02_MODULE_STANDARD).
+
+--------------------------------------------------------------------------------
+1. НАЗНАЧЕНИЕ СИСТЕМЫ
+--------------------------------------------------------------------------------
+Оркестратор контента: берёт готовые видео (VideoMaker / ShortsMaker), раскладывает
+их по расписанию и публикует на платформы (YouTube, Telegram, далее — другие),
+ведёт статусы, ссылки, разбирает ошибки, показывает панель и управляется
+Telegram-ботом.
+
+Ключевые свойства:
+  * публикация по слотам с защитами (лимиты, warmup, анти-коллизии);
+  * связка «YouTube-видео → Telegram-пост со ссылкой»;
+  * проектность (проекты/ниши: tochka и др.);
+  * всё состояние — в локальной SQLite на сервере;
+  * управление: панель (webapp), Telegram-бот, MCP-инструменты.
+
+--------------------------------------------------------------------------------
+2. ГДЕ ЧТО ЛЕЖИТ (RUNTIME)
+--------------------------------------------------------------------------------
+Хост: pve (192.168.100.40), путь /opt/orchestrator
+Служба: systemd orchestrator.service
+  ExecStart: python -m orchestrator.main --config config.yaml --db data/data.sqlite
+             --daemon --health-port 8080 --watch-roots /mnt/video /mnt/ssd_src
+Прочее рядом:
+  /opt/orchestrator/.env        — секреты (токены, ключи)            [chmod 600]
+  /opt/orchestrator/config.yaml — конфигурация (в git НЕ хранится, есть config.example.yaml)
+  /opt/orchestrator/data/data.sqlite — БД
+  /opt/orchestrator/venv        — python-окружение
+  /opt/orchestrator/scripts/    — операционные скрипты (+ infra_watchdog.py)
+Таймеры: orchestrator-watchdog.timer, infra-watchdog.timer, orch-backup.timer,
+         net-watchdog.timer, cloudflared-webapp.service (туннель панели)
+MCP-серверы (для ассистентов): scripts/mcp_server.py, scripts/postiz_mcp_server.py
+
+--------------------------------------------------------------------------------
+3. КОМПОНЕНТЫ ЯДРА (src/orchestrator/*.py)
+--------------------------------------------------------------------------------
+main.py            — сборка компонентов, CLI, демон.
+runner.py          — главный цикл (watch → distribute → status sync → link update
+                     → telegram send → backup и т.д.), интервалы.
+watcher.py         — сканирование папок (/mnt/video, /mnt/ssd_src), стабильность
+                     файлов, определение long_video / shorts / thematic.
+db.py              — SQLite-обёртка, схема, publish_log, настройки.
+config.py          — pydantic-модель конфига (AppConfig, PlatformCfg, ProjectCfg...).
+scheduler.py       — слоты, распределение, отправка due-постов, waiting_for_youtube,
+                     schedule/refresh telegram links, backlog-слоты.
+slots.py/sched_settings.py/schedule_guard.py — расчёт слотов, overrides, защиты.
+publisher.py       — создание постов (резерв строк, идемпотентность, лимиты,
+                     загрузка медиа, вызовы Postiz).
+postiz*.py         — клиент Postiz (postiz.py, postiz_http.py, postiz_errors.py,
+                     postiz_factory.py).
+status_sync.py     — опрос Postiz: published/error, release_url, обновление БД.
+link_updater.py    — ссылки YouTube: missing-url (диалог/дефолт), force_update,
+                     refresh thematic.
+telegram_bot.py    — команды/диалоги бота (status, queue, pause, backlog_*,
+                     force_link_update, missing_url...).
+telegram_transport.py / telegram_publish.py — poll/отправка в Bot API, посты.
+backlog.py/tail.py — хвост серий, решения «распределить/ждать», вопросы владельцу.
+safety.py          — лимиты, warmup, cooldown, «серьёзные ошибки» и паузы платформ.
+overflow.py        — защита от переполнения очереди.
+media.py           — подготовка медиа (симлинки/кэш, варианты vertical/wide).
+manual_uploads.py / manual_sources.py — ручные загрузки и источники (engines!).
+webapp_api.py      — HTTP API панели (+ раздача webapp/), ключ доступа.
+backup.py          — бэкапы БД (sqlite backup API), ретенция.
+jobs.py/metrics.py/reload.py/clock.py — фоновые задачи, метрики, hot-reload, время.
+
+Интерфейсы движков (src/orchestrator/engines/):
+  base.py            — абстракция движка платформы (publish/list/update/delete/claims).
+  registry.py        — карта возможностей по имени движка (postiz/direct/n8n/browser).
+  postiz_engine.py   — движок «через Postiz».
+  direct_youtube.py  — прямой YouTube Data API (list_uploads, update_metadata,
+                       delete, check_claims[заглушка]); токен — через брокер.
+  n8n_engine.py      — через n8n (экспериментально).
+  browser_engine.py  — браузерная автоматизация (экспериментально).
+  token_broker_client.py — клиент брокера токенов.
+
+--------------------------------------------------------------------------------
+4. ПОТОКИ (AS-IS)
+--------------------------------------------------------------------------------
+4.1 Скан и появление контента
+    watcher → новые файлы в /mnt/video/** → записи в shorts / long_videos →
+    очередь (platform_queue_state) по платформам.
+
+4.2 Распределение по слотам
+    scheduler/slots: long_video — вт/пт 16:00; shorts_standalone — пн/ср/чт/сб/вс
+    12:00 и 18:00; thematic shorts — 20:30.
+    Для каждого поста создаётся строка entity_platform_status
+      (entity_type, entity_id, platform, status='scheduled'/'ready',
+       postiz_scheduled_for, last_error).
+    Telegram ставится +15 мин от YouTube (telegram_link_delay_min) и ждёт ссылку.
+
+4.3 Публикация
+    publisher.publish(): резерв строки (CAS) → подготовка медиа (media.py) →
+      * Telegram (send_via=bot): отправка Bot API (send_post, кнопка, превью);
+      * YouTube и остальное: postiz.create_post(...) → Postiz грузит В МОМЕНТ слота.
+    Запись postiz_post_id, статус publishing → published/error.
+
+4.4 Синхронизация и ссылки
+    status_sync: опрос Postiz по расписанию → published + release_url (COALESCE).
+    refresh_telegram_links: как только release_url появился → Telegram-строка
+      помечается «ссылка известна» → send_due_telegram_posts отправит пост с
+      ссылкой и кнопкой.
+    Если ссылки нет: Telegram ждёт release_url_timeout_min (90 мин) → потом
+      отправляет БЕЗ ссылки (плейсхолдер). Статус ожидания: last_error=
+      'waiting_for_youtube'.
+    force_update: ручная установка ссылки — СЕЙЧАС ТОЛЬКО для entity_type=
+      'long_video' (ограничение; для шортсов не работает — известный баг).
+
+4.5 Telegram-бот
+    Polling Bot API; whitelist allowed_chat_ids; команды: /status /queue /failed
+    /pause /resume /platforms /calendar /next_video /next_short /distribute
+    /backlog_* /series_end /force_link_update /reload_config /tail /app /help;
+    диалоги: missing_url (запрос ссылки), tail-режим, backlog-вопросы.
+
+4.6 Панель
+    webapp_api.py отдаёт /webapp/** (UI) и /webapp/api/** (метрики, очередь,
+    календарь, force_link, scan, distribute и др.). Доступ по ключу
+    (X-Webapp-Key / ?key=), наружу — через cloudflared-туннель.
+
+4.7 Инфраструктура
+    Брокер токенов: на Postiz-VM (token-broker.service) читает токены из БД
+    Postiz (docker exec psql) и отдаёт по /token?platform=youtube.
+    Postiz: отдельная VM (192.168.100.60), self-hosted, единственная реальная
+    платформа через него сегодня — YouTube.
+    MCP: локальные серверы для ассистентов (оркестратор, Postiz).
+    Наблюдаемость: journald (orchestrator.service), publish_log в БД,
+    infra-watchdog.py (+timer) шлёт алерты в Telegram.
+
+--------------------------------------------------------------------------------
+5. ДАННЫЕ (SQLite: /opt/orchestrator/data/data.sqlite)
+--------------------------------------------------------------------------------
+Таблицы:
+  shorts, long_videos            — сущности контента (описания, хэштеги, пути).
+  entity_platform_status         — ПОСТ-СТРОКИ: (entity_type, entity_id, platform)
+                                   status, postiz_post_id, postiz_scheduled_for,
+                                   release_url, published_at, link_updated_at,
+                                   last_error.
+  platform_queue_state           — состояние очередей платформ (tail, серии и пр.).
+  platform_safety_state          — лимиты/warmup/паузы платформ.
+  platform_uploads               — ручные загрузки (manual uploads).
+  publish_log                    — журнал действий (entity_type, entity_id,
+                                   platform, action, details, created_at).
+  system_state                   — key/value настройки (в т.ч. служебные флаги).
+
+Статусы строк (ключевые): ready → scheduled → publishing → published
+                          (альтернативы: updating, error, waiting_for_youtube в
+                           last_error).
+
+--------------------------------------------------------------------------------
+6. КОНФИГ И СЕКРЕТЫ
+--------------------------------------------------------------------------------
+config.yaml (пример — config.example.yaml):
+  schedules, platforms (post_mode, send_via, publish_chat_id, video_variant,
+  audio_profile, integration_id, project), tail, limits, link_update,
+  description_templates, safety, telegram (allowed_chat_ids), projects,
+  media (symlink_mode, local_prefix, cache_dir), backup, engines (youtube: direct,
+  telegram: postiz), manual_uploads, test_publish, timezone, интервалы.
+.env (НЕ в git): POSTIZ_* (токен, URL), TELEGRAM_* (токен бота, режим),
+  WEBAPP_* (ключ панели, корни), TOKEN_BROKER_URL/SECRET, BROKER_*.
+Секреты не логируются; доступа из панели к токенам нет.
+
+--------------------------------------------------------------------------------
+7. ДЕПЛОЙ И ЭКСПЛУАТАЦИЯ
+--------------------------------------------------------------------------------
+scripts/deploy.sh — безопасный деплой: rsync кода → /opt/orchestrator → рестарт
+службы + синк кнопки меню бота (menu button) + проверки.
+Бэкапы: orch-backup.timer (backup.py), ретенция keep_days; отдельно бэкапы БД и
+конфигов в backups/.
+Откат: предыдущий коммит + повторный деплой; БД бэкапится перед изменениями.
+
+--------------------------------------------------------------------------------
+8. ОГРАНИЧЕНИЯ ТЕКУЩЕЙ АРХИТЕКТУРЫ (ПОЧЕМУ НУЖНЫ МОДУЛИ)
+--------------------------------------------------------------------------------
+1) Платформенная логика размазана: publisher/scheduler/telegram_bot знают
+   про особенности YouTube/Telegram (link-режим, +15 минут, waiting_for_youtube).
+2) Жёсткая связка с Postiz как единственным «настоящим» загрузчиком; Postiz не
+   умеет publishAt (загрузку заранее скрытым с отложенной публикацией).
+3) Ограничения-хардкоды: force_update только long_video; claims — заглушка;
+   проверка ссылок/текстов специфична для YouTube+Telegram.
+4) Нет единого манифеста платформы: возможности, лимиты, правила медиа
+   раскиданы по коду и конфигу.
+5) Добавление новой платформы (Instagram/TikTok/Facebook/Threads) требует
+   правок ядра — вместо добавления одного модуля.
+
+Целевая организация и контракт модуля — в 02_MODULE_STANDARD.txt.
+================================================================================

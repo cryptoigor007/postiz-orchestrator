@@ -1520,3 +1520,14 @@ platforms/base.py. НЕ трогать webapp/БД/config.yaml/Postiz; module:yo
 не включать.
 
 **Проверено.** check.sh → ALL CHECKS PASSED (565 тестов); push в master.
+
+## 2026-09-25 — Ревизия «все коннекторы и модули»: docs/dev/10_ЧЕКЛИСТ_КОННЕКТОРЫ.txt
+
+**Что.** По вопросу владельца «разве YouTube-CLI — это всё?» проведена честная ревизия
+трёх слоёв: код (Grok: P2–P7 + 09), внешние коннекторы (Postiz-каналы, Meta, TikTok,
+YouTube production/верификация, B2, домен/email, Postiz Cloud $29) и решения владельца.
+Живые проверки: Postiz — 2 канала (YouTube testPostiz, Telegram); provider-ключи Meta/
+TikTok не заданы; прод 3823 цикла / 0 ошибок; CI success. Итог: код — не главный
+тормоз; блокеры — доступы владельца (emails, B2, домен, YouTube-верификация, решение $29).
+
+**Проверено.** check.sh → ALL CHECKS PASSED (565 тестов); push в master.

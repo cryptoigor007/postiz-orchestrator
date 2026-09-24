@@ -25,6 +25,7 @@ docs/dev/06_HANDOFF.txt            — ПЕРЕДАЧА В НОВУЮ СЕССИ
 docs/dev/07_GROK_TASK.txt          — полная задача для внешнего исполнителя (Grok)
 docs/dev/08_ОТВЕТ_НА_АНАЛИЗ.txt    — ответ репозитория на анализ P1/Э2 (схема БД, решения)
 docs/dev/09_YT_SCRIPTS_TZ.txt      — ТЗ на YouTube-CLI («руки» ассистента: все операции YouTube)
+docs/dev/10_ЧЕКЛИСТ_КОННЕКТОРЫ.txt — ревизия «все коннекторы»: статус, блокеры, чек-лист владельцу
 
 docs/modules/MODULE_YOUTUBE.txt    — ТЗ модуля YouTube (ЭТАЛОН структуры ТЗ)
 docs/modules/MODULE_INSTAGRAM.txt  — ТЗ модуля Instagram
@@ -43,8 +44,8 @@ docs/modules/MODULE_TELEGRAM.txt   — ТЗ модуля Telegram (Bot API; эт
 СТАТУСЫ ДОКУМЕНТОВ
 --------------------------------------------------------------------------------
 [ГОТОВО]     00_INDEX, 01_ARCHITECTURE, 02_MODULE_STANDARD, 03_API_STANDARDS
-[ГОТОВО]     dev 00–09; ТЗ: YOUTUBE (эталон), INSTAGRAM, TIKTOK, FACEBOOK,
-             THREADS, TELEGRAM; пакет аудита TikTok; ТЗ YouTube-CLI («руки»)
+[ГОТОВО]     dev 00–10; ТЗ: YOUTUBE (эталон), INSTAGRAM, TIKTOK, FACEBOOK,
+             THREADS, TELEGRAM; пакет аудита TikTok; ТЗ YouTube-CLI; ревизия коннекторов
 [ГОТОВО]     Э1 — каркас модульной системы (src/orchestrator/platforms/)
 [ДАЛЕЕ]      Э2 — модуль YouTube (upload + publishAt), затем Э3–Э6
 

@@ -1,0 +1,283 @@
+================================================================================
+  ГИД ДЛЯ GROK: ПОЛНАЯ НАСТРОЙКА ВСЕХ СИСТЕМ И МОДУЛЕЙ
+  (инфраструктура → приложения → ключи → токены → аудиты: по шагам)
+  Версия 1.0 от 25.09.2026
+
+  ГЛАВНАЯ ССЫЛКА НА ГИД (GitHub, публичный):
+    https://github.com/cryptoigor007/postiz-orchestrator
+  Этот файл в гиде:
+    https://github.com/cryptoigor007/postiz-orchestrator/blob/master/docs/dev/11_GROK_SETUP.txt
+================================================================================
+
+0. КАК ПОЛЬЗОВАТЬСЯ ЭТИМ ФАЙЛОМ
+--------------------------------------------------------------------------------
+- Исполнитель: Grok. Общие задачи: docs/dev/07_GROK_TASK.txt (пакеты P1–P7) и
+  docs/dev/09_YT_SCRIPTS_TZ.txt (YouTube-CLI «руки»).
+- Здесь — ВСЁ, что нужно подключить СНАРУЖИ (кабинеты, ключи, токены, аудиты),
+  по каждой системе и каждому модулю, по шагам.
+- Метки ответственности:
+    [GROK]     — делает сам, доступ к репо есть;
+    [ВЛАДЕЛЕЦ] — только владелец (пароли, 2FA, подтверждения, email, деньги);
+    [ЖДЁТ]     — пункт ждёт владельца; Grok продолжает остальное и помечает.
+- Жёсткие правила (из AGENTS.md / 07_GROK_TASK):
+    * секреты — только в .env (chmod 600) и в кабинетах; НИКОГДА в git/чат/логи;
+    * не регистрировать аккаунты от имени владельца, не покупать платное;
+    * чужие аккаунты не трогать; серые методы запрещены;
+    * прод не ломать: engines/platforms включаются только на этапе P5, по одному;
+    * «готово» без доказательств (тесты, check.sh, CI, живая проверка) не бывает.
+
+1. КАРТА СИСТЕМ И ГДЕ ЧТО ЛЕЖИТ (шпаргалка)
+--------------------------------------------------------------------------------
+| Система | Где живёт | Что важно |
+|---|---|---|
+| Оркестратор (прод) | pve: `root@100.95.225.71:/opt/orchestrator` | .env (600); tokens/; сервисы orchestrator, infra-watchdog |
+| Postiz (self-hosted) | VM `postiz@192.168.100.60`, контейнер `postiz` | compose: `/home/postiz/postiz/docker-compose.yml` |
+| Туннель Postiz | pve, сервис `cloudflared-postiz` | quick tunnel — адрес МЕНЯЕТСЯ при рестарте |
+| Отчёт по туннелю | `scripts/postiz_tunnel_sync.sh` (только читает) | печатает, что где поменять |
+| Токен-брокер | `/opt/token_broker.py` на Postiz VM | `TOKEN_BROKER_URL`, `TOKEN_BROKER_SECRET` в .env |
+| GitHub (гид) | repo `cryptoigor007/postiz-orchestrator` | CI: `.github/workflows/ci.yml`; Pages — цель P7 |
+| Локально (Mac) | `~/orch-work` (venv, tools/, tests/) | `./scripts/check.sh`, `./scripts/gui_check.sh` |
+
+Переменные оркестратора (уже есть, менять осторожно): POSTIZ_BASE_URL,
+POSTIZ_API_TOKEN, TOKEN_BROKER_URL, TOKEN_BROKER_SECRET, TELEGRAM_BOT_TOKEN,
+WEBAPP_ACCESS_KEY и др. Добавляемые в P2/P6 (имена фиксированы здесь):
+YT_CLIENT_ID, YT_CLIENT_SECRET (P2); B2_KEY_ID, B2_APP_KEY, B2_BUCKET,
+B2_ENDPOINT (P6.1).
+
+2. ПОРЯДОК РАБОТ И ЗАВИСИМОСТИ (что от чего зависит)
+--------------------------------------------------------------------------------
+| Работа | Внешняя зависимость | Можно ли начинать без неё |
+|---|---|---|
+| P2 модуль YouTube | Свои GCP-ключи (сейчас в окружении Postiz) + верификация канала | ДА: код и contract на testPostiz; [ЖДЁТ] боевой канал/обложки |
+| P3 модуль Telegram | нет | ДА |
+| P4 адаптер Postiz | нет (POSTIZ_* уже есть) | ДА |
+| P5 переключение прода | зелёные P2–P4 | ДА после них |
+| 09 YouTube-CLI | тот же GCP-клиент (Desktop) | ДА: код; живой login — после ключей |
+| P6.1 B2 медиахостинг | аккаунт Backblaze B2 + ключи | ДА: код; публикация IG/Threads — после |
+| P6.2 Instagram | Meta app + email Meta + B2 | [ЖДЁТ] Meta email; код — можно |
+| P6.3 TikTok (inbox) | email TikTok + TikTok app | [ЖДЁТ] email; код — можно |
+| P6.4 Facebook | Meta app + email Meta | [ЖДЁТ] Meta email; код — можно |
+| P6.5 Threads | ОтДЕЛЬНОЕ приложение Threads API + B2 | [ЖДЁТ] Meta email; код — можно |
+| P7 сайт/аудит TikTok | домен + email + демо-видео | ДА: шаблоны; подача — после владельца |
+
+3. ОБЩИЕ ПРАВИЛА КЛЮЧЕЙ И ПЕРЕДАЧИ СЕКРЕТОВ
+--------------------------------------------------------------------------------
+3.1. Хранение: только .env (600) и кабинеты. В git — `.env.example` с ИМЕНАМИ.
+3.2. Передача: владелец кладёт данные в файл на сервере (например
+     `root@100.95.225.71:/root/tg_media_owner/apps.env`, 600) или сам вводит
+     в кабинет. В чат/почту секреты не отправлять.
+3.3. Маскирование: логи/ошибки не содержат токенов; URL с параметрами не печатать.
+3.4. Ротация: при подозрении — перевыпуск в кабинете → обновить .env → рестарт
+     сервиса (orchestrator / postiz), проверить auth_status.
+3.5. Проверка прав после записи: `chmod 600`, `ls -l`; тест `stat` в doctor.
+
+4. YOUTUBE — модуль P2 (+ CLI 09)
+--------------------------------------------------------------------------------
+4.1. Что уже есть:
+     - Канал @testPostiz подключён к Postiz; Postiz хранит YOUTUBE_CLIENT_ID /
+       YOUTUBE_CLIENT_SECRET (в контейнере); оркестратор берёт токен через
+       токен-брокер (engines.youtube: direct).
+     - Два видео опубликованы; кастомные обложки НЕ применились — канал не
+       подтверждён (факт 23.09).
+4.2. Что нужно внешне:
+     [ВЛАДЕЛЕЦ] 1) боевой YouTube-канал;
+                2) подтверждение канала по телефону (без него не работают
+                   кастомные обложки);
+                3) Google Cloud: OAuth-приложение → «In production»
+                   (иначе refresh-токен живёт 7 дней);
+                4) свои client_id/secret — сейчас они в окружении Postiz,
+                   подтвердить, что приложение собственное.
+     [GROK]     ключи перенести в `/opt/orchestrator/.env`
+                (YT_CLIENT_ID/YT_CLIENT_SECRET), токен — в
+                `/opt/orchestrator/tokens/youtube.json` (600, вне git);
+                авто-refresh, invalid_grant → алерт (07 §2.4).
+4.3. Шаги владельцу (Google Cloud Console, console.cloud.google.com):
+     1) создать проект (или взять существующий);
+     2) APIs & Services → Library → включить «YouTube Data API v3»
+        (для аналитики позже — «YouTube Analytics API»);
+     3) OAuth consent screen: External; scopes добавить: youtube.upload,
+        youtube, youtube.force-ssl (+ yt-analytics.readonly — фаза 2);
+     4) Publish App → статус «In production» (предупреждение «не проверено»
+        для своих аккаунтов допустимо);
+     5) Credentials → Create credentials → OAuth client ID → Desktop app →
+        скачать JSON (client_id/client_secret);
+     6) Authorized redirect URIs:
+        - Postiz: `https://<адрес-туннеля>/integrations/social/youtube`
+        - CLI (loopback): `http://127.0.0.1:8765/` (порт из 09 §3);
+     7) передать client_id/secret способом из §3.2.
+4.4. Квота: 10 000 units/сутки; videos.insert ≈ 1600 (≈6 загрузок/сутки).
+     Общая с Postiz и CLI — вести учёт (CLI §6 09). При нехватке:
+     заявка «YouTube API Services – Audit and Quota Extension Form»
+     (потребуется сайт/policy — см. P7), подаёт владелец.
+4.5. Contract-проверка (ТОЛЬКО тестовый канал testPostiz): upload private +
+     publishAt = +10 мин → get_status → published; ссылка сохранена; при
+     падении thumbnails.set ссылка НЕ теряется (регресс 24.09).
+4.6. CLI 09: `yt auth login` (loopback) на Mac; профили test/prod; токен 600;
+     live-прогон — после получения ключей; остальное — по 09 §11.
+
+5. TELEGRAM — модуль P3
+--------------------------------------------------------------------------------
+5.1. Что уже есть: бот-токен (TELEGRAM_BOT_TOKEN в .env оркестратора); канал
+     «Точка наблюдения» подключён к Postiz (TELEGRAM_TOKEN в контейнере);
+     публикация Telegram работает (engines.telegram: postiz).
+5.2. Что нужно: для прямого модуля — бот должен быть администратором канала
+     (проверить фактом: getChat/getMe, отправка тестового сообщения в тестовый
+     канал). Лимит Bot API на видео — 50 МБ: больше — понятная ошибка или
+     отправка по ссылке/сжатие (не падать).
+5.3. Внешних аудитов нет — самая готовая площадка. [GROK] делай P3 без задержек.
+5.4. Сохранить текущее поведение: сравнение «до/после» на тестовом канале
+     (текст + превью над текстом + кнопка; правка после ссылки YouTube).
+
+6. META: FACEBOOK + INSTAGRAM — модули P6.4 / P6.2
+--------------------------------------------------------------------------------
+6.1. Что уже есть: Facebook-аккаунт владельца (вход по телефону), Страница
+     «Точка наблюдения» (ID 61594683901231); профили Instagram и Threads
+     существуют; регистрация Meta for Developers пройдена до шага
+     `Contact info` — [ЖДЁТ] email, который Facebook примет (mail.ru отклонён).
+6.2. [ВЛАДЕЛЕЦ] Дать email → завершить Contact info → создать приложение:
+     1) developers.facebook.com → Create App → тип «Business»;
+     2) продукты: Facebook Login + Instagram Graph API;
+     3) Basic Settings: App Domains = домен туннеля; Valid OAuth Redirect URIs:
+        `https://<адрес>/integrations/social/facebook`
+        `https://<адрес>/integrations/social/instagram`
+     4) скопировать App ID + App Secret → передать по §3.2.
+6.3. Права (какие запрашивает Postiz): pages_show_list, business_management,
+     pages_manage_posts, pages_manage_engagement, pages_read_engagement,
+     read_insights; для Instagram: instagram_basic, instagram_content_publish,
+     instagram_manage_insights (+ instagram_manage_contents — v1.1, удаление).
+6.4. [GROK] Ключи в Postiz: `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`
+     (Instagram использует ЭТО ЖЕ приложение — отдельных INSTAGRAM_* нет).
+     Правка `/home/postiz/postiz/docker-compose.yml` → `docker compose up -d`.
+6.5. [ВЛАДЕЛЕЦ] Один раз пройти OAuth-подключение каналов в панели Postiz
+     (логин/2FA — только на его стороне). После — [GROK] проверить
+     new postiz_integrations и прогнать contract на тестовом посте.
+6.6. Instagram дополнительно: IG-профиль должен быть Professional/Creator и
+     привязан к Странице; для публикации нужен ПУБЛИЧНЫЙ URL медиа (Meta сама
+     скачивает ролик) → B2 (§10). Facebook умеет грузить файл напрямую.
+6.7. Review: пока владелец подключает СВОИ аккаунты и он админ приложения —
+     достаточно Development Mode; App Review и Business Verification нужны
+     только для чужих аккаунтов (пока не нужны).
+6.8. Contract: FB — видео/пост на Страницу; IG — Reels (at_slot, контейнеры
+     TTL 24 ч; ранняя загрузка выключена — A12). Только тестовые записи, потом
+     удаление (IG delete — v1.1 при scope; в v1 просто оставить/скрыть).
+
+7. THREADS — модуль P6.5
+--------------------------------------------------------------------------------
+7.1. ВАЖНО: Meta требует ОТДЕЛЬНОЕ приложение Threads API (в Postiz —
+     `THREADS_APP_ID`, `THREADS_APP_SECRET`; отдельного провайдера в коде Postiz
+     уже есть: threads.provider.ts). Профиль Threads у владельца есть.
+7.2. [ВЛАДЕЛЕЦ] После email Meta: developers.facebook.com → Create App →
+     сценарий «Threads API» → получить THREADS_APP_ID/SECRET; Redirect URI:
+     `https://<адрес>/integrations/social/threads`.
+7.3. Права: threads_basic, threads_content_publish (+ manage_replies/insights —
+     по необходимости). Публикация — по URL медиа → нужен B2 (§10).
+7.4. [GROK] Вписать ключи в compose, перезапустить, проверить подключение;
+
+8. TIKTOK — модуль P6.3 (+ аудит в P7)
+--------------------------------------------------------------------------------
+8.1. Что уже есть: TikTok-аккаунт владельца (пароль есть). БЛОКЕР: вход в
+     developers.tiktok.com невозможен без email аккаунта (проверено фактом).
+     [ЖДЁТ] владелец: email, привязанный к TikTok (или добавить почту в
+     приложении TikTok).
+8.2. [ВЛАДЕЛЕЦ] developers.tiktok.com → Log in → Manage apps → Connect app:
+     1) продукты: Login Kit + Content Posting API;
+     2) scopes: user.info.basic, video.upload, video.publish;
+     3) Redirect URI: `https://<адрес>/integrations/social/tiktok`;
+     4) получить Client Key + Client Secret → передать по §3.2.
+8.3. [GROK] Ключи в Postiz: `TIKTOK_CLIENT_ID`, `TIKTOK_CLIENT_SECRET`.
+8.4. До аудита приложения: публикуются только черновики/приватно
+     (SELF_ONLY, аккаунт private). Наш MVP — inbox (SEND_TO_USER_INBOX),
+     FILE_UPLOAD (не требует верификации домена — A19). Direct Post —
+     после аудита (см. 8.5), до него НЕ включать.
+8.5. Аудит Direct Post (P7): подаёт владелец/агент, Grok готовит пакет —
+     сайт (index/privacy/terms/support по 05_TIKTOK_AUDIT_PACKAGE), демо-видео,
+     описание. Требования: домен + email + Redirect URI + демо. Риск: «внутренние
+     инструменты» могут не пройти → fallback inbox/SELF_ONLY, это допустимо.
+8.6. Contract: черновик дошёл до TikTok (draft_sent) — фиксируем как успех;
+     «опубликовано» для inbox не считаем (A20).
+
+9. POSTIZ — адаптер P4 и путь «через Postiz»
+--------------------------------------------------------------------------------
+9.1. Провайдер → переменные в контейнере Postiz (сейчас НЕ заданы, кроме
+     Telegram/YouTube):
+     | Провайдер | Переменные | Примечание |
+     | Facebook | FACEBOOK_APP_ID, FACEBOOK_APP_SECRET | публикация только в Страницу |
+     | Instagram | те же FACEBOOK_* (отдельных нет) | + публичный медиа-URL |
+     | Threads | THREADS_APP_ID, THREADS_APP_SECRET | отдельное приложение Meta |
+     | TikTok | TIKTOK_CLIENT_ID, TIKTOK_CLIENT_SECRET | до аудита — черновики |
+     | YouTube | YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET | уже есть |
+     | Telegram | TELEGRAM_TOKEN | уже есть |
+9.2. Порядок: правка compose → `docker compose up -d` → в панели Postiz
+     появляются кнопки «Add channel» → владелец подключает каналы → [GROK]
+     проверяет `postiz_integrations` и делает тестовую публикацию.
+9.3. ВАЖНО: после любого перезапуска туннеля обновить MAIN_URL /
+     NEXT_PUBLIC_BACKEND_URL / FRONTEND_URL и Redirect URI в кабинетах —
+     чек-лист печатает `scripts/postiz_tunnel_sync.sh`.
+9.4. Развилка «Postiz Cloud $29/мес» (решение владельца, НЕ подключать без
+     письменного «да»): даёт их verified-приложения + их медиахостинг (снимает
+     Meta/TikTok-стройку и B2). Переезд: аккаунт → подключить каналы → API key →
+     поменять POSTIZ_BASE_URL/POSTIZ_API_TOKEN в .env оркестратора. Нет —
+     продолжаем с §6–8 и B2.
+
+10. B2 — МЕДИАХОСТИНГ ДЛЯ META (P6.1)
+--------------------------------------------------------------------------------
+10.1. Зачем: Instagram/Threads принимают только публичный URL (Meta скачивает
+      ролик сама). У нас домашняя сеть — публичного входа нет.
+10.2. [ВЛАДЕЛЕЦ] backblaze.com → Create Account (без карты) → Bucket
+      (например `orch-media-temp`) → Application Key (keyID + applicationKey) →
+      передать по §3.2. [GROK] может подготовить пошаговую инструкцию со
+      скриншотами, если нужно.
+10.3. [GROK] Куда: Postiz как хранилище (`STORAGE_PROVIDER=s3`, endpoint/region/
+      keyID/applicationKey) И/ИЛИ оркестратор (`B2_KEY_ID`, `B2_APP_KEY`,
+      `B2_BUCKET`, `B2_ENDPOINT`) для media_host P6.1.
+10.4. Правила: отдельный бакет только под временные медиа; случайные имена; TTL
+      ≤ 24 ч с авто-удалением; без листинга; ключи 600; удалять после публикации.
+10.5. Проверка: `curl -I "<ссылка>"` → 200 и `content-type: video/mp4`
+      (не HTML) — см. STORAGE-OPTIONS.md.
+
+11. ДОМЕН И ТУННЕЛЬ (стабильные callback URL)
+--------------------------------------------------------------------------------
+11.1. Проблема: quick tunnel trycloudflare меняет адрес при рестарте → все
+      Redirect URI (Meta/TikTok/Google) ломаются.
+11.2. Варианты: (а) named Cloudflare tunnel на домене (рекомендуется, бесплатно
+      с доменом на Cloudflare); (б) свой домен + DuckDNS/nginx; (в) Postiz Cloud
+      (тоже снимает вопрос). Решение — за владельцем; [GROK] готовит точные
+      шаги под выбранный вариант.
+11.3. При смене адреса обновить: compose (3 переменные) + кабинеты Meta/TikTok/
+      Google + перезапуск postiz; прогон `postiz_tunnel_sync.sh` для контроля.
+
+12. P7 — САЙТ ДЛЯ АУДИТА (GitHub Pages)
+--------------------------------------------------------------------------------
+12.1. [GROK] Делает шаблоны index/privacy/terms/support по
+      docs/dev/05_TIKTOK_AUDIT_PACKAGE.txt; домен/email — плейсхолдеры до
+      получения от владельца (не выдумывать данные).
+12.2. Размещение: GitHub Pages репозитория (ссылка в §14); владелец может дать
+      свой домен/email — подставить.
+12.3. Демо-видео + текст заявки: готовит Grok; подача — после домена/email.
+12.4. Тот же сайт может понадобиться для YouTube quota-расширения и для Meta —
+      делать один раз, аккуратно.
+
+13. ЧЕК-ЛИСТ ВЛАДЕЛЬЦУ (актуальная версия — docs/dev/10; кратко)
+--------------------------------------------------------------------------------
+[ ] 1. Email для Meta (Contact info).
+[ ] 2. Email для TikTok-аккаунта.
+[ ] 3. YouTube: боевой канал + подтверждение (телефон) + GCP «In production».
+[ ] 4. B2: аккаунт/бакет/ключи (0 ₽, без карты).
+[ ] 5. Домен или named tunnel (стабильные callback).
+[ ] 6. Решение по Postiz Cloud ($29/мес): да/нет.
+[ ] 7. Согласовать тестовые аккаунты IG/FB/Threads/TikTok для contract-тестов.
+
+14. ССЫЛКИ
+--------------------------------------------------------------------------------
+- Гид (репозиторий): https://github.com/cryptoigor007/postiz-orchestrator
+- Этот файл: https://github.com/cryptoigor007/postiz-orchestrator/blob/master/docs/dev/11_GROK_SETUP.txt
+- Задача Grok: docs/dev/07_GROK_TASK.txt (§9 — «что нужно от владельца»)
+- YouTube-CLI: docs/dev/09_YT_SCRIPTS_TZ.txt
+- Ревизия коннекторов: docs/dev/10_ЧЕКЛИСТ_КОННЕКТОРЫ.txt
+- Postiz-провайдеры/туннель: docs/PLATFORM_SETUP.md
+- Статус Meta/TikTok/страницы: docs/POSTIZ_SOCIAL_SETUP_STATUS.md
+- Медиахостинг: docs/STORAGE-OPTIONS.md
+- Решения: docs/dev/04_DECISIONS.txt (A12, A17, A19, A20, Q2)
+- Кабинеты: console.cloud.google.com | developers.facebook.com |
+  developers.tiktok.com | backblaze.com | one.dash.cloudflare.com
+================================================================================

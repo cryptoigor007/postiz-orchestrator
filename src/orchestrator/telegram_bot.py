@@ -365,12 +365,15 @@ def setup_commands(bot: TelegramNotifier, components: dict) -> None:
     def cmd_force_link_update(chat_id: int, arg: str) -> str:
         parts = arg.split()
         if len(parts) < 3:
-            return "Usage: /force_link_update <entity_id> <platform> <url>"
+            return "Usage: /force_link_update <entity_id> <platform> <url> [short|long_video]"
         eid, platform, url = int(parts[0]), parts[1], parts[2]
+        etype = parts[3] if len(parts) > 3 else None
         link_upd = components.get("link_upd")
         if not link_upd:
             return "LinkUpdater not available"
-        ok = link_upd.force_update(eid, platform, url, scheduler=components.get('scheduler'))
+        ok = link_upd.force_update(
+            eid, platform, url,
+            scheduler=components.get('scheduler'), entity_type=etype)
         return "OK" if ok else "Failed"
 
     def cmd_reload_config(chat_id: int, arg: str) -> str:

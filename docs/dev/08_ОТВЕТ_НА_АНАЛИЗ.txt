@@ -1,0 +1,95 @@
+ОТВЕТ НА АНАЛИЗ ПОСТАВКИ (P1/Э2) — от стороны репозитория
+Дата: 24.09.2026. Проверено по актуальному master: commit 720298f,
+./scripts/check.sh → ALL CHECKS PASSED (558 тестов), версия 8.4.55.
+Baseline зелёный. Первое действие при вливании: git pull → ./scripts/check.sh.
+
+Разбор принят, границы ты указал верно. Ниже — фактические ответы по местам,
+где была неизвестность, и решения. Секретов/доступов тут нет и не будет:
+все такие вещи делаются только на машине.
+
+1. СХЕМА БД — ровно по репо (src/orchestrator/db.py), не угадывать
+1.1. entity_platform_status:
+     entity_type, entity_id, platform, status, postiz_post_id, postiz_scheduled_for,
+     published_at, release_url, link_updated_at, last_error, deleted_at,
+     deleted_reason, cascade_from. Колонки updated_at НЕТ.
+1.2. publish_log:
+     id, entity_type, entity_id, platform, action, details, created_at.
+     Колонка называется details (во множественном числе).
+1.3. waiting_for_youtube — это НЕ status. Хранится как
+     status='ready' AND last_error='waiting_for_youtube'; опора по времени —
+     postiz_scheduled_for (строка telegram). В scheduler для плейсхолдера
+     используется COALESCE(y.postiz_scheduled_for, y.published_at) youtube-строки.
+     Алерт «застрял»: telegram-строка (ready + waiting_for_youtube) с
+     postiz_scheduled_for <= now−30 мин; порог вынести в конфиг.
+1.4. QUOTA/AUTH: типизированных кодов в ядре пока нет (появятся с модулями,
+     ModuleErrorCode). Не изобретай их. Для P1: смотри фактические action,
+     которые пишут publisher.py/status_sync.py (upload_fail, create_fail,
+     safety_block, orphan_* и т.д.), и тексты last_error — матч по тем строкам,
+     что реально встречаются в БД; тестовые строки бери из живой БД/журнала.
+
+2. ОТВЕТЫ ПО ТВОИМ ЗАМЕЧАНИЯМ
+2.1. /force_link_update: команда бота делегирует в link_updater.force_update —
+     правка в link_updater закрывает и команду. Реализация: entity_type брать из
+     самой записи (SELECT entity_type ...), обновлять/логировать его;
+     thematic-refresh — только для long_video (у шортсов нет дочерних тематических
+     описаний). Прочие long_video-места в telegram_bot.py (по текущему master:
+     110/134/141 — диалог «пропавшая ссылка», 238/309/389 — списки/выборки) —
+     P1 не расширять; трогать только если команда по смыслу должна работать для
+     шортсов; сомнительное фиксируй в 04_DECISIONS.
+2.2. auth_status-алерт: эндпоинта /webapp/api/modules_status НЕТ. В ядре есть
+     только функция platforms.modules_status() (для панели; выйдет в P2.8/P5).
+     В P1 оставить: «застрявшие waiting» + всплеск upload_fail/create_fail.
+     Алерты по токенам (expiry/refresh/invalid_grant) — только с P2, источник —
+     token_store модуля, а не выдуманный эндпоинт.
+2.3. core_min: enforcement в манифесте отсутствует (поле хранится, не проверяется).
+     Решение: core_min "8.5.0" оставляем как целевую веху; версию ядра поднимаем
+     до 8.5.0 в P5 перед включением модулей. До P5 module:youtube в проде не
+     включается — противоречия нет.
+2.4. Обложки / кейс 24.09: корень — неверифицированный YouTube-канал (шаг
+     владельца: верификация + OAuth-приложение в production). Postiz-путь НЕ
+     чиним (причина внешняя), в модуле best-effort уже заложен. P1 на postiz
+     не расширять.
+2.5. HTTP/ретраи/идемпотентность: да — единый HTTP-клиент ядра обязателен
+     (03_API_STANDARDS); отдельного модуля в репо пока нет — создаётся в P2:
+     ретраи TRANSIENT/RATE_LIMIT с backoff, таймауты, маскирование. Свой urllib
+     в модуле не оставлять. Upload обязан быть идемпотентным на уровне api
+     (по entity_id), не только в daily_ahead; 308/resume — сохранять session/offset.
+2.6. daily_ahead: systemd-таймер не нужен — в runner уже есть цикл
+     (watch/sync/recon/backup); добавь пятый интервал с временем 09:00 и
+     идемпотентностью; конфиг daily_job_at.
+2.7. Contract-тест testPostiz: выполняется на нашей стороне (на машине), не
+     удалённо. Ты готовишь dry-run, раннер с флагом и чек-лист ожиданий.
+     Секреты/токены не передаются и в архивах не ходят — только .env на машине.
+2.8. Wiring: каркас уже в репо — platforms/__init__.py: resolve_engine,
+     ModuleRegistry, load_modules(engines, deps=...), modules_status().
+     load_modules намеренно пропускает postiz/n8n/browser (их обслуживает старый
+     слой engines/). P2.8: в publisher/scheduler выбирать модуль по engines.youtube
+     при флаге; дефолт — postiz; в проде не включать.
+2.9. Скелеты P3/P4: в engines и прод не включать (ни module:telegram, ни
+     module:postiz). P3 — переносом фактических файлов из репо
+     (telegram_publish.py, telegram_transport.py); P4 — на фактическом клиенте
+     (postiz.py / postiz_http.py), без угадывания методов.
+2.10. A42–A46: принимаем; при вливании перенумеруем в общий 04_DECISIONS.
+2.11. base.py в репо обновлён после твоей копии (чистка vulture, commit 031e60c):
+      бери свежую версию, свои изменения переноси поверх, не затирай.
+2.12. Заготовка манифеста YouTube: claims_check = manual (не unsupported):
+      модуль возвращает supported=false, а ручной чекпойнт делает ядро — это и
+      есть manual по 02_MODULE_STANDARD/04_DECISIONS. Приведи к ТЗ §11.
+
+3. ОБЯЗАТЕЛЬНЫЙ ПОРЯДОК
+0) git pull; ./scripts/check.sh.
+1) P1-срез: force_update по 2.1; watchdog по 1.1–1.4; тесты на реальной схеме
+   Database, не только FakeDB; check.sh → commit.
+2) P2-срез: api по 2.5; module; register+deps; wiring по 2.8; полный unit-набор
+   ошибок; daily_ahead по 2.6; check.sh → commit.
+3) Contract на testPostiz (наша сторона) → вывод в SESSION_LOG.
+4) P5: обкатка ≥ суток, сравнение с postiz, проверенный откат.
+   Только потом P3 и P4. До P5 module:youtube/module:telegram в проде не включаются.
+
+4. ГРАНИЦЫ
+- Секреты/ключи/доступы не пересылаются; регистрации/покупки/аккаунты — владелец.
+- Никаких «готово в проде» без прогонов: отчёт = что сделано + вывод проверок.
+
+Ждём: P1-дифф против текущего master и далее P2 по §3.2. Твои предложения:
+черновик wiring — ок после P1; SQL-список не нужен (схема выше); построчный
+ревью — не приоритет, приоритет — тесты и contract.

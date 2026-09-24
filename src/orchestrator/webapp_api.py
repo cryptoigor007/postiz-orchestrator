@@ -425,6 +425,7 @@ class WebAppAPI:
                     fid = 0
                 fplat = str(data.get("platform") or "").strip()
                 furl = str(data.get("url") or "").strip()
+                ftype = str(data.get("entity_type") or "").strip() or None
                 link_upd = self.comps.get("link_upd")
                 if link_upd is None:
                     return 503, {"error": "link_updater unavailable"}, "application/json"
@@ -433,7 +434,7 @@ class WebAppAPI:
                         "application/json"
                 if not re.match(r"^https?://", furl, re.I):
                     return 400, {"error": "url must be http(s)"}, "application/json"
-                ok = link_upd.force_update(fid, fplat, furl)
+                ok = link_upd.force_update(fid, fplat, furl, entity_type=ftype)
                 return (200, {"ok": True}, "application/json") if ok else (
                     400, {"error": "force_link_failed"}, "application/json"
                 )

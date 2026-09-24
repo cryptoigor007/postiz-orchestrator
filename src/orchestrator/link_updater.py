@@ -71,29 +71,58 @@ class LinkUpdater:
                 acted += 1
         return acted
 
-    def force_update(self, entity_id: int, platform: str, new_url: str, scheduler=None) -> bool:
-        """Set release_url and drive refresh path (L44)."""
+    def force_update(
+        self,
+        entity_id: int,
+        platform: str,
+        new_url: str,
+        scheduler=None,
+        entity_type: str | None = None,
+    ) -> bool:
+        """Set release_url for any entity_type and drive refresh path (L44).
+
+        Работает для short, long_video и любого другого entity_type в
+        entity_platform_status (раньше — только long_video).
+        Если entity_type не задан, а под (entity_id, platform) подходит несколько
+        записей (id у short и long_video независимы и могут совпадать), берётся
+        запись без release_url — её обычно и чинят; при равенстве — long_video.
+        """
         if not (new_url.startswith("http://") or new_url.startswith("https://")):
             return False
-        row = self.db.fetchone(
-            "SELECT postiz_post_id FROM entity_platform_status "
-            "WHERE entity_type='long_video' AND entity_id=? AND platform=?",
-            (entity_id, platform),
-        )
+        if entity_type:
+            row = self.db.fetchone(
+                "SELECT entity_type, postiz_post_id, release_url "
+                "FROM entity_platform_status "
+                "WHERE entity_type=? AND entity_id=? AND platform=?",
+                (entity_type, entity_id, platform),
+            )
+        else:
+            row = self.db.fetchone(
+                "SELECT entity_type, postiz_post_id, release_url "
+                "FROM entity_platform_status "
+                "WHERE entity_id=? AND platform=? "
+                "ORDER BY "
+                "  CASE WHEN release_url IS NULL OR release_url='' THEN 0 ELSE 1 END, "
+                "  CASE entity_type WHEN 'long_video' THEN 0 ELSE 1 END "
+                "LIMIT 1",
+                (entity_id, platform),
+            )
         if not row:
             return False
+        entity_type = row["entity_type"] or "long_video"
         self.db.execute(
             "UPDATE entity_platform_status SET release_url=?, link_updated_at=? "
-            "WHERE entity_type='long_video' AND entity_id=? AND platform=?",
-            (new_url, self.clock.now().isoformat(), entity_id, platform),
+            "WHERE entity_id=? AND platform=? AND entity_type=?",
+            (new_url, self.clock.now().isoformat(), entity_id, platform, entity_type),
         )
-        self.db.log("long_video", entity_id, platform, "force_link_update", new_url)
+        self.db.log(entity_type, entity_id, platform, "force_link_update", new_url)
         # L44: refresh thematic descriptions + telegram links when URL appears
         if scheduler is not None:
-            try:
-                self.refresh_thematic_after_url(entity_id, platform, scheduler)
-            except Exception:
-                logger.exception("force_update thematic refresh failed")
+            if entity_type == "long_video":  # тематические шортсы есть только у длинных
+                try:
+                    self.refresh_thematic_after_url(entity_id, platform, scheduler)
+                except Exception:
+                    logger.exception("force_update thematic refresh failed")
             try:
                 if hasattr(scheduler, "refresh_telegram_links"):
                     scheduler.refresh_telegram_links()

@@ -1451,3 +1451,27 @@ TikTok; правила, команды, стоп-сигналы, критери�
 
 **Примечание.** Неотслеживаемый `src/orchestrator/platforms/youtube/manifest.yaml`
 (ранняя заготовка) не тронут — в задаче отдельный пункт «сверить с ТЗ и включить в P2».
+
+## 2026-09-24 (ночь) — P1 v2 влит: force_update для любого entity_type + алерты watchdog
+
+**Что.** Влита поставка `delivery_p1_v2` (собрана против 720298f) с проверкой и правками:
+- `link_updater.force_update` — любой entity_type (short/long_video): при совпадении id
+  выбирается запись без release_url (при равенстве — long_video); добавлен явный параметр
+  entity_type (бот: `/force_link_update <id> <platform> <url> [short|long_video]`,
+  webapp force_link принимает entity_type); thematic-refresh — только для long_video,
+  telegram-refresh — для всех типов.
+- `scripts/infra_watchdog.py` — алерты: waiting_for_youtube > 30 мин (`ORCH_WAITING_YT_MIN`),
+  всплеск upload_fail/create_fail за 24 ч (≥3), auth/quota-тексты в last_error.
+  Две правки относительно поставки: путь БД по умолчанию `/opt/orchestrator/data/data.sqlite`
+  (в поставке был orchestrator.db — молчаливый no-op) и сравнение времени ISO-строками
+  в локальном времени (SQLite datetime('now') — UTC и ломал бы пороги в МСК).
+- `tests/test_link_updater_force.py` — 7 тестов (включая коллизии id и явный тип).
+- Манифест YouTube (был untracked): `claims_check` → `manual` по ТЗ §11; закоммичен.
+- Доки: `docs/dev/08_ОТВЕТ_НА_АНАЛИЗ.txt`, `docs/dev/p1_v2/{APPLY_P1.md,P1_CHANGELOG.md}`.
+
+**Проверено.** `check.sh` → ALL CHECKS PASSED, 565 тестов; `deploy.sh` → service=active
+health=ok; ручной прогон infra-watchdog на сервере — «infra ok», journal без ошибок;
+push в master.
+
+**Заметка.** module:youtube в прод не включаем (этап P5). Дальше — P2 по
+`docs/dev/07_GROK_TASK.txt`.

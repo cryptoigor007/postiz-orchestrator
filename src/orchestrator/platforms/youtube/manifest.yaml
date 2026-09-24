@@ -1,0 +1,51 @@
+id: youtube
+name: YouTube
+api_version: "Data API v3"
+module_version: "2.0.0"
+core_min: "8.5.0"
+auth:
+  method: oauth2_authorization_code
+  scopes:
+    - youtube.upload
+    - youtube
+    - youtube.force-ssl
+  broker_key: youtube
+capabilities:
+  publish: true
+  early_upload: true
+  schedule_publish: true
+  update_metadata: true
+  delete: true
+  thumbnail: true
+  # manual: API клеймы не отдаёт (check_claims → supported=false), но ядро
+  # делает ручной чекпойнт владельцу — это режим manual (04_DECISIONS).
+  claims_check: manual
+  video: true
+  image: false
+  text: false
+  stories: false
+  public_media_required: false
+limits:
+  posts_per_day: 6
+  rate:
+    rpm: 60
+  quota:
+    unit: "api_units"
+    per_day: 10000
+    cost_upload: 1600
+media:
+  video:
+    container: mp4
+    video_codec: h264
+    audio_codec: aac
+    aspect: ["9:16", "16:9"]
+    max_mb: 256000
+    max_duration_sec: 10800
+  thumbnail:
+    formats: [jpg, png]
+    max_mb: 2
+statuses:
+  published: [published, live]
+  pending:   [processing, scheduled]
+  failed:    [rejected, failed]
+docs: MODULE_YOUTUBE.txt

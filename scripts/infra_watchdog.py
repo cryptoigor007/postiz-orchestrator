@@ -13,6 +13,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta
 from pathlib import Path
 
 STATE = Path("/var/lib/orchestrator-infra-watchdog.json")
@@ -95,6 +96,106 @@ def _health_ok(url: str, headers: dict | None = None, tries: int = 3,
     return False
 
 
+def _db_query(sql: str, args: tuple = ()) -> list[dict]:
+    """SELECT через sqlite3. Схема — src/orchestrator/db.py (без updated_at)."""
+    db_path = os.getenv("ORCH_DB", "/opt/orchestrator/data/data.sqlite")
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        try:
+            cur = conn.execute(sql, args)
+            return [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+
+def _orch_alerts() -> list[str]:
+    """Алерты P1 по реальной схеме БД (db.py).
+
+    entity_platform_status: НЕТ updated_at.
+    waiting_for_youtube — это last_error при status='ready', время — postiz_scheduled_for.
+    publish_log: колонка details (мн.ч.); action — фактические строки publisher
+    (upload_fail, create_fail, safety_block, orphan_* …), не ModuleErrorCode.
+    Время сравниваем ISO-строками в локальном времени (как пишет ядро):
+    datetime('now') в SQLite — UTC и ломал бы пороги в не-UTC поясах.
+    Token/auth_status алерты — с P2 (token_store), не в P1.
+    """
+    out: list[str] = []
+    stuck_min = int(os.getenv("ORCH_WAITING_YT_MIN", "30"))
+
+    # 1) «застрявшие» waiting_for_youtube
+    cutoff_stuck = (datetime.now() - timedelta(minutes=stuck_min)).isoformat()
+    rows = _db_query(
+        """
+        SELECT entity_id, entity_type, platform, postiz_scheduled_for, last_error
+        FROM entity_platform_status
+        WHERE status = 'ready'
+          AND last_error = 'waiting_for_youtube'
+          AND postiz_scheduled_for IS NOT NULL
+          AND postiz_scheduled_for <= ?
+        LIMIT 10
+        """,
+        (cutoff_stuck,),
+    )
+    if rows:
+        ids = ", ".join(
+            f"{r.get('entity_type')}/{r.get('entity_id')}@{r.get('platform')}"
+            for r in rows
+        )
+        out.append(f"waiting_for_youtube: >{stuck_min} мин ({ids})")
+
+    # 2) всплеск upload_fail / create_fail за 24 ч (фактические action из publisher)
+    cutoff_day = (datetime.now() - timedelta(days=1)).isoformat()
+    err_rows = _db_query(
+        """
+        SELECT action, COUNT(*) AS cnt
+        FROM publish_log
+        WHERE created_at >= ?
+          AND action IN (
+            'upload_fail', 'create_fail', 'safety_block',
+            'orphan_cleanup', 'orphan_delete'
+          )
+        GROUP BY action
+        """,
+        (cutoff_day,),
+    )
+    if err_rows:
+        parts = [f"{r['action']}×{r['cnt']}" for r in err_rows]
+        total = sum(int(r["cnt"]) for r in err_rows)
+        if total >= 3:  # антишум: один-два сбоя не алертим
+            out.append(f"publish failures 24ч: {total} ({', '.join(parts)})")
+
+    # 3) last_error с типичными auth/quota текстами (не ModuleErrorCode)
+    auth_rows = _db_query(
+        """
+        SELECT entity_id, entity_type, platform, last_error
+        FROM entity_platform_status
+        WHERE last_error IS NOT NULL AND last_error != ''
+          AND (
+            lower(last_error) LIKE '%quota%'
+            OR lower(last_error) LIKE '%invalid_grant%'
+            OR lower(last_error) LIKE '%unauthorized%'
+            OR lower(last_error) LIKE '%auth%'
+            OR lower(last_error) LIKE '%token%'
+          )
+          AND status NOT IN ('published', 'deleted')
+        LIMIT 5
+        """
+    )
+    if auth_rows:
+        sample = "; ".join(
+            f"{r.get('entity_type')}/{r.get('entity_id')}: "
+            f"{(r.get('last_error') or '')[:60]}"
+            for r in auth_rows
+        )
+        out.append(f"auth/quota last_error: {sample}")
+
+    return out
+
+
 def main() -> int:
     env = _env()
     problems: list[str] = []
@@ -125,6 +226,9 @@ def main() -> int:
             problems.append("опасный сетевой скрипт запущен вручную (война маршрутов)")
     except Exception:
         pass
+
+    # --- дополнительные алерты оркестратора (Пакет 1.2) ---
+    problems.extend(_orch_alerts())
 
     now = time.time()
     state = {}

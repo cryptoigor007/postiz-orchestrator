@@ -1488,3 +1488,21 @@ contract-проверки на реальных аккаунтах — позж�
 YouTube testPostiz уже есть). `06_HANDOFF.txt` §4 обновлён (все модули, начиная с YouTube).
 
 **Проверено.** `check.sh` → ALL CHECKS PASSED (565 тестов); push в master.
+
+## 2026-09-25 — CI починен: config.ci.yaml для тестов (config.yaml не в git)
+
+**Причина.** GitHub Actions падал на шаге Tests (все прогоны, с самого выноса
+config.yaml из git): тесты читают `config.yaml` из корня → 294 FileNotFoundError
+(125 failed + 169 errors). Локально было зелёно, потому что живой config.yaml
+лежит на машине, а в CI файла нет.
+
+**Фикс.** Добавлен `config.ci.yaml` — копия config.example.yaml без секретов, с
+CI-заглушками: `integration_id: ci-youtube-integration / ci-telegram-integration`,
+`test_publish.test_integration_ids` — они же, `allowed_chat_ids: [7004751908]`
+(id владельца уже публичен в AGENTS.md). В `.github/workflows/ci.yml` добавлен шаг
+«Prepare CI config»: `cp config.ci.yaml config.yaml` (до Lint/Tests/GUI-smoke).
+
+**Проверено.** Локально в копии репо с этим конфигом: 565 passed; `scripts/ci_gui_smoke.sh`
+→ GUI-ПРОВЕРКА ПРОЙДЕНА. После push: CI run 36055192932 для 408f9e3 → **success**
+(все шаги зелёные, включая GUI smoke). Исторические красные прогоны старых веток —
+это до фикса; на master CI зелёный.

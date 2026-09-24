@@ -19,12 +19,16 @@ docs/dev/00_INDEX.txt              — этот файл (навигация, с
 docs/dev/01_ARCHITECTURE.txt       — как устроена система сейчас (as-is)
 docs/dev/02_MODULE_STANDARD.txt    — стандарт модульной системы + план миграции
 docs/dev/03_API_STANDARDS.txt      — общие стандарты API/интеграций
+docs/dev/04_DECISIONS.txt          — журнал решений (41) + ответы владельца (тест)
+docs/dev/05_TIKTOK_AUDIT_PACKAGE.txt — пакет для аудита TikTok (инфра, тексты, демо)
+docs/dev/06_HANDOFF.txt            — ПЕРЕДАЧА В НОВУЮ СЕССИЮ (состояние, шаги, команды)
 
 docs/modules/MODULE_YOUTUBE.txt    — ТЗ модуля YouTube (ЭТАЛОН структуры ТЗ)
 docs/modules/MODULE_INSTAGRAM.txt  — ТЗ модуля Instagram
 docs/modules/MODULE_TIKTOK.txt     — ТЗ модуля TikTok
 docs/modules/MODULE_FACEBOOK.txt   — ТЗ модуля Facebook
 docs/modules/MODULE_THREADS.txt    — ТЗ модуля Threads
+docs/modules/MODULE_TELEGRAM.txt   — ТЗ модуля Telegram (Bot API; этап Э3)
 
 ПОРЯДОК ЧТЕНИЯ
 --------------------------------------------------------------------------------
@@ -36,9 +40,10 @@ docs/modules/MODULE_THREADS.txt    — ТЗ модуля Threads
 СТАТУСЫ ДОКУМЕНТОВ
 --------------------------------------------------------------------------------
 [ГОТОВО]     00_INDEX, 01_ARCHITECTURE, 02_MODULE_STANDARD, 03_API_STANDARDS
-[ГОТОВО]     MODULE_YOUTUBE (эталон)
-[ГОТОВО]     MODULE_INSTAGRAM, MODULE_TIKTOK, MODULE_THREADS, MODULE_FACEBOOK
-[В РАБОТЕ]   — (все ТЗ готовы, далее реализация по плану миграции Э1–Э6)
+[ГОТОВО]     dev 00–06; ТЗ: YOUTUBE (эталон), INSTAGRAM, TIKTOK, FACEBOOK,
+             THREADS, TELEGRAM; пакет аудита TikTok
+[ГОТОВО]     Э1 — каркас модульной системы (src/orchestrator/platforms/)
+[ДАЛЕЕ]      Э2 — модуль YouTube (upload + publishAt), затем Э3–Э6
 
 ТЕРМИНЫ (кратко)
 --------------------------------------------------------------------------------

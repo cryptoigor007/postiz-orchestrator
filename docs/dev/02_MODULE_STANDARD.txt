@@ -65,6 +65,7 @@ src/orchestrator/engines/      — СТАРЫЙ слой совместимос�
     image:              false
     text:               false
     stories:            false
+    public_media_required: false              # медиа только по публичному URL (§3.1)
   limits:
     posts_per_day: 6                          # рекомендация (предохранитель ядра — safety)
     rate:         { rpm: 60 }

@@ -302,7 +302,8 @@ Reels (официальные требования Meta):
       early_upload: true
       schedule_publish: true      # время задаётся при загрузке; перенос после —
                                   # проверить (§16), иначе at_slot
-      update_metadata: partial    # набор полей проверить
+      update_metadata: false      # v1: правится часть полей (набор — проверить §7);
+                                  # включим true после проверки
       delete: true
       thumbnail: false            # v1.1 (доп. scopes)
       claims_check: auto          # Reels: auto; обычное видео: supported=false
@@ -482,7 +483,8 @@ platforms:
       publish_kind: auto           # auto | reel | video
                                    # auto: 9:16 и ≤90 с → reel, иначе video
       early_upload: true
-      early_upload_hours: 24       # за сколько грузить до слота
+      early_upload_mode: daily_ahead  # держим «завтра» загруженным (как YouTube)
+      daily_job_at: "09:00"           # ежедневный джоб (за час до сброса квоты)
       claims_checkpoint_hours: 2   # за сколько до слота спросить про клеймы
                                    # (только для обычных видео; Reels — auto)
       hold_state: scheduled        # scheduled | draft (Reels при early_upload)

@@ -387,6 +387,7 @@ Dry-run: без реальных загрузок (флаг конфига).
   statuses: published=[PUBLISH_COMPLETE],
     pending=[PROCESSING_UPLOAD, PROCESSING_DOWNLOAD, SEND_TO_USER_INBOX],
     failed=[FAILED]
+  docs: MODULE_TIKTOK.txt
 Чек-лист:
 [ ] Манифест заполнен; capabilities честные (см. выше)
 [ ] auth_status() корректен; refresh без владельца; invalid_grant → алерт

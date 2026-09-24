@@ -187,6 +187,44 @@ platforms:
 engines:
   youtube: "module:youtube"      # или "postiz" (совместимость)
 
+manifest.yaml модуля (ориентир; полная схема — 02_MODULE_STANDARD §3):
+  id:            youtube
+  name:          YouTube
+  api_version:   "Data API v3"
+  module_version: "1.0.0"
+  core_min:      "8.5.0"
+  auth:
+    method:      oauth2_authorization_code
+    scopes:      ["youtube.upload", "youtube", "youtube.force-ssl"]
+    broker_key:  youtube
+  capabilities:
+    publish:            true
+    early_upload:       true
+    schedule_publish:   true      # publishAt (отложенная публикация на платформе)
+    update_metadata:    true
+    delete:             true
+    thumbnail:          true
+    claims_check:       manual    # check_claims() вернёт supported=false; ручной
+                                  # чекпойнт ядра (§8; Content ID публичным API недоступен)
+    video:              true
+    image:              false
+    text:               false
+    stories:            false
+    public_media_required: false
+  limits:
+    posts_per_day: 6
+    rate: { rpm: 60 }
+    quota: { unit: "api_units", per_day: 10000, cost_upload: 1600 }
+  media:
+    video: { container: mp4, video_codec: h264, audio_codec: aac,
+             aspect: ["9:16", "16:9"], max_mb: 256000 }
+    thumbnail: { formats: [jpg, png], max_mb: 2 }
+  statuses:
+    published: [published]
+    pending:   [processing, scheduled, uploaded]
+    failed:    [rejected, failed]
+  docs: MODULE_YOUTUBE.txt
+
 --------------------------------------------------------------------------------
 12. ТЕСТЫ
 --------------------------------------------------------------------------------
@@ -205,7 +243,7 @@ Dry-run: без реальных загрузок.
 13. КРИТЕРИИ ПРИЁМКИ
 --------------------------------------------------------------------------------
 [ ] Манифест модуля заполнен (capabilities: early_upload/schedule_publish=true,
-    claims_check=unsupported)
+    claims_check=manual; check_claims() возвращает supported=false — ручной чекпойнт ядра)
 [ ] auth_status() корректно сообщает состояние; refresh работает без владельца
 [ ] Ранняя загрузка: видео приватно, publishAt установлен, ссылка сохранена
 [ ] Публикация происходит в назначенное время БЕЗ участия системы

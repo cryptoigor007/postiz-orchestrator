@@ -201,7 +201,8 @@ Caption: ≤2200 символов, ≤30 хэштегов, ≤20 @-упомин�
 6.4 test_publish — публикация на тестовом IG-аккаунте (test_integration_ids).
 
 Capabilities (честные):
-  publish: true; early_upload: true (ОГРАНИЧЕННО 24 ч); schedule_publish: false;
+  publish: true; early_upload: false в v1 (ОГРАНИЧЕННО 24 ч; включается в v1.1 —
+    см. 04_DECISIONS A12); schedule_publish: false;
   update_metadata: false (caption после публикации не меняется; доступно только
     включение/выключение комментариев); delete: true (нужен scope
     instagram_manage_contents); thumbnail: true (обложка Reels);
@@ -237,7 +238,7 @@ Capabilities (честные):
 get_status(external_id): для медиа — GET /<IG_MEDIA_ID>?fields=permalink,...;
 для контейнера (до публикации) — GET /<container_id>?fields=status_code.
 Где хранить container_id: стандарт полей БД этого не описывает — предложение
-ядру: новое поле (module_container_id) или publish_log/details (см. §16, п.1).
+ядру: поле external_sub_id (решено — 04_DECISIONS A10).
 
 --------------------------------------------------------------------------------
 8. КЛЕЙМЫ И ОСОБЕННОСТИ ПЛАТФОРМЫ
@@ -379,7 +380,7 @@ manifest.yaml модуля (ориентир; заполнить по 02_MODULE_
     broker_key:  instagram
   capabilities:
     publish:            true
-    early_upload:       true      # ОГРАНИЧЕННО: контейнер живёт 24 ч (§6.2)
+    early_upload:       false     # v1: at_slot; вкл. v1.1 после проверки (§6.2, 04_DECISIONS A12)
     schedule_publish:   false     # publishAt у платформы нет
     update_metadata:    false     # caption после публикации не меняется
     delete:             true      # нужен scope instagram_manage_contents
@@ -500,7 +501,7 @@ Dry-run: пайплайн без реальных публикаций (флаг
 СТАТУС: все вопросы ниже разобраны — решения и тесты: docs/dev/04_DECISIONS.txt
 
 1) Где хранить container_id (идемпотентность): новое поле в
-   entity_platform_status (module_container_id) или publish_log/details?
+   entity_platform_status (external_sub_id) — решено, см. 04_DECISIONS A10.
 2) Хостинг медиа для Meta: какой вариант выбираем (docs/STORAGE-OPTIONS.md)?
    Влияет на надёжность 9004/2207052 и на окно ранней загрузки.
 3) Точный лимит публикаций: 100 (гайд) vs 50 (media_publish, endpoint) —

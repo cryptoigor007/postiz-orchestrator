@@ -133,33 +133,34 @@ class PlatformModule(ABC):
     def auth_status(self) -> AuthStatus: ...
 
     # ---- по желанию (переопределяются модулями) ----
-    def validate_config(self, cfg: dict[str, Any]) -> list[str]:
+    # noqa ниже: заглушки интерфейса — аргументы не используются телом по определению.
+    def validate_config(self, cfg: dict[str, Any]) -> list[str]:  # noqa
         return []
 
     def prepare(self, media: MediaSpec) -> PreparedMedia:
         return PreparedMedia(path=media.path, kind=media.kind)
 
     def upload(
-        self, media: PreparedMedia, meta: PublishMeta, when: datetime | None = None
+        self, media: PreparedMedia, meta: PublishMeta, when: datetime | None = None  # noqa
     ) -> UploadResult:
         raise NotSupported("upload")
 
-    def schedule_publish(self, external_id: str, when: datetime) -> bool:
+    def schedule_publish(self, external_id: str, when: datetime) -> bool:  # noqa
         raise NotSupported("schedule_publish")
 
-    def publish(self, media: PreparedMedia, meta: PublishMeta) -> PublishResult:
+    def publish(self, media: PreparedMedia, meta: PublishMeta) -> PublishResult:  # noqa
         raise NotSupported("publish")
 
-    def update_metadata(self, external_id: str, patch: PublishMeta) -> bool:
+    def update_metadata(self, external_id: str, patch: PublishMeta) -> bool:  # noqa
         raise NotSupported("update_metadata")
 
-    def delete(self, external_id: str) -> bool:
+    def delete(self, external_id: str) -> bool:  # noqa
         raise NotSupported("delete")
 
-    def get_status(self, external_id: str) -> PublishStatus:
+    def get_status(self, external_id: str) -> PublishStatus:  # noqa
         raise NotSupported("get_status")
 
-    def check_claims(self, external_id: str) -> ClaimsResult:
+    def check_claims(self, external_id: str) -> ClaimsResult:  # noqa
         """По умолчанию: платформа клеймы через API не отдаёт (ручной чекпойнт ядра)."""
         return ClaimsResult()
 

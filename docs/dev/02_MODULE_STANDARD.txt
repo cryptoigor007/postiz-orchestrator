@@ -170,6 +170,8 @@ NotSupported (ядро учитывает это по capabilities).
 entity_platform_status получает поля (миграция совместимая, ALTER TABLE):
   module             TEXT    — id модуля, который публиковал (напр. youtube)
   external_id        TEXT    — ID на платформе (video id и т.п.)
+  external_sub_id    TEXT    — вспомогательный ID (container_id у Instagram,
+                               publish_id/post_id у TikTok, video_id у Facebook)
   publish_mode       TEXT    — early_upload | at_slot | manual
   scheduled_at       TEXT    — время публикации на стороне платформы (publishAt)
   claims_state       TEXT    — unknown | pending | none | claimed
@@ -251,6 +253,8 @@ entity_platform_status получает поля (миграция совмес�
 --------------------------------------------------------------------------------
 11. ОТКРЫТЫЕ ВОПРОСЫ
 --------------------------------------------------------------------------------
+СТАТУС: все вопросы ниже разобраны — решения и тесты: docs/dev/04_DECISIONS.txt
+
 1) Ручной чекпойнт клеймов: канал связи — бот (по умолчанию) или панель?
 2) Ранняя загрузка: за сколько часов грузить (предлагается 24 ч; настраиваемо
    platform.schedule.early_upload_hours).

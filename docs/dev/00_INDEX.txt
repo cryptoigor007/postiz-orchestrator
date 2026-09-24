@@ -22,6 +22,7 @@ docs/dev/03_API_STANDARDS.txt      — общие стандарты API/инт�
 docs/dev/04_DECISIONS.txt          — журнал решений (41) + ответы владельца (тест)
 docs/dev/05_TIKTOK_AUDIT_PACKAGE.txt — пакет для аудита TikTok (инфра, тексты, демо)
 docs/dev/06_HANDOFF.txt            — ПЕРЕДАЧА В НОВУЮ СЕССИЮ (состояние, шаги, команды)
+docs/dev/07_GROK_TASK.txt          — полная задача для внешнего исполнителя (Grok)
 
 docs/modules/MODULE_YOUTUBE.txt    — ТЗ модуля YouTube (ЭТАЛОН структуры ТЗ)
 docs/modules/MODULE_INSTAGRAM.txt  — ТЗ модуля Instagram
@@ -40,7 +41,7 @@ docs/modules/MODULE_TELEGRAM.txt   — ТЗ модуля Telegram (Bot API; эт
 СТАТУСЫ ДОКУМЕНТОВ
 --------------------------------------------------------------------------------
 [ГОТОВО]     00_INDEX, 01_ARCHITECTURE, 02_MODULE_STANDARD, 03_API_STANDARDS
-[ГОТОВО]     dev 00–06; ТЗ: YOUTUBE (эталон), INSTAGRAM, TIKTOK, FACEBOOK,
+[ГОТОВО]     dev 00–07; ТЗ: YOUTUBE (эталон), INSTAGRAM, TIKTOK, FACEBOOK,
              THREADS, TELEGRAM; пакет аудита TikTok
 [ГОТОВО]     Э1 — каркас модульной системы (src/orchestrator/platforms/)
 [ДАЛЕЕ]      Э2 — модуль YouTube (upload + publishAt), затем Э3–Э6

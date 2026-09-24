@@ -1,0 +1,250 @@
+================================================================================
+  ТЗ: YOUTUBE-CLI — «РУКИ» АССИСТЕНТА (полный набор операций с YouTube)
+  Исполнитель: Grok.   Дата: 25.09.2026.   Версия ТЗ: 1.0
+  Репозиторий: postiz-orchestrator (~/orch-work).  Ветка: master.
+================================================================================
+
+0. ЗАЧЕМ ЭТО
+- Ассистенту (OpenCode) нужны «руки»: ОДНА CLI-утилита, покрывающая ВСЁ, что
+  касается YouTube: загрузка, отложенная публикация, обложки, правка метаданных,
+  удаление, статусы, ожидание публикации, списки, поиск, плейлисты, комментарии,
+  субтитры, учёт квот, журнал, диагностика. Аналитика — фаза 2.
+- Требование владельца: «уметь делать всё, что касается YouTube». Владелец ничего
+  не нажимает руками в студии — операции выполняет ассистент через этот CLI.
+- Это НЕ замена этапа P2 (модуль YouTube в ядре, docs/modules/MODULE_YOUTUBE.txt).
+  CLI живёт отдельно и в одной кодовой базе; при P2 разрешено переиспользовать
+  yt_client как основу модуля. Прод не ломать: CLI ничего не делает сам по себе.
+
+1. ОБЛАСТЬ РАБОТ (DEliverables — что сдать)
+1.1. src/orchestrator/yt_client.py — библиотека: OAuth-refresh, HTTP-клиент YouTube
+     Data API v3 (ретраи/бэкофф), resumable upload, маппинг ошибок, учёт квот.
+1.2. src/orchestrator/yt_cli.py — CLI (argparse): команды §4, вывод — человеческий
+     и --json, коды выхода §5, безопасность §8.
+1.3. tools/yt — bash-обёртка (600): `exec` из корня репо с PYTHONPATH=src в venv:
+        ~/orch-work$ ./tools/yt <команда> [флаги]
+1.4. tests/test_yt_client.py + tests/test_yt_cli.py — unit на моках HTTP (§10).
+1.5. docs/YT_CLI.md — короткая эксплуатационная документация + примеры §13.
+1.6. Обновить docs/dev/00_INDEX.txt (строка про этот файл и YT_CLI.md).
+
+2. ОКРУЖЕНИЕ И ЗАВИСИМОСТИ
+2.1. Python 3.11+ (в репо venv — 3.14; CI — 3.12). httpx уже в requirements.txt.
+     Никаких новых зависимостей без нужды.
+2.2. Запуск:  PYTHONPATH=src ./venv/bin/python -m orchestrator.yt_cli <cmd>
+     На сервере: ssh root@<pve> 'cd /opt/orchestrator && PYTHONPATH=src ./venv/bin/python -m orchestrator.yt_cli <cmd>'
+2.3. Команды неинтерактивны: НИКАКИХ prompt()/input(); всё через флаги/env.
+
+3. АВТОРИЗАЦИЯ, ТОКЕНЫ, ПРОФИЛИ
+3.1. OAuth2 installed-app (Google Cloud, Desktop) + loopback redirect; устройство,
+     если доступно, — альтернативно.
+     Scopes: youtube.upload, youtube, youtube.force-ssl
+     (+ yt-analytics.readonly — только фаза 2, отдельным флагом).
+3.2. `yt auth login` — открывает URL авторизации (браузер), ловит код на
+     127.0.0.1:<порт>, меняет на refresh_token, сохраняет:
+       ~/.config/orch/yt/<profile>.json   (chmod 600, {refresh_token, scopes, saved_at, channel})
+     Секреты клиента (client_id/client_secret) — отдельно:
+       env: YT_CLIENT_ID/YT_CLIENT_SECRET  или  файл ~/.config/orch/yt/client.json (600).
+3.3. Профили: --profile test|prod (env YT_PROFILE, по умолчанию test).
+     test — тестовый канал (сейчас testPostiz), prod — боевой (позже).
+3.4. Приоритет источника токена: --token-file/env YT_TOKEN_FILE → профильный файл →
+     TokenBrokerClient (переходный режим, src/orchestrator/engines/token_broker_client.py).
+     Если источник недоступен — понятная ошибка, exit 10.
+3.5. Refresh автоматический (за 5 мин до истечения); invalid_grant → exit 11 +
+     текст «нужно переавторизовать: yt auth login». Никаких «немых» повторов.
+3.6. Защита от чужого канала: env YT_EXPECTED_CHANNEL_ID — после auth проверять
+     channel.id; несовпадение → exit 71, НИЧЕГО не менять.
+3.7. Секреты: не в argv, не в логах (маскировать), файлы 600 (если слабее — отказ).
+
+4. КОМАНДЫ (ПОЛНЫЙ СПИСОК; флаги обязательны к реализации)
+    Глобально: --json  --profile NAME  --dry-run  --timeout SEC  --verbose  --version.
+
+4.1.  auth login [--client-secrets PATH] [--scopes ...]
+      auth check [--json]              — валиден ли refresh, scopes, канал, срок.
+4.2.  doctor [--json]                 — env/файлы/права 600/scopes/канал/учёт квот.
+4.3.  channel [--json]                — id, title, verified, subscriberCount,
+                                        videoCount, uploads-playlist, country.
+4.4.  upload FILE
+        --title T                 (обязателен, если не выведен из имени файла)
+        --description D | --description-file F
+        --tags "a,b,c"            --category ID (по умолчанию 22)
+        --privacy private|unlisted|public   (по умолчанию private)
+        --publish-at WHEN         (RFC3339 или "YYYY-MM-DD HH:MM" или "+2h30m";
+                                   допустим ТОЛЬКО с private)
+        --made-for-kids false     (selfDeclaredMadeForKids)
+        --thumbnail FILE          (best-effort, см. 4.7/8.4)
+        --playlist ID             (после загрузки)
+        --idempotency-key KEY     (защита от дублей, см. §7)
+        --force-quota             (разрешить превысить дневной бюджет)
+      JSON: {ok, video_id, url, privacy, publish_at, thumbnail_set, playlist_added,
+             warnings:[], quota_used}
+      ПОРЯДОК: videoId сохраняется в журнал СРАЗУ после финализации загрузки —
+      ДО обложки/плейлиста (кейс 24.09: обложка падает → ссылка не теряется).
+4.5.  update VIDEO [--title --description(-file) --tags --category --privacy]
+        [--publish-at WHEN | --publish-now]
+4.6.  schedule VIDEO --at WHEN        — private + publishAt (валидирует будущее время).
+      publish VIDEO                   — public (+снять publishAt).
+      unlist VIDEO | private VIDEO
+4.7.  thumb set VIDEO FILE            — thumbnails.set (jpg/png ≤2MB; иначе MEDIA_INVALID)
+      thumb get VIDEO [--out PATH]
+4.8.  delete VIDEO --yes              — без --yes → exit 70, ничего не удаляется.
+      delete-batch --ids a,b,c --yes
+4.9.  info VIDEO [--json]             — snippet+status+statistics+processingDetails.
+      status VIDEO                    — кратко по-русски (private/public/…).
+      wait VIDEO --until processed|published [--timeout 900] [--interval 30]
+4.10. list [--mine] [--channel UC..] [--limit N] [--since DATE] [--json]
+        (playlistItems по uploads-плейлисту; 1 unit/страница).
+4.11. search "ЗАПРОС" [--limit N]     — search.list (100 units! предупреждать).
+4.12. playlists list | create TITLE [--privacy] | add PLAYLIST VIDEO
+                                     | remove PLAYLIST VIDEO
+4.13. comments VIDEO [--limit N] [--include-replies]
+      comment reply THREAD_ID "TEXT"
+      comment moderate COMMENT_ID --status held|published|rejected
+4.14. captions list VIDEO
+      captions upload VIDEO FILE --lang ru --name "Название" [--draft]
+      captions delete CAPTION_ID
+4.15. claims VIDEO                    — API недоступен (Content ID только партнёрам):
+      honest-ответ JSON {ok:false, code:"UNSUPPORTED", studio_url:"https://studio.youtube.com/…"}
+      exit 0 (это справка, не ошибка).
+4.16. quota [--json]                  — израсходовано сегодня (units) по командам,
+      остаток, время сброса (полночь по Тихоокеанскому времени).
+4.17. ledger [--tail N] [--json]      — журнал операций (§9).
+4.18. ФАЗА 2 (после включения API/скоупа): analytics video VIDEO --days N |
+      analytics channel --days N (YouTube Analytics API v2: views,
+      estimatedMinutesWatched, likes, comments, subscribersGained).
+
+5. ВЫВОД, ОШИБКИ, КОДЫ ВЫХОДА
+5.1. Любая команда поддерживает --json: стабильные ключи, UTF-8, без секретов.
+     Ошибка в JSON: {"ok":false,"code":"QUOTA","message":"…","details":{…}}.
+5.2. Exit-коды (маппинг в ModuleErrorCode из src/orchestrator/platforms/base.py):
+      0  ok;  2  usage/validation;  3  config (нет токена/файла);
+      10 AUTH_REQUIRED; 11 AUTH_EXPIRED (invalid_grant); 12 SCOPE_MISSING;
+      20 QUOTA (quotaExceeded/uploadLimitExceeded); 21 RATE_LIMIT (429/backoff исчерпан);
+      30 PLATFORM_REJECTED (метаданные/политика); 40 MEDIA_INVALID (файл/размер/формат);
+      50 TRANSIENT (сеть/5xx после ретраев); 60 INTERNAL;
+      70 CONFIRMATION_REQUIRED (--yes/--confirm-prod); 71 CHANNEL_MISMATCH.
+5.3. Тексты ошибок — по-русски, с действием («переавторизуйтесь: yt auth login»).
+
+6. КВОТЫ И УЧЁТ (без этого «руки» опасны)
+6.1. Оценка units (учёт в журнале, точные значения из docs):
+      videos.insert 1600 | thumbnails.set 50 | videos.update 50 | videos.delete 50 |
+      videos.list 1 | channels.list 1 | playlistItems.list 1 | playlistItems.insert 50 |
+      playlists.insert 50 | commentThreads.list 1 | comments.insert 50 |
+      comments.setModerationStatus 50 | captions.list 50 | captions.insert 400 |
+      search.list 100.
+6.2. Дневной бюджет (по умолчанию 9500) в ~/.local/state/yt-cli/quota-YYYY-MM-DD.json:
+      каждая команда до вызова проверяет прогноз; upload без запаса → отказ (exit 20),
+      если не задан --force-quota. Сброс — полночь PT (в ответе указывать).
+6.3. При quotaExceeded от API — не долбить, exit 20 + «сброс в HH:MM МСК».
+6.4. Квота общая с Postiz/ядром: CLI обязан отмечать свои траты; при P2 — сверка.
+
+7. ИДЕМПОТЕНТНОСТЬ И ВОЗОБНОВЛЕНИЕ
+7.1. --idempotency-key: ключ → video_id в журнале; повторный вызов возвращает
+     существующий video_id (и проверяет его наличие videos.list), НЕ грузит заново.
+     По умолчанию ключ = sha256(path|size|mtime|title).
+7.2. Resumable: сессия в ~/.local/state/yt-cli/sessions/<hash>.json (600); при обрыве —
+     продолжение с сохранённого offset (обработка 308 + Range), до 5 ретраев чанка
+     с экспоненциальным бэкоффом; после финализации сессия удаляется.
+7.3. Повтор verbs (update/delete/thumb) идемпотентны по своей природе; delete
+     повторно — «уже удалено» → ok:true, ничего не делать.
+
+8. БЕЗОПАСНОСТЬ И ЛИЧНАЯ ГИГИЕНА «РУК»
+8.1. Деструктив — только с --yes (delete/delete-batch). Без него exit 70.
+8.2. Профиль prod: для public/publish-at/delete требуется --confirm-prod
+     (env YT_ALLOW_PROD=1 разрешает автоматизацию; по умолчанию выключено).
+8.3. YT_EXPECTED_CHANNEL_ID — fail-closed (exit 71) до любых мутаций.
+8.4. Обложка/плейлист — best-effort: video_id уже сохранён; ошибка → warnings[],
+     exit 0 (кроме --strict-thumbnail → 40, но video_id всё равно в JSON).
+8.5. Секреты: маскирование в логах/ошибках; файлы токенов/сессий 600;
+     в argv секретов нет; URL с токеном никогда не печатать.
+8.6. --dry-run: все мутации печатают, что было бы сделано; HTTP-мутаций нет.
+
+9. ЖУРНАЛ И НАБЛЮДАЕМОСТЬ
+9.1. ~/.local/state/yt-cli/ledger.jsonl — каждая операция: ts, cmd, profile, channel,
+     video_id, key, units, result (ok/err+code), длительность. Без секретов.
+9.2. quota-YYYY-MM-DD.json — суммы units по командам за день.
+9.3. `yt ledger --tail 20` и `yt quota` — быстрый контроль; ассистент прикладывает
+     выдержки в отчёты. Всё читается скриптами (JSON).
+
+10. ТЕСТЫ
+10.1. Unit (моки HTTP; никаких реальных вызовов):
+      - refresh токена; invalid_grant → 11;
+      - resumable: init → чанки → 308 → финализация; обрыв и возобновление;
+      - upload: videoId в журнале ДО обложки; ошибка обложки → warnings, exit 0;
+      - маппинг: 401→10, 403 quotaExceeded/uploadLimitExceeded→20, 429→21,
+        400 медиа→40, 5xx после ретраев→50;
+      - ledger/quota: арифметика, отказ при бюджете, --force-quota;
+      - идемпотентность: повторный ключ не грузит второй раз;
+      - защита: delete без --yes→70; prod без --confirm-prod→70; чужой канал→71;
+      - JSON-схемы стабильны; в выводе нет секретов.
+10.2. CLI-тесты (subprocess): коды выхода, --json, справка, ошибки usage.
+10.3. Ручной smoke на ТЕСТОВОМ канале (в docs/YT_CLI.md, шаги):
+      маленькое тестовое видео → upload --privacy private --publish-at +10m →
+      wait --until processed → info → thumb set → update → unlist → delete --yes.
+      Никаких боевых каналов.
+
+11. КРИТЕРИИ ПРИЁМКИ (чек-лист)
+[ ] yt doctor --json → ok:true (токен, права 600, канал, scopes)
+[ ] upload: видео загружено private+publishAt; ссылка youtu.be/<id> получена;
+    при падении обложки ссылка/ID сохранены (warnings, exit 0)
+[ ] update/schedule/publish/unlist/private/delete работают; повторный delete — ok
+[ ] info/status/wait корректно отражают processing → published
+[ ] list/search/playlists/comments/captions работают (или честный отказ, если
+    у канала/скоупа нет прав — с понятным кодом)
+[ ] quota/ledger точны; превышение бюджета блокирует upload (exit 20)
+[ ] --dry-run не делает мутаций; --yes/--confirm-prod/expected-channel работают
+[ ] tests/ зелёные; ./scripts/check.sh → ALL CHECKS PASSED; CI зелёный
+[ ] docs/YT_CLI.md с примерами; 00_INDEX обновлён
+[ ] (фаза 2) analytics после добавления scope/API
+
+12. ФАЙЛЫ И СТРУКТУРА (создать/изменить)
+  src/orchestrator/yt_client.py        (новый; можно переиспользовать engines/direct_youtube.py)
+  src/orchestrator/yt_cli.py           (новый)
+  tools/yt                             (новый, bash 700/755)
+  tests/test_yt_client.py              (новый)
+  tests/test_yt_cli.py                 (новый)
+  docs/YT_CLI.md                       (новый)
+  docs/dev/00_INDEX.txt                (одна строка)
+  НЕ ТРОГАТЬ: webapp/, scheduler, БД (миграции), config.yaml (секреты), Postiz.
+
+13. ПРИМЕРЫ ДЛЯ АССИСТЕНТА (копипаста; всё неинтерактивно)
+  ./tools/yt doctor --json
+  ./tools/yt upload ~/Videos/short-391.mp4 --title "Точка наблюдения #391" \
+      --description-file /tmp/desc.txt --tags "наука,космос" --privacy private \
+      --publish-at "2026-09-25 09:00" --thumbnail /tmp/cover.jpg --json
+  ./tools/yt wait dQw4w9WgXcQ --until published --timeout 3600
+  ./tools/yt info dQw4w9WgXcQ --json
+  ./tools/yt update dQw4w9WgXcQ --description-file /tmp/desc2.txt
+  ./tools/yt thumb set dQw4w9WgXcQ /tmp/cover2.jpg
+  ./tools/yt comments dQw4w9WgXcQ --limit 50 --json
+  ./tools/yt delete dQw4w9WgXcQ --yes
+  ./tools/yt quota --json
+
+14. ПЛАН ВНЕДРЕНИЯ У GROK (по шагам; маленькими коммитами)
+  1) Прочитать: AGENTS.md, docs/dev/07_GROK_TASK.txt §0, docs/dev/08_ОТВЕТ_НА_АНАЛИЗ.txt,
+     docs/modules/MODULE_YOUTUBE.txt (терминология/ошибки), 03_API_STANDARDS.
+  2) git pull; ./scripts/check.sh (baseline зелёный).
+  3) yt_client.py: auth+refresh, HTTP с ретраями, маппинг ошибок, quota/ledger,
+     resumable upload. Unit-тесты на моках.
+  4) yt_cli.py: команды §4 (фаза 1), §5 выходы, §8 защита. CLI-тесты.
+  5) tools/yt + docs/YT_CLI.md; обновить 00_INDEX.
+  6) check.sh → commit → push. Отчёт: что сделано, вывод проверок, что осталось (фаза 2).
+  Готово по этому ТЗ, когда выполнен весь чек-лист §11 (кроме фазы 2 — пометить явно).
+  Прод не деплоить (CLI не в проде); секреты не коммитить.
+
+15. ЧЕГО НЕ ДЕЛАТЬ
+  - Не включать module:youtube в проде (этап P5) и не менять engines.
+  - Не менять схему БД; не трогать webapp/панель; не менять config.yaml.
+  - Не использовать Postiz для новых операций; никаких серых методов/обходов квот.
+  - Не выдумывать факты; если API что-то не умеет (claims, чужие каналы) —
+    честный UNSUPPORTED в JSON.
+
+16. ССЫЛКИ (актуальность проверить)
+  - YouTube Data API v3: https://developers.google.com/youtube/v3/docs
+    videos.insert (resumable): .../videos/insert , thumbnails.set, videos.update/delete/list,
+    channels.list, playlistItems.insert/list, playlists.insert,
+    commentThreads.list, comments.insert, comments.setModerationStatus,
+    captions.list/insert/delete, search.list.
+  - Resumable upload protocol: developers.google.com/youtube/v3/guides/using_resumable_upload_protocol
+  - Quota costs: developers.google.com/youtube/v3/determine_quota_cost
+  - OAuth installed app (loopback): developers.google.com/identity/protocols/oauth2/native-app
+  - Analytics API v2 (фаза 2): developers.google.com/youtube/analytics
+================================================================================

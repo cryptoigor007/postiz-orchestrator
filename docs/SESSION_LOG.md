@@ -1506,3 +1506,17 @@ CI-заглушками: `integration_id: ci-youtube-integration / ci-telegram-i
 → GUI-ПРОВЕРКА ПРОЙДЕНА. После push: CI run 36055192932 для 408f9e3 → **success**
 (все шаги зелёные, включая GUI smoke). Исторические красные прогоны старых веток —
 это до фикса; на master CI зелёный.
+
+## 2026-09-25 — ТЗ на YouTube-CLI («руки» ассистента): docs/dev/09_YT_SCRIPTS_TZ.txt
+
+**Что.** По просьбе владельца составлено полное ТЗ на CLI-утилиту `yt` для ВСЕХ
+операций YouTube: загрузка + отложка (publishAt), обложки, правка, удаление,
+статусы/wait, списки/поиск, плейлисты, комментарии, субтитры, квоты (9500/сутки,
+учёт units), ledger/sessions 600, doctor; фаза 2 — аналитика. Ключевое: --json,
+exit-коды по ModuleErrorCode, --dry-run, --yes/--confirm-prod, YT_EXPECTED_CHANNEL_ID,
+идемпотентность (--idempotency-key), resumable-upload, профили test/prod.
+Исполнитель — Grok; переиспользование: engines/direct_youtube.py, TokenBrokerClient,
+platforms/base.py. НЕ трогать webapp/БД/config.yaml/Postiz; module:youtube в прод
+не включать.
+
+**Проверено.** check.sh → ALL CHECKS PASSED (565 тестов); push в master.

@@ -20,6 +20,8 @@ Facebook → Threads → пакет аудита TikTok.
 5. `docs/dev/06_HANDOFF.txt` — состояние, команды, доступы (без секретов).
 6. `docs/dev/02_MODULE_STANDARD.txt` + `docs/dev/03_API_STANDARDS.txt` + `docs/dev/04_DECISIONS.txt`.
 7. ТЗ платформы: `docs/modules/MODULE_<PLATFORM>.txt` (YouTube — эталон структуры).
+8. `docs/dev/09_YT_SCRIPTS_TZ.txt` — ТЗ на YouTube-CLI («руки» ассистента: все операции
+   YouTube через shell). Отдельная задача; порядок — по указанию владельца.
 
 ## Текущее состояние (обновлять по мере работы)
 - Версия ядра 8.4.55; Э1 (каркас модулей) и P1 (force_update + watchdog-алерты) влиты.

@@ -1,0 +1,222 @@
+================================================================================
+  05. ПАКЕТ ДЛЯ АУДИТА TIKTOK — МАКСИМАЛЬНО ПОЛНЫЙ ВАРИАНТ
+  (без «лайтовых» компромиссов; цель — пройти review с первого-второго раза)
+  Дата: 24.09.2026   |   Статус: руководство к действию
+================================================================================
+ПРИНЦИП: только честная подача. Обман ревью = риск отзыва приложения, токенов и
+аккаунтов. Мы подаём ИМЕННО то, что делаем; отличие от «утилиты» — в том, что
+это продукт для АВТОРА, публикующего СВОЙ оригинальный контент в СВОЙ аккаунт.
+
+--------------------------------------------------------------------------------
+1. ЧТО ДОЛЖНО РАБОТАТЬ ДО ПОДАЧИ (продуктовая готовность)
+--------------------------------------------------------------------------------
+1.1 Пользовательский путь (обязателен для демо):
+    (а) Подключение TikTok через Login Kit (OAuth, кнопка «Connect TikTok»);
+    (б) Экран компоуза: выбор видеофайла, заголовок/описание/хэштеги;
+    (в) ПРИВАТНОСТЬ выбирается вручную (без дефолта!), переключатели
+        комментариев / duet / stitch — тоже руками;
+    (г) Экран подтверждения: «Я подтверждаю публикацию» (явное согласие);
+    (д) Планирование даты/времени ИЛИ публикация сейчас;
+    (е) Статус публикации (обработка → опубликовано) и ссылка на пост.
+1.2 Ограничения, которые демонстрируем осознанно: уважение лимитов платформы,
+    обработка ошибок с человекочитаемыми сообщениями, отключение аккаунта одной
+    кнопкой, удаление данных по запросу.
+1.3 Отдельный тестовый TikTok-аккаунт (не боевой) — на нём снимаем демо
+    и на нём же проверяем ревью-контур.
+
+--------------------------------------------------------------------------------
+2. ИНФРАСТРУКТУРА (стабильные адреса — обязательное требование review)
+--------------------------------------------------------------------------------
+2.1 Сайт приложения (политика/условия/support): GitHub Pages
+    - репозиторий: <github_user>/tiktok-scheduler-site (или отдельный)
+    - страницы:  /           — лендинг приложения (2-3 абзаца + скриншоты)
+                 /privacy    — Политика конфиденциальности (текст в §3)
+                 /terms      — Условия использования (текст в §3)
+                 /support    — контакт поддержки (email + форма-ссылка)
+    - адрес вида https://<user>.github.io/tiktok-scheduler-site/ — постоянный.
+2.2 Callback (redirect URI) для OAuth — ДОЛЖЕН БЫТЬ ПОСТОЯННЫМ.
+    РЕШЕНИЕ (самое правильное и безопасное): именованный Cloudflare Tunnel
+    на собственном домене (например app.<домен>), HTTPS — Cloudflare.
+    Никаких пробросов портов в дом, никакого «quick tunnel» (адрес меняется).
+    Варианты, если домена нет:
+      * бесплатные субдомены (is-a.dev / js.org / eu.org) — условия проверить,
+        для некоммерческого проекта подходят;
+      * покупка самого дешёвого домена (≈$1–10/год) — предпочтительно.
+    НЕ РЕКОМЕНДУЕТСЯ: DuckDNS + проброс 443 — входящий доступ в домашнюю сеть.
+2.3 Публичная раздача временных медиа (для IG/Threads — из другого этапа):
+    Backblaze B2 (см. STORAGE-OPTIONS.md). К TikTok-аудиту прямого отношения не
+    имеет (TikTok принимает файл напрямую), но домен/инфраструктура общие.
+2.4 Email поддержки: отдельный ящик (например support@<домен> или <user>+tiktok@..),
+    указанный и в портале, и в политике/условиях. Письмо от ревьюеров не должно
+    попадать в спам/уходить в никуда.
+
+--------------------------------------------------------------------------------
+3. ГОТОВЫЕ ТЕКСТЫ
+--------------------------------------------------------------------------------
+=== 3.1 APP DESCRIPTION (EN — для портала) ===
+Name: Tochka Scheduler
+Category: Productivity
+Description (short):
+  A scheduling app for a creator's own TikTok account: compose a post
+  (caption, hashtags), choose privacy and interaction settings manually,
+  confirm, and schedule it for a selected time. Publishes original videos
+  only; no bulk uploads, no third-party accounts.
+Description (long):
+  Tochka Scheduler is a personal content tool for a creator who publishes
+  their own original short videos. The user connects their own TikTok
+  account, selects a video, writes the caption and hashtags, explicitly
+  chooses the privacy level (no default is applied) and interaction
+  settings (comments, duet, stitch), confirms the post, and either
+  publishes it immediately or schedules it for a chosen date and time.
+  The app shows the publication status and respects TikTok's rate limits.
+  The app does not accept content for accounts the user does not own and
+  does not perform any posting without the user's explicit confirmation.
+
+=== 3.2 PRIVACY POLICY (EN) — публикуется на /privacy ===
+Effective date: <дата>
+Tochka Scheduler ("the App", "we") helps the account owner publish their own
+videos to their own TikTok account.
+1. Data we process
+   - TikTok account data returned by Login Kit: open_id, username, display name,
+     avatar. Access and refresh tokens issued by TikTok.
+   - Content the user submits: video files, captions, hashtags, scheduling data.
+   - Technical logs: request statuses and errors (without tokens).
+2. Why
+   - To authenticate the user, publish and schedule the user's own content,
+     show publication status, and diagnose errors.
+3. How we store
+   - Tokens are stored on our server and protected from public access.
+   - Video files are stored temporarily and deleted after publication or on request.
+   - We do not sell or share personal data with third parties.
+4. Retention and deletion
+   - Tokens are stored until the user disconnects the account.
+   - The user may disconnect at any time (revoking access) and request full data
+     deletion by email: <email>.
+5. Security
+   - Access to the server is restricted; secrets are not exposed.
+6. Children
+   - The App is not intended for users under 13.
+7. Changes and contact
+   - We will update this page when the policy changes. Contact: <email>.
+
+=== 3.3 TERMS OF SERVICE (EN) — публикуется на /terms ===
+1. The App is provided "as is" to help the account owner publish their own
+   original content to their own TikTok account.
+2. The user is solely responsible for the content and confirms they own the
+   rights to it and that it complies with TikTok's rules.
+3. The App is not affiliated with, endorsed by, or sponsored by TikTok.
+4. The user may stop using the App at any time and revoke access.
+5. Contact: <email>.
+
+=== 3.4 USE CASE / REVIEW NOTES (EN — в форму review) ===
+- Who uses it: one creator (the account owner) for their own account.
+- What it does: manual compose → manual privacy selection → explicit
+  confirmation → schedule/publish ORIGINAL videos.
+- Why Direct Post API is needed: to publish at the user's selected future time
+  with the user-selected privacy, without manual last-minute steps.
+- What it explicitly does NOT do: no bulk uploads, no publishing to accounts
+  the user does not own, no automated posting without explicit user action,
+  no automation of engagement (likes/comments/duets).
+- How reviewers can test: test account credentials + step-by-step instructions
+  are attached in the review form (§6.5).
+
+=== 3.5 РУССКИЕ ВЕРСИИ (для сайта — по желанию) ===
+Публикуются как переводы тех же страниц (можно на том же /privacy и /terms
+вторым блоком «Русская версия»). Смысл не отличается.
+
+--------------------------------------------------------------------------------
+4. ДЕМО-ВИДЕО (покадровый сценарий; длительность 2:30–3:30)
+--------------------------------------------------------------------------------
+0:00–0:20  Титул: App name + «Personal scheduler for the creator's own TikTok
+           account». Показать лендинг.
+0:20–0:50  Connect: вход, кнопка «Connect TikTok», экран согласия TikTok,
+           возврат в приложение, видно подключённый аккаунт (отдельный тестовый).
+0:50–1:40  Compose: загрузка видеофайла, заголовок, описание, хэштеги.
+1:40–2:10  ПРИВАТНОСТЬ: показать, что уровень приватности выбирается вручную
+           (без предустановки) + toggles comments/duet/stitch + «Made with AI»,
+           если применимо.
+2:10–2:40  Подтверждение: экран «Я подтверждаю публикацию», выбор времени
+           (например, через 5 минут).
+2:40–3:10  Публикация: статус «processing → published», открытие поста в TikTok,
+           видно, что публикация произошла в выбранное время и с выбранной
+           приватностью.
+3:10–3:30  Дисконнект + удаление (по желанию): показ, что доступ отзывается.
+ТРЕБОВАНИЯ: реальный экран, без монтажных склеек ключевых шагов, читаемый текст,
+1080p, английские подписи или субтитры.
+
+--------------------------------------------------------------------------------
+5. ПОШАГОВАЯ ПОДАЧА (TikTok Developer Portal)
+--------------------------------------------------------------------------------
+5.1 Создать приложение: developers.tiktok.com → Manage apps → Connect an app
+    (или New app). Название, иконка (PNG, требования портала — проверить),
+    категория Productivity, платформа Web.
+5.2 Добавить продукты:
+    * Login Kit (Web) — обязательно;
+    * Content Posting API — Video upload + Direct Post.
+5.3 Настройки OAuth:
+    * Redirect URI: https://<домен>/integrations/social/tiktok (ровно как в коде);
+    * Scopes: user.info.basic, video.upload, video.publish.
+5.4 URL-поля: Website URL, Privacy Policy URL, Terms of Service URL (из §2.1).
+5.5 Заполнить форму review: описание (3.1), use case (3.4), приложить демо-видео
+    (4) и инструкции для тестировщика (логин тестового аккаунта/шаги).
+5.6 Отправить (Submit for review). Статусы: Under review → Approved/Rejected.
+
+--------------------------------------------------------------------------------
+6. ЧЕК-ЛИСТ СООТВЕТСТВИЯ (перед отправкой — пройти каждый пункт)
+--------------------------------------------------------------------------------
+[ ] Политика и условия доступны по HTTPS без авторизации и без заглушек
+[ ] Email поддержки работает (проверить, отправив себе письмо)
+[ ] Redirect URI в портале = ровно тот, что использует приложение
+[ ] Демо показывает ВСЕ шаги, включая ручной выбор приватности и подтверждение
+[ ] В приложении нет авто-публикации без действия пользователя
+[ ] Нет массовой загрузки и работы с чужими аккаунтами
+[ ] Токены не логируются, доступ к серверу ограничен
+[ ] Указаны реальные данные: кто разработчик, зачем доступ, какие данные
+[ ] Скриншоты и лендинг соответствуют реальному приложению
+[ ] Лимиты TikTok уважаются (в приложении видно корректное обращение с ошибками)
+
+--------------------------------------------------------------------------------
+7. ЧАСТЫЕ ПРИЧИНЫ ОТКАЗА И ЧТО ДЕЛАТЬ
+--------------------------------------------------------------------------------
+1) Недоступна политика/условия → поднять на GitHub Pages, проверить curl -I.
+2) Демо не показывает direct post или приватность ставится по умолчанию → переписать UX
+   (приватность только руками) и переснять демо.
+3) «Похоже на утилиту для управляемых аккаунтов» → переписать позиционирование
+   (продукт для автора, свой аккаунт, свой оригинальный контент), добавить явные
+   ограничения в описание.
+4) Redirect URI mismatch → исправить и переотправить.
+5) Нет инструкций для тестировщика → добавить пошагово (со скриншотами).
+6) Отказ без причины → запросить разъяснение в тикете/апелляции, приложить
+   соответствие чек-листу §6.
+После отказа: исправить перечисленное → повторная подача. Количество попыток
+не ограничено; после обмана — считай, что закрыто навсегда.
+
+--------------------------------------------------------------------------------
+8. СРОКИ, СТАТУСЫ И РЕЗЕРВНЫЕ ПУТИ
+--------------------------------------------------------------------------------
+* Подготовка (сайт, тексты, демо, тестовый аккаунт): 1–3 дня.
+* Review: обычно от нескольких дней до нескольких недель (проверить актуальные сроки).
+* Пока идёт review: работаем через INBOX (черновики) — TikTok уже функционален.
+* Если нужен полный автомат до решения: Postiz Cloud ($29/мес, триал 7 дней) —
+  их одобренное приложение; одобрят наш аудит → отменяем подписку, уходим на своё.
+* Если отказ: остаёмся на inbox + (опционально) Cloud; повторная подача после правок.
+
+--------------------------------------------------------------------------------
+9. ЧТО НУЖНО ОТ ВЛАДЕЛЬЦА
+--------------------------------------------------------------------------------
+1) Домен или решение по бесплатному субдомену (§2.2) — для callback.
+2) Email поддержки (§2.4).
+3) Отдельный тестовый TikTok-аккаунт для демо и ревью (§1.3).
+4) Доступ в TikTok Developer Portal (регистрация разработчика бесплатна).
+5) Время: записать демо-видео по сценарию §4 (или это сделаю я после реализации
+   модуля — потребуется только твой аккаунт на экране).
+
+--------------------------------------------------------------------------------
+10. ССЫЛКИ (официальные; проверить актуальность при подаче)
+--------------------------------------------------------------------------------
+* Content Sharing Guidelines:  https://developers.tiktok.com/doc/content-sharing-guidelines/
+* Content Posting API (start): https://developers.tiktok.com/doc/content-posting-api-get-started/
+* Direct Post:                 https://developers.tiktok.com/doc/content-posting-api-reference-direct-post/
+* Login Kit for Web:           https://developers.tiktok.com/doc/login-kit-web/
+* Правила review:              https://developers.tiktok.com/doc/app-review-guidelines/ (проверить)
+================================================================================

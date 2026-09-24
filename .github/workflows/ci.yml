@@ -14,6 +14,9 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -q -r requirements.txt ruff
+      # config.yaml не хранится в git (секреты) — тестам нужен файл в корне
+      - name: Prepare CI config
+        run: cp config.ci.yaml config.yaml
       - name: Lint
         run: ruff check src scripts tests
       - name: XSS/CSP linter

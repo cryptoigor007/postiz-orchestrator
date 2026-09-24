@@ -1,0 +1,190 @@
+# config.ci.yaml — конфиг для GitHub Actions (workflow копирует его в config.yaml).
+# Секретов нет: только CI-заглушки. Живой config.yaml в git не хранится.
+# Пример конфигурации (значения-заглушки). Скопируйте в config.yaml и заполните.
+# Живой config.yaml в репозиторий НЕ коммитится.
+schedules:
+  long_video:
+    type: long_video
+    source: videomaker
+    days: [tue, fri]
+    time: "16:00"
+    exception_days: []
+  shorts_thematic:
+    type: shorts_thematic
+    source: videomaker
+    default_time: "20:30"
+  shorts_standalone:
+    type: shorts_standalone
+    source: shortsmaker
+    days: [mon, wed, thu, sat, sun]
+    times: ["12:00", "18:00"]
+    exception_days: []
+
+# Rollout: telegram first → youtube → rest
+# integration_id: заполнить после подключения в Postiz UI
+platforms:
+  telegram:
+    post_mode: link            # в Telegram — только ссылка на YouTube (лимит 50 МБ)
+    send_via: bot              # отправляем сами через Bot API: превью ролика НАД текстом
+    publish_chat_id: ""   # канал «Точка наблюдения» (@tochkanablyudeniya)
+    link_preview_above: true   # Bot API link_preview_options.show_above_text
+    video_variant: vertical
+    audio_profile: default   # reserved (не используется)
+    enabled: true
+    daily_limit: 5
+    integration_id: "ci-telegram-integration"   # Postiz: Postiz Test Channel
+  youtube:
+    video_variant: wide
+    audio_profile: youtube_safe   # reserved
+    enabled: true
+    daily_limit: 7
+    integration_id: "ci-youtube-integration"   # Postiz: testPostiz
+  instagram:
+    video_variant: vertical
+    audio_profile: meta_safe   # reserved
+    enabled: false
+    daily_limit: 5
+    integration_id: ""
+  tiktok:
+    video_variant: vertical
+    audio_profile: tiktok_safe   # reserved
+    enabled: false
+    daily_limit: 7
+    integration_id: ""
+  facebook:
+    video_variant: wide
+    audio_profile: meta_safe   # reserved
+    enabled: false
+    daily_limit: 5
+    integration_id: ""
+
+tail:
+  soft_enter_days: 5
+  series_end_question_ttl_days: 10
+  series_end_question_cooldown_days: 3
+  use_all_short_slots: true
+  pause_standalone_during_tail: true
+  ask_minutes_before: 60        # спросить за час до слота серии (16:00 -> 15:00)
+  reminder_minutes_before: 15   # напомнить за 15 минут до слота
+  default_action: distribute    # distribute | wait (если не ответили к слоту)
+
+limits:
+  max_posts_per_distribute: 12
+  postiz_create_per_hour: 60   # наш предохранитель; API Postiz троттлит ~30/час на создание — 60 даёт запас на ретраи, превышения ловим 429+Retry-After
+  max_shorts_per_long_video: 8
+  overflow_move_files: false   # НЕ переносить файлы; лишнее просто не публикуется
+
+link_update:
+  release_url_timeout_min: 90
+  missing_url_dialog_ttl_hours: 12
+  missing_url_default_action: "post_without_link"
+  placeholder_text: "Полное видео на канале"
+
+description_templates:
+  telegram_link: "{title}\n\n{description}\n\n▶ Смотреть на YouTube: {link}"
+  telegram_link_no_link: "{title}\n\n{description}\n\n▶ Смотреть на YouTube — ссылка появится после премьеры"
+  thematic_short: "{description}\n\n▶ Полное видео: {link}"
+  thematic_short_no_link: "{description}\n\n▶ Полное видео на канале"
+  default: "{description}"
+
+safety:
+  min_interval_minutes: 25
+  conflict_window_minutes: 0   # окно анти-коллизий с Postiz/n8n (0 = как min_interval)
+  jitter_seconds: 0   # без случайного сдвига — стандартные времена 16:00/20:30
+  warmup_days: 12
+  warmup_daily_limit: 2
+  warmup_after_pause_hours: 24
+  on_serious_error:
+    action: pause_platform
+    pause_hours: 0
+    notify: true
+  serious_errors:
+    - "rate limit"
+    - "quota exceeded"
+    - "spam"
+    - "blocked"
+    - "Unsupported file type"
+  rate_limit_errors: ["429", "too many requests", "ThrottlerException"]
+  auth_errors:
+    - "No API Key found"
+    - "Invalid API key"
+    - "unauthorized"
+    - "401"
+    - "403"
+    - "invalid token"
+    - "token expired"
+    - "authentication"
+
+telegram:
+  # 2026-09-23: убран второй id (группа/канал) — бот в этом чате отсутствует
+  # (getChat → 400 chat not found), из-за него при каждой синхронизации меню-кнопки
+  # летела ошибка invalid chat_id. Возвращать — только вместе с доступом бота к чату.
+  allowed_chat_ids: [7004751908]
+
+# Проекты (ниши): у каждого проекта свои каналы во всех сетях. Пока проект один —
+# «Точка наблюдения», поэтому у платформ project не указан ("" = основной проект).
+# Второй проект добавляется так: завести блок ниже + платформы с project: <имя>
+# (например telegram_anekdoty, youtube_anekdoty). Подробности: docs/PLAN-PROJECTS.md
+default_project: "tochka"    # контент без явной привязки относится к «Точке наблюдения»
+
+projects:
+  tochka:
+    title: "Точка наблюдения"
+    series_ids: []          # id серий videomaker проекта (пусто = контент не привязан)
+    folders: []             # папки обычных шортсов проекта
+    telegram_chat_ids: []
+  project2:                 # второй проект: название владелец ещё не выбрал
+    title: "Проект 2"
+    series_ids: []
+    folders: []
+    telegram_chat_ids: []
+
+media:
+  symlink_mode: true            # не копировать файлы с диска сервера в Postiz (симлинк)
+  local_prefix: "/mnt/video/"   # что считается «на диске сервера»
+  cache_dir: "/mnt/video/.orch_cache"
+  telegram_max_mb: 0            # сжатие выключено (0)
+
+backup:
+  enabled: true
+  interval_hours: 6
+  keep_days: 14
+  method: "sqlite_backup"   # код всегда использует Connection.backup (VACUUM INTO — неверный ярлык)
+
+reconciliation_interval_hours: 24
+engines:
+  youtube: direct
+  telegram: postiz
+manual_uploads:
+  enabled: true
+  platforms: []
+  lookback_days: 60
+  page_size: 50
+  schedule_scan: daily
+  placement_default: end   # reserved (экран плейсмента не реализован)
+telegram_link_delay_min: 15   # Telegram-ссылка через N минут после выхода видео на YouTube
+timezone: "Europe/Moscow"
+watcher_interval_sec: 75
+status_sync_interval_sec: 180
+confirm_published_interval_sec: 120
+file_stability_cycles: 2
+watch_max_depth: 5   # глубина рекурсивного сканирования папок
+watch_max_age_days: 3650  # не отсекать старое (скан должен возвращать удалённое)
+
+# Пробный (тестовый) пост: отдельный контур, НЕ трогает боевые строки расписания.
+# Включать только когда нужно проверить E2E-публикацию на тестовом канале.
+test_publish:
+  enabled: true                 # API/UI тестового поста доступны
+  default_delay_minutes: 1
+  min_delay_minutes: 1
+  max_delay_minutes: 120
+  title_prefix: "[orch-test] "
+  platforms: ["youtube", "telegram"]   # allowlist (у нас это тестовые каналы)
+  require_explicit_platforms: true
+  allow_prod_channel: false
+  prod_integration_ids: []       # сюда вписать id боевых каналов при переходе на прод
+  # fail-closed: тест разрешён только для этих integration_id (наши тест-каналы)
+  test_integration_ids: ["ci-youtube-integration", "ci-telegram-integration"]
+  skip_tail_side_effects: true
+  skip_thematic_cascade: true
+  zero_jitter: true

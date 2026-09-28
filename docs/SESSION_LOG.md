@@ -1542,3 +1542,33 @@ TikTok не заданы; прод 3823 цикла / 0 ошибок; CI success.
 сайт аудита (P7), чек-лист владельцу и ссылки (в т.ч. на GitHub-гид).
 
 **Проверено.** check.sh → ALL CHECKS PASSED (565 тестов); push в master.
+
+## 2026-09-25 вечер — AGENT HANDOFF
+
+- Выровнены capabilities IG/FB под код (delete/schedule/update_metadata).
+- Модульный регресс: 74 passed, 3 skipped.
+- Добавлен docs/dev/13_AGENT_HANDOFF_PROMPT.txt — полный промпт для следующего агента.
+- Архив modules-AGENT-HANDOFF-2026-09-25.zip.
+
+
+## 2026-09-25 — Grok H1–H8 (итоговый архив)
+- Module-pack + P2-R2 publisher (ORCH_MODULE_PUBLISH) + daily_ahead runner + token_store Meta/TikTok
+- P7 audit_site placeholders; docs updated; engines default postiz/direct
+- ./scripts/check.sh → ALL CHECKS PASSED
+
+
+## 2026-09-28 — Приёмка H1–H8: архив наложен на master, приведён к правилам проекта
+
+**Что.** Архив H1–H8 (agent-pack Grok, 25.09) наложен на master (origin/master == b75e488).
+Незакоммиченная правка `docs/dev/09_YT_SCRIPTS_TZ.txt` сохранена (файл исключён из наложения).
+Доводка до правил проекта: устранены 58 ruff-замечаний пакета (авто-фикс, поведение не менялось);
+строка vulture в `scripts/check.sh` приведена к рабочей (`./venv/bin/vulture` + fallback);
+`_register_builtins` больше не глушит ошибки импорта без лога (правило AGENTS.md);
+`docs/dev/00_INDEX.txt` дополнен строками 12/13 и статусом H1–H8.
+
+**Проверено.** Модульный набор §E1 (10 файлов): 76 passed, 3 skipped (contract — без
+ORCH_CONTRACT). `./scripts/check.sh` → ALL CHECKS PASSED (649 passed, 5 skipped). Прод не
+затронут: engines остаются postiz/direct; module-путь — только за ORCH_MODULE_PUBLISH=1 (или P5).
+
+**Осталось.** H9/H10 [ЖДЁТ]: live contract TG/YT на test-каналах + ключи владельца (Meta/TikTok
+email, B2, tunnel). H11 [ВЛАДЕЛЕЦ]: P5 — включение module:<id> по одному, с test-post и откатом.

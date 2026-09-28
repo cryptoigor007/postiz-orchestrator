@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import signal
 import time
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ class Runner:
         signal.signal(signal.SIGTERM, self.stop)
 
         last_watch = last_sync = last_recon = last_backup = last_test_cleanup = time.monotonic()
+        last_daily_ahead_date: str | None = None
         w_int = self.cfg.watcher_interval_sec
         s_int = self.cfg.status_sync_interval_sec
         r_int = self.cfg.reconciliation_interval_hours * 3600
@@ -76,6 +78,9 @@ class Runner:
                 if now - last_test_cleanup >= 3600:  # P1.3: раз в час
                     self._cycle_test_cleanup()
                     last_test_cleanup = now
+                da = getattr(self.cfg, "daily_ahead", None)
+                if da is not None and getattr(da, "enabled", False):
+                    last_daily_ahead_date = self._maybe_daily_ahead(last_daily_ahead_date)
             except Exception as e:
                 self.metrics.incr("errors")
                 self.metrics.set("last_error", str(e))
@@ -250,3 +255,125 @@ class Runner:
         path = run_backup(self.comps["db"], self.cfg, bdir)
         if path:
             logger.info("Backup: %s", path)
+
+    def _maybe_daily_ahead(self, last_run_date: str | None) -> str | None:
+        """Run daily_ahead once per local calendar day at configured hour:minute."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        da = self.cfg.daily_ahead
+        try:
+            tz = ZoneInfo(self.cfg.timezone or "Europe/Moscow")
+        except Exception:
+            tz = ZoneInfo("UTC")
+        now_local = datetime.now(tz)
+        today_s = now_local.date().isoformat()
+        if last_run_date == today_s:
+            return last_run_date
+        if (now_local.hour, now_local.minute) < (int(da.hour), int(da.minute)):
+            return last_run_date
+        try:
+            self._cycle_daily_ahead()
+        except Exception:
+            logger.exception("daily_ahead cycle failed")
+            return last_run_date
+        return today_s
+
+    def _cycle_daily_ahead(self) -> None:
+        """Collect slots for today+tomorrow without external_id; upload via module:youtube."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from .daily_ahead import AheadItem, plan_horizon, run_daily_ahead
+        from .platforms import default_registry, resolve_engine
+
+        da = self.cfg.daily_ahead
+        eng = str(self.cfg.engine_for("youtube") or "")
+        try:
+            resolved = resolve_engine(eng)
+        except ValueError:
+            resolved = None
+        youtube_module = None
+        if resolved is not None and resolved.kind == "module" and resolved.module_id:
+            reg = default_registry()
+            if reg.has(resolved.module_id):
+                broker = self.comps.get("broker")
+                pcfg = self.cfg.platforms.get("youtube")
+                iid = getattr(pcfg, "integration_id", "") or "" if pcfg else ""
+
+                def _tp(p: str = "youtube", b=broker, i: str = iid) -> str:
+                    if b is None:
+                        return ""
+                    try:
+                        return str((b.get(p, i) or {}).get("token") or "")
+                    except Exception:
+                        return ""
+
+                youtube_module = reg.create(
+                    resolved.module_id,
+                    token_provider=_tp,
+                    cfg=self.cfg,
+                    dry_run=bool(da.dry_run) or self.dry_run,
+                    http=None,
+                )
+
+        try:
+            tz = ZoneInfo(self.cfg.timezone or "Europe/Moscow")
+        except Exception:
+            tz = ZoneInfo("UTC")
+        today = datetime.now(tz).date()
+        horizon = plan_horizon(today, days=int(da.days or 2))
+        horizon_set = {d.isoformat() for d in horizon}
+
+        rows = self.comps["db"].fetchall(
+            """
+            SELECT eps.entity_type, eps.entity_id, eps.postiz_post_id, eps.postiz_scheduled_for,
+                   eps.status
+            FROM entity_platform_status eps
+            WHERE eps.platform='youtube'
+              AND eps.status IN ('ready', 'scheduled')
+              AND eps.postiz_scheduled_for IS NOT NULL
+            """
+        )
+        items: list = []
+        for r in rows:
+            sched = r["postiz_scheduled_for"]
+            try:
+                dt = datetime.fromisoformat(str(sched))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                local_d = dt.astimezone(tz).date().isoformat()
+            except Exception:
+                continue
+            if local_d not in horizon_set:
+                continue
+            if r["postiz_post_id"]:
+                items.append(AheadItem(path="", title="", slot=dt, external_id=str(r["postiz_post_id"])))
+                continue
+            et, eid = r["entity_type"], r["entity_id"]
+            if et == "long_video":
+                row = self.comps["db"].fetchone(
+                    "SELECT title, wide_path FROM long_videos WHERE id=?", (eid,),
+                )
+                path = (row["wide_path"] if row else None) or ""
+                title = (row["title"] if row else "") or ""
+            else:
+                row = self.comps["db"].fetchone(
+                    "SELECT title, path FROM shorts WHERE id=?", (eid,),
+                )
+                path = (row["path"] if row else None) or ""
+                title = (row["title"] if row else "") or ""
+            if not path:
+                continue
+            items.append(AheadItem(path=path, title=title, slot=dt, external_id=None))
+
+        result = run_daily_ahead(items, youtube_module, dry_run=bool(da.dry_run) or self.dry_run)
+        logger.info(
+            "daily_ahead: uploaded=%s skipped=%s errors=%s dry_run=%s",
+            result.uploaded, result.skipped, len(result.errors or []),
+            bool(da.dry_run) or self.dry_run,
+        )
+        if result.errors:
+            for err in result.errors[:10]:
+                logger.warning("daily_ahead error: %s", err)
+

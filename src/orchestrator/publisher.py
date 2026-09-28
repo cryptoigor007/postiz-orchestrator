@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+
+# P2-R2: module path gated by ORCH_MODULE_PUBLISH
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -115,6 +118,132 @@ class Publisher:
             (entity_type, entity_id, platform),
         )
 
+
+    def _module_path_allowed(self) -> bool:
+        """P2-R2: module publish only under explicit flag (never default prod)."""
+        return os.environ.get("ORCH_MODULE_PUBLISH", "").strip() in ("1", "true", "yes")
+
+    def _try_module_publish(
+        self,
+        entity_type: str,
+        entity_id: int,
+        platform: str,
+        media_path: str | None,
+        content: dict[str, Any],
+        scheduled_for: datetime | None,
+    ) -> PostizPost | None:
+        """Publish via PlatformModule when engines.<p>=module:<id> and flag is set."""
+        if not self._module_path_allowed():
+            return None
+        try:
+            from .platforms import default_registry, resolve_engine
+        except Exception:
+            logger.debug("platforms registry unavailable", exc_info=True)
+            return None
+        eng = str(self.cfg.engine_for(platform) or "").strip()
+        try:
+            resolved = resolve_engine(eng)
+        except ValueError:
+            return None
+        if resolved.kind != "module" or not resolved.module_id:
+            return None
+
+        reg = default_registry()
+        if not reg.has(resolved.module_id):
+            logger.error(
+                "module publish: module %r not registered (platform=%s)",
+                resolved.module_id, platform,
+            )
+            self._release_reserve(entity_type, entity_id, platform)
+            raise RuntimeError(f"module {resolved.module_id!r} not registered")
+
+        broker = self.broker
+        pcfg = self.cfg.platforms.get(platform)
+        iid = getattr(pcfg, "integration_id", "") or "" if pcfg else ""
+
+        def _token_provider(p: str = platform, b: Any = broker, i: str = iid) -> str:
+            if b is None:
+                return ""
+            try:
+                return str((b.get(p, i) or {}).get("token") or "")
+            except Exception:
+                return ""
+
+        mod = reg.create(
+            resolved.module_id,
+            token_provider=_token_provider,
+            cfg=self.cfg,
+            dry_run=self.dry_run,
+            http=None,
+        )
+        from .platforms.base import MediaSpec, PublishMeta
+
+        meta = PublishMeta(
+            title=str((content or {}).get("title") or ""),
+            description=str((content or {}).get("description") or ""),
+            hashtags=str((content or {}).get("hashtags") or ""),
+            extra=dict(content or {}),
+        )
+        prepared = None
+        if media_path:
+            prepared = mod.prepare(MediaSpec(path=media_path, kind="video"))
+
+        self.db.log(entity_type, entity_id, platform, "module.upload.start", resolved.module_id)
+        if scheduled_for is not None:
+            if prepared is not None:
+                up = mod.upload(prepared, meta, when=scheduled_for)
+                external_id = up.external_id
+                url = up.url or ""
+                try:
+                    mod.schedule_publish(external_id, scheduled_for)
+                except Exception as e:
+                    from .platforms.base import NotSupported
+                    if not isinstance(e, NotSupported):
+                        raise
+            else:
+                prepared = mod.prepare(MediaSpec(path="", kind="text"))
+                pr = mod.publish(prepared, meta)
+                external_id = pr.external_id
+                url = pr.url or ""
+        else:
+            if prepared is None:
+                prepared = mod.prepare(MediaSpec(path="", kind="text"))
+            pr = mod.publish(prepared, meta)
+            external_id = pr.external_id
+            url = pr.url or ""
+
+        self.db.log(entity_type, entity_id, platform, "module.publish.done", external_id)
+        status = "scheduled" if scheduled_for else "published"
+        now = self.clock.now().isoformat()
+        sched_str = scheduled_for.isoformat() if scheduled_for else None
+        self.db.execute(
+            """
+            INSERT INTO entity_platform_status
+                (entity_type, entity_id, platform, status, postiz_post_id,
+                 postiz_scheduled_for, published_at, last_error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+            ON CONFLICT(entity_type, entity_id, platform) DO UPDATE SET
+                status=excluded.status,
+                postiz_post_id=excluded.postiz_post_id,
+                postiz_scheduled_for=excluded.postiz_scheduled_for,
+                published_at=excluded.published_at,
+                last_error=NULL
+            """,
+            (entity_type, entity_id, platform, status, external_id, sched_str,
+             now if not scheduled_for else None),
+        )
+        if scheduled_for:
+            self.safety.record_post(platform, scheduled_for)
+        self.db.log(entity_type, entity_id, platform, "created", external_id)
+        logger.info(
+            "Created module post %s for %s/%s on %s (module=%s)",
+            external_id, entity_type, entity_id, platform, resolved.module_id,
+        )
+        return PostizPost(
+            id=str(external_id), platform=platform, scheduled_for=scheduled_for,
+            status=status, release_url=url or None, content=content,
+        )
+
     def publish(
         self,
         entity_type: str,
@@ -210,6 +339,13 @@ class Publisher:
                 logger.info("Hourly create limit reached (%s)", hourly)
                 self._release_reserve(entity_type, entity_id, platform)
                 return None
+
+        # P2-R2: module path (only if ORCH_MODULE_PUBLISH=1 and engines.<p>=module:<id>)
+        mod_post = self._try_module_publish(
+            entity_type, entity_id, platform, media_path, content or {}, scheduled_for
+        )
+        if mod_post is not None:
+            return mod_post
 
         # 3. Upload (для постов-ссылок медиа нет)
         pcfg = self.cfg.platforms.get(platform)

@@ -14,5 +14,5 @@ echo "[4/5] node --check"
 node --check webapp/app.js
 echo "[5/5] pytest"
 PYTHONPATH=src "$PY" -m pytest tests/ -q
-(./venv/bin/vulture src/orchestrator scripts --min-confidence 100 || { echo "VULTURE: dead code found"; exit 1; }) 2>/dev/null
+(./venv/bin/vulture src/orchestrator scripts --min-confidence 100 || python3 -m vulture src/orchestrator scripts --min-confidence 100 || { echo "VULTURE: dead code found"; exit 1; }) 2>/dev/null
 echo "ALL CHECKS PASSED"

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
@@ -25,6 +26,8 @@ from .base import (  # noqa: F401  (реэкспорт для удобства �
     UploadResult,
 )
 from .manifest import ManifestError, ModuleManifest, load_manifest  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "AuthStatus",
@@ -159,3 +162,51 @@ def modules_status(
             }
         )
     return report
+
+
+# --- регистрация встроенных модулей ---
+def _register_builtins() -> None:
+    """Импорт встроенных модулей; ошибки импорта — в лог (fail-closed при load)."""
+    try:
+        from .youtube import create_youtube_module
+
+        register_module("youtube", create_youtube_module)
+    except Exception as e:
+        # модуль ещё не собран / отсутствует зависимость — fail-closed при load
+        logger.warning("модуль youtube не зарегистрирован при старте: %s", e)
+    try:
+        from .telegram import create_telegram_module
+
+        register_module("telegram", create_telegram_module)
+    except Exception as e:
+        logger.warning("модуль telegram не зарегистрирован при старте: %s", e)
+    try:
+        from .postiz import create_postiz_module
+
+        register_module("postiz", create_postiz_module)
+    except Exception as e:
+        logger.warning("модуль postiz не зарегистрирован при старте: %s", e)
+
+    try:
+        from .instagram import create_instagram_module
+        register_module("instagram", create_instagram_module)
+    except Exception as e:
+        logger.warning("модуль instagram не зарегистрирован при старте: %s", e)
+    try:
+        from .tiktok import create_tiktok_module
+        register_module("tiktok", create_tiktok_module)
+    except Exception as e:
+        logger.warning("модуль tiktok не зарегистрирован при старте: %s", e)
+    try:
+        from .facebook import create_facebook_module
+        register_module("facebook", create_facebook_module)
+    except Exception as e:
+        logger.warning("модуль facebook не зарегистрирован при старте: %s", e)
+    try:
+        from .threads import create_threads_module
+        register_module("threads", create_threads_module)
+    except Exception as e:
+        logger.warning("модуль threads не зарегистрирован при старте: %s", e)
+
+
+_register_builtins()

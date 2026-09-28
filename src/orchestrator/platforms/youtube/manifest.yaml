@@ -1,7 +1,7 @@
 id: youtube
 name: YouTube
 api_version: "Data API v3"
-module_version: "2.0.0"
+module_version: "2.1.1"
 core_min: "8.5.0"
 auth:
   method: oauth2_authorization_code

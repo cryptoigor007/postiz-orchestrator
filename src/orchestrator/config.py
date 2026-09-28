@@ -121,6 +121,15 @@ class TestPublishCfg(BaseModel):
     cleanup_after_hours: int = 24  # P1.3: авто-снятие тест-постов старше N часов
 
 
+class DailyAheadCfg(BaseModel):
+    """A2: ежедневная ранняя загрузка (сегодня+завтра) через module:youtube."""
+    enabled: bool = False
+    hour: int = 9
+    minute: int = 0
+    days: int = 2
+    dry_run: bool = True
+
+
 class AppConfig(BaseModel):
     schedules: dict[str, Any]
     platforms: dict[str, PlatformCfg]
@@ -149,6 +158,7 @@ class AppConfig(BaseModel):
     backup: BackupCfg = Field(default_factory=BackupCfg)
     engines: dict[str, str] = Field(default_factory=dict)
     test_publish: TestPublishCfg = Field(default_factory=TestPublishCfg)
+    daily_ahead: DailyAheadCfg = Field(default_factory=DailyAheadCfg)
     reconciliation_interval_hours: int = 24
     telegram_link_delay_min: int = 15
     timezone: str = "Europe/Moscow"

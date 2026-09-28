@@ -150,6 +150,12 @@ backup:
   method: "sqlite_backup"   # код всегда использует Connection.backup (VACUUM INTO — неверный ярлык)
 
 reconciliation_interval_hours: 24
+daily_ahead:
+  enabled: false
+  hour: 9
+  minute: 0
+  days: 2
+  dry_run: true
 engines:
   youtube: direct
   telegram: postiz

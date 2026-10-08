@@ -1,0 +1,12 @@
+Moltbook provider module.
+
+Verified current API surface used by this module:
+- POST /api/v1/posts
+- GET /api/v1/posts
+- GET /api/v1/posts/:id
+- DELETE /api/v1/posts/:id
+- GET /api/v1/agents/me
+
+The module is intentionally text/link only. Delete is followed by GET verification because the live service has had observed false-success DELETE behavior; a still-visible post produces a reconcile error instead of a false success.
+
+API base must use https://www.moltbook.com/api/v1 to avoid redirect/auth-header issues.

@@ -1,0 +1,47 @@
+> HARD_CUT: historical only — see REPORT-HARD-CUT.txt for current status.
+
+POSTIZ_ZERO_STATUS=ABSOLUTE_DONE
+date=2026-09-29
+core_version=8.5.0
+schema_version=18
+
+## Definition of Done checklist
+[x] No PostizClient / from .postiz production path
+[x] config: account_id, module_create_per_hour, test_account_ids
+[x] StatusSync/Publisher/Guard/link/main module-only
+[x] B2 streaming + delete(fileId,fileName) + media_host_objects + TTL
+[x] OAuth PKCE + platform_accounts bind + /api/oauth/*/start
+[x] WebApp calendar external_* + inventory + ops
+[x] FB/IG/Threads/TikTok per canon (inbox≠published)
+[x] Claims + daily_ahead two-bucket + ModuleReconciliation in main
+[x] core_min load gate (registry refuses core < core_min)
+[x] lease stuck publishing recovery
+[x] test_postiz_zero_c* + f* : 118 passed (this build)
+[x] Runbooks docs/runbooks/*
+[x] POSTIZ_ZERO_STATUS=ABSOLUTE_DONE
+
+## Platforms
+youtube 2.2.0 module early_upload claims
+telegram 1.1.0 module bot
+facebook 0.3.0 Reels/Video schedule list
+instagram 0.3.0 orchestrator owner container
+threads 0.3.0 faststart daily_limit=3
+tiktok 0.3.0 inbox uploaded_inbox≠published
+
+## Run
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp config.example.yaml config.yaml
+mkdir -p data tokens
+PYTHONPATH=src python -m orchestrator.main --config config.yaml --db data/orch.sqlite --dry-run
+PYTHONPATH=src:scripts pytest tests/test_postiz_zero_c*.py tests/test_postiz_zero_f*.py -q
+bash scripts/gate_postiz_zero.sh
+
+
+CURRENT IMPLEMENTATION CHECKPOINT (2026-10-01)
+- Full pytest: 803 passed / 5 skipped / 0 failed.
+- Social architecture gate: PASS.
+- Platform-zero gate: PASS.
+- Canonical provider catalog: 42 module IDs / 42 manifests.
+- Beehiiv native module added; Rutube partner is modeled as an access mode, not a separate network.
+- Provider/account fault isolation and persisted health/circuit state are active.

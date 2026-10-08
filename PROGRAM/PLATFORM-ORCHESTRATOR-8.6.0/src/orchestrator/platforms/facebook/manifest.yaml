@@ -1,0 +1,45 @@
+id: facebook
+name: Facebook Page
+api_version: '1'
+module_version: 0.3.0
+core_min: 8.0.0
+auth:
+  method: oauth
+  strategy: meta_page
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: true
+  update_metadata: true
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: false
+  text: true
+  list_uploads: true
+  list_scheduled: true
+  list_private: false
+  scan_mode: auto
+  schedule_owner: platform
+limits:
+  daily_default: 5
+media:
+  max_mb: 1024
+statuses:
+  published: published
+  scheduled: scheduled
+provider_type: social
+publish_mode: direct
+status_authority: authoritative
+media_transfer: pull_from_url
+review_requirement: app_review
+account_types:
+- page
+docs: MODULE_FACEBOOK.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

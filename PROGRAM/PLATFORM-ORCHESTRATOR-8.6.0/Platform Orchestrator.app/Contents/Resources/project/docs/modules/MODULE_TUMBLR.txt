@@ -1,0 +1,8 @@
+# Tumblr
+
+Status: NATIVE_PARTIAL (native transport present; scope remains partial)
+
+Implemented in this snapshot: OAuth1a authentication check, text publish, post status reconciliation, metadata update, and delete. Image/video publishing remains intentionally disabled by the manifest until a media-specific contract is implemented.
+
+Account: Tumblr blog.
+Authentication: Tumblr OAuth1a consumer + user token/secret.

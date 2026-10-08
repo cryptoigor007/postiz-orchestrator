@@ -1,0 +1,45 @@
+id: threads
+name: Threads
+api_version: '1'
+module_version: 0.3.0
+core_min: 8.0.0
+auth:
+  method: oauth
+  strategy: threads
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: true
+  text: true
+  list_uploads: true
+  list_scheduled: false
+  list_private: false
+  scan_mode: published_only
+  schedule_owner: orchestrator
+limits:
+  daily_default: 3
+media:
+  max_mb: 300
+  prefer_faststart: true
+statuses:
+  published: published
+provider_type: social
+publish_mode: direct
+status_authority: best_effort
+media_transfer: pull_from_url
+review_requirement: app_review
+account_types:
+- profile
+docs: MODULE_THREADS.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

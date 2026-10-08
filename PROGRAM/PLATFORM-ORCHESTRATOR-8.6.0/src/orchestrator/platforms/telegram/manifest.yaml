@@ -1,0 +1,66 @@
+id: telegram
+name: Telegram
+api_version: "Bot API 9.x"
+module_version: "1.2.0"
+core_min: "8.5.0"
+auth:
+  method: bot_token
+  scopes: []
+  broker_key: ""
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: true
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: true
+  text: true
+  stories: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+limits:
+  posts_per_day: 30
+  rate:
+    rpm: 20
+  quota:
+    unit: "messages"
+    per_day: 0
+media:
+  video:
+    container: mp4
+    video_codec: h264
+    audio_codec: aac
+    aspect: ["9:16", "16:9"]
+    max_mb: 50
+    max_duration_sec: 0
+  image:
+    formats: [jpg, png]
+    max_mb: 10
+  text:
+    max_chars: 4096
+    caption_max_chars: 1024
+statuses:
+  published: [published]
+  pending: [sending]
+  failed: [error]
+provider_type: social
+publish_mode: orchestrator
+status_authority: authoritative
+media_transfer: file_upload
+review_requirement: none
+account_types: ['bot', 'channel']
+docs: MODULE_TELEGRAM.txt
+
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

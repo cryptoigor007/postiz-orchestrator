@@ -1,0 +1,70 @@
+id: beehiiv
+name: beehiiv
+api_version: v2
+module_version: 0.1.0
+core_min: 8.5.0
+auth:
+  method: api_key
+  scopes:
+    - publications:read
+    - posts:read
+    - posts:write
+  env: BEEHIIV_API_KEY
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: true
+  delete: true
+  thumbnail: false
+  video: false
+  image: true
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: true
+  scan_mode: auto
+  schedule_owner: orchestrator
+  claims_check: unsupported
+  content_kinds:
+    - text
+    - article
+  content_kind_default: article
+limits:
+  posts_per_day: 0
+media:
+  image:
+    supported: true
+    max_mb: 20
+  video:
+    supported: false
+statuses:
+  published:
+    - confirmed
+    - published
+  pending:
+    - draft
+    - processing
+    - 202
+  failed:
+    - failed
+    - POST_CREATION_FAILED
+provider_type: newsletter
+publish_mode: direct
+status_authority: authoritative
+media_transfer: mixed
+review_requirement: none
+account_types:
+  - publication
+docs: MODULE_BEEHIIV.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+version_policy:
+  source: https://developers.beehiiv.com/api-reference/posts
+  notes: "Create post is asynchronous; publication plans/permissions may restrict access."
+contract_strict: true

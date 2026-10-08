@@ -1,0 +1,53 @@
+id: farcaster
+name: Farcaster (Neynar)
+api_version: neynar-v2
+module_version: 0.1.0
+core_min: 8.6.0
+auth:
+  method: api_key
+  strategy: neynar_api_key_plus_signer
+  broker_key: farcaster
+provider_type: partner
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: true
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds: [text]
+  content_kind_default: text
+limits:
+  source: Neynar/Farcaster
+  embeds_max: 2
+media:
+  source: text_and_embeds
+  upload: unsupported
+statuses:
+  published: [published]
+  pending: []
+  deleted: [deleted]
+docs: MODULE_FARCASTER.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: PARTNER
+publish_mode: partner
+status_authority: authoritative
+media_transfer: pull_from_url
+review_requirement: partner
+account_types: [farcaster_user]
+contract_strict: true

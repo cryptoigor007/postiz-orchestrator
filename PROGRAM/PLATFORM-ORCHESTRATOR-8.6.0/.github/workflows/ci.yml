@@ -1,0 +1,33 @@
+name: Platform Orchestrator CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.lock
+      - name: Verify exact test dependency versions
+        run: |
+          python - <<'PY'
+          import pytest
+          import pytest_asyncio
+          assert pytest.__version__ == '8.3.5'
+          assert pytest_asyncio.__version__ == '0.25.3'
+          PY
+      - name: Run project audit
+        run: python scripts/final_audit.py

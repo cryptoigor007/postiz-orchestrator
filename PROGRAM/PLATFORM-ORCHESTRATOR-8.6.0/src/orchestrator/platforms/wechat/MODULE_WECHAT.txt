@@ -1,0 +1,12 @@
+WeChat Official Account server-side article publishing module.
+
+Implemented workflow:
+1. obtain server-side access_token from app_id/app_secret;
+2. create an HTML news draft via /cgi-bin/draft/add;
+3. submit the draft via /cgi-bin/freepublish/submit;
+4. reconcile publish state via /cgi-bin/freepublish/get;
+5. list published articles via /cgi-bin/freepublish/batchget;
+6. delete published articles using article_id via /cgi-bin/freepublish/delete.
+
+A permanent thumb_media_id is required for a normal news draft. The module deliberately
+returns a processing state after submit until the publish-status endpoint confirms success.

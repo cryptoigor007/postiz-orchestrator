@@ -1,0 +1,7 @@
+[Unit]
+Description=Self-healing network watchdog
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/net-watchdog.sh

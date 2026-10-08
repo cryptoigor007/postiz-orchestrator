@@ -1,0 +1,57 @@
+id: rutube
+name: Rutube
+api_version: partner
+module_version: 0.1.0
+core_min: 8.5.0
+auth:
+  method: partner_token
+  scopes: []
+  broker_key: rutube
+capabilities:
+  publish: false
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: false
+  text: false
+  stories: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+  content_kinds:
+  - video_native
+  content_kind_default: video_native
+limits:
+  posts_per_day: 5
+media:
+  video:
+    container: mp4
+    max_mb: 16384
+statuses:
+  published:
+  - published
+  pending:
+  - processing
+  failed:
+  - failed
+provider_type: partner
+publish_mode: partner
+status_authority: unknown
+media_transfer: mixed
+review_requirement: partner
+account_types:
+- channel
+docs: MODULE_RUTUBE.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

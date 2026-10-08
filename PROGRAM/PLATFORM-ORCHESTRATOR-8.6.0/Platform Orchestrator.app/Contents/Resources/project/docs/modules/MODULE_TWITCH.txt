@@ -1,0 +1,8 @@
+# Twitch
+
+Status: NATIVE_PARTIAL (native transport present; scope remains partial)
+
+This module contains native transport code for the declared provider capabilities declared by its manifest. Provider access/approval, credentials, automated tests, and a live owner canary are still required before this provider is considered LIVE.
+
+Category: streaming
+Implementation checklist: see FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md.

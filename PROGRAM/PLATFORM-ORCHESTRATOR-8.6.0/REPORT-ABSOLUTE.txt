@@ -1,0 +1,50 @@
+STATUS=ABSOLUTE+NECESSARY_N1_N15+P2_CODE_CLOSE
+Date: 2026-10-01T12:55:00+03:00
+SCHEMA_VERSION=20
+
+FINAL VERIFICATION:
+pytest: 777 passed, 0 failed, 5 skipped
+check.sh: PASS
+ gate_platform_zero.sh: PASS (126 platform-zero tests)
+ critical test tautologies: NONE
+YAML unique-key validation: PASS (all repository YAML files checked)
+Ruff: not installed in this execution environment; check.sh skips it by design. Strict ruff failure behavior is enabled when ruff is available.
+
+CODE DONE:
+N1 Public OAuth callback before Telegram auth + optional /oauth/callback alias
+N2 Atomic OAuth token save; account enable only after successful save; tokens dir 0700 / files 0600
+N3 local_schedule due-fire with immediate publish path and idempotent status handling
+N4 publishing exception recovery; retryable errors return to ready, permanent errors to error; lease cleared
+N5 VK schedule_publish: false
+N6 unified auth_tokens provider wired to publisher/status_sync/reconciliation/remote_scan/claims
+N7 check.sh strict ruff behavior + critical-test tautology gate
+N8 START.md + PLATFORM_SETUP OAuth redirect/STAGE documentation
+N9 YAML duplicate-key fail-closed loader for config + manifests; duplicate config entries removed
+N10 OAuth start/callback extracted from webapp_api.py into oauth/web.py
+N11 critical tautological assertions removed; automated gate added (full ruff not executable here)
+N12 media_host propagated to publisher/reconciliation/remote_scan module creation
+N13 Threads live get_status is non-authoritative unknown instead of false published
+N14 claims runner + CLI create YouTube module with shared token provider
+N15 EPS schema verification runs before schema_version bump; incomplete schema fails closed
+
+OPS remain host-owner tasks (not executable/verifyable from this source archive): O1-O16
+These include real tokens, public HTTPS URL, live YT/TG STAGE, backups/logrotate installation,
+timezone validation and single-host operational rollout.
+
+Archive target: platform-orchestrator-HARD-CUT-FINAL.zip
+Excluded from final archive: venv/.venv, tokens, .env, sqlite/db runtime data, caches, __pycache__.
+
+--- 2026-10-01 SOCIAL STACK PREPARATION ADDENDUM ---
+SCHEMA_VERSION is now 21 in the prepared archive.
+See REPORT-SOCIAL-ORCHESTRATOR-PREPARED.txt and docs/FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md
+for the current implementation/preparation status. This file preserves the historical
+N1-N15 closure record from the earlier HARD_CUT checkpoint.
+
+
+CURRENT IMPLEMENTATION CHECKPOINT (2026-10-01)
+- Full pytest: 803 passed / 5 skipped / 0 failed.
+- Social architecture gate: PASS.
+- Platform-zero gate: PASS.
+- Canonical provider catalog: 42 module IDs / 42 manifests.
+- Beehiiv native module added; Rutube partner is modeled as an access mode, not a separate network.
+- Provider/account fault isolation and persisted health/circuit state are active.

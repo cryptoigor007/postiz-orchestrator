@@ -1,0 +1,51 @@
+id: messenger
+name: Facebook Messenger
+api_version: Graph v26.0
+module_version: 0.2.0
+core_min: 8.6.0
+auth:
+  method: page_access_token
+  strategy: messaging
+provider_type: messaging
+capabilities:
+  publish: false
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: false
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+  content_kinds: []
+  content_kind_default: text
+limits:
+  source: not_implemented
+media:
+  source: not_implemented
+statuses:
+  published: []
+  pending: []
+docs: MODULE_MESSENGER.txt
+messaging:
+  supported: true
+  code_ready: true
+webhooks:
+  supported: true
+access_state: CODE_READY
+publish_mode: unsupported
+status_authority: unknown
+media_transfer: mixed
+review_requirement: none
+account_types: []
+
+contract_strict: true

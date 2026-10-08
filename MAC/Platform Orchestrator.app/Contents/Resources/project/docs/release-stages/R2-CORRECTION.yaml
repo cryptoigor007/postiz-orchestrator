@@ -1,0 +1,12 @@
+stage_id: R2
+stage_name: "Correction build after rejection"
+version: "8.6.0"
+date: "2026-10-03"
+full_program: true
+macos_clickable_app: true
+external_write: test_destination_only
+automation_default: false
+provider_binding: required_before_submission
+scope_policy: least_privilege
+live_canary: prohibited
+rejection_policy: correction_only

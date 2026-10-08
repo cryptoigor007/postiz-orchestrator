@@ -1,0 +1,4 @@
+Final verification: 839 passed / 5 skipped / 0 failed
+Platform gate: PASS (126 tests)
+Social gate: PASS (42 providers / 42 manifests)
+Round-4 modules: youtube, telegram, tiktok, vk, beehiiv, discord, slack, line, messenger, instagram_messaging

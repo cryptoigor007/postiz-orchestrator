@@ -1,0 +1,74 @@
+id: x
+name: X (Twitter)
+api_version: v2
+module_version: 0.1.0
+core_min: 8.5.0
+auth:
+  method: oauth2_pkce
+  scopes:
+  - tweet.read
+  - tweet.write
+  - users.read
+  - media.write
+  broker_key: x
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: true
+  text: true
+  stories: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+  content_kinds:
+  - promo_text
+  - image_carousel
+  content_kind_default: promo_text
+limits:
+  posts_per_day: 10
+  rate:
+    rpm: 5
+  quota:
+    unit: tweets
+    per_day: 50
+media:
+  image:
+    formats:
+    - jpg
+    - png
+    - webp
+    max_mb: 5
+    max_count: 4
+  text:
+    max_chars: 280
+    long_form_chars: 25000
+statuses:
+  published:
+  - published
+  pending:
+  - sending
+  failed:
+  - failed
+provider_type: social
+publish_mode: direct
+status_authority: best_effort
+media_transfer: resumable
+review_requirement: none
+account_types:
+- user
+docs: MODULE_X.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

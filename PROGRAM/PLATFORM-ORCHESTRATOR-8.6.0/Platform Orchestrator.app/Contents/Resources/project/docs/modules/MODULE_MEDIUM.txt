@@ -1,0 +1,7 @@
+# Medium
+
+Status: FEASIBILITY (native production publishing not advertised)
+
+The source tree contains an adapter, but this snapshot does not claim Medium as a production-capable native provider. Medium's published API documentation now states that the API is no longer supported and that new integrations are not allowed. The manifest therefore marks Medium as feasibility-gated rather than LIVE/native-ready.
+
+Reference checked: https://github.com/Medium/medium-api-docs

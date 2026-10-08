@@ -1,0 +1,2 @@
+FEASIBILITY — no official server-side publisher/bot transport confirmed.
+Do not implement browser automation or unofficial gateway transport as a substitute.

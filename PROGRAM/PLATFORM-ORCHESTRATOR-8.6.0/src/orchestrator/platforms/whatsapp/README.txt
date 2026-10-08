@@ -1,0 +1,1 @@
+WhatsApp Cloud API native messaging core: text, media-by-ID/link, templates, interactive payloads and phone identity probe. Production access still requires Meta Business/WABA/phone credentials and any required review/approval.

@@ -1,0 +1,32 @@
+STATUS=HARD_CUT
+Date: 2026-09-30T16:12:00+03:00
+SCHEMA_VERSION=19
+pytest: 725 passed, 0 failed, 0 errors, 5 skipped
+gate: PASS (scripts/gate_platform_zero.sh)
+check.sh: ALL CHECKS PASSED
+Changed modules (residual closure + full polish):
+  - README.md (R1 operational Postiz removed; START/PLATFORM_SETUP primary)
+  - START.md, ONEPAGE-RUN.txt, README_DELIVERY.txt, STAGE_ACCEPTANCE.md,
+    GROK.md, AGENTS.md (HARD_CUT entry points; no Postiz onboarding)
+  - scripts/check.sh (added: compileall + gate + pytest)
+  - src/orchestrator/webapp_api.py
+      R2: NotSupported → 501 engine_not_implemented
+      fix: remote inventory badge `item` → `r` (NameError)
+      cleanup: unused imports / oauth import order
+  - tests/test_n8n_browser_engines.py (R2 unit + e2e handle → 501)
+  - pytest.ini / requirements.txt (R3 asyncio warning)
+  - deploy/* (R4 DEPRECATED HARD_CUT headers)
+  - docs/POSTIZ_*, RESIDUAL.md (R5 historical notes)
+Known limitations (ТОЛЬКО внешние / product):
+  - Meta/TikTok App Review, API quotas, B2 keys, DNS/tunnel ops
+  - Browser engine experimental (NotSupported / engine_not_implemented)
+  - TikTok process-local inbox cache (EPS = source of truth after restart)
+
+
+CURRENT IMPLEMENTATION CHECKPOINT (2026-10-01)
+- Full pytest: 803 passed / 5 skipped / 0 failed.
+- Social architecture gate: PASS.
+- Platform-zero gate: PASS.
+- Canonical provider catalog: 42 module IDs / 42 manifests.
+- Beehiiv native module added; Rutube partner is modeled as an access mode, not a separate network.
+- Provider/account fault isolation and persisted health/circuit state are active.

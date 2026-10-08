@@ -1,0 +1,14 @@
+# beehiiv module
+Status: NATIVE_CODE (native transport present for declared capability scope; live access/canary required)
+
+Native beehiiv API v2 publication/post module.
+
+Required:
+- BEEHIIV_API_KEY
+- BEEHIIV_PUBLICATION_ID
+
+The create-post endpoint is asynchronous: a successful POST returns a stable post id,
+then GET /publications/{publicationId}/posts/{postId} is used to resolve the final status.
+The immediate-publication request uses status=confirmed for current API behavior.
+
+Production access can depend on beehiiv plan/permission level.

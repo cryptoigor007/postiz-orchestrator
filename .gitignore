@@ -1,15 +1,18 @@
+# Локальные рабочие файлы (не входят в пакет 8.6.0)
+.env
+.env.*
+config.yaml
+config.yaml.bak
+venv/
+.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.venv/
-venv/
+.ruff_cache/
+.coverage
+.DS_Store
 data/*.sqlite
 data/*.sqlite-*
 backups/
 logs/
-.env
-*.bak
-.DS_Store
-tests/gui/node_modules/
-.coverage
-config.yaml
+node_modules/

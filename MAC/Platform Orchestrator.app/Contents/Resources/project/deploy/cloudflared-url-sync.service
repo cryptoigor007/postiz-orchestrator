@@ -1,0 +1,8 @@
+[Unit]
+Description=Sync cloudflared webapp URL to Telegram menu button
+After=network-online.target cloudflared-webapp.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cloudflared_url_sync.sh

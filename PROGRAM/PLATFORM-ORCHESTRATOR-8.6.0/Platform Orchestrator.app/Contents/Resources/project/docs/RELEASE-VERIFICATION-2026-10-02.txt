@@ -1,0 +1,15 @@
+PLATFORM ORCHESTRATOR 8.6.0 — RELEASE VERIFICATION 2026-10-02
+Final audit: 961 passed, 5 skipped, 0 failed
+Python source modules: 169
+Provider catalog/manifests: 42/42
+Runtime bare-except-pass: 0
+Active secret/query-key scan: 0
+Owner-specific active IP scan: 0
+JS syntax: node --check OK
+Shell syntax: bash -n OK
+Pytest pins: 8.3.5 / 0.25.3 in requirements, lock, CI gate
+GUI jsdom smoke: BLOCKED in sandbox by broken/incomplete local jsdom install
+External V-01/V-02: NOT CLOSED inside archive
+
+Files: 722
+Symlinks: 0

@@ -1,6 +1,0 @@
-[Unit]
-Description=Purge old Postiz drafts (soft-delete)
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/postiz_purge_drafts.sh

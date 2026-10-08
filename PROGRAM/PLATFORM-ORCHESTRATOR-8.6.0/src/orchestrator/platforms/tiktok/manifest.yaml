@@ -1,0 +1,46 @@
+id: tiktok
+name: TikTok
+api_version: "1"
+module_version: "0.4.0"
+core_min: "8.0.0"
+auth:
+  method: oauth
+  strategy: tiktok
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: false
+  text: false
+  list_uploads: true
+  list_scheduled: false
+  list_private: false
+  scan_mode: published_only
+  schedule_owner: orchestrator
+provider_type: social
+publish_mode: inbox
+status_authority: best_effort
+media_transfer: resumable
+review_requirement: audit
+account_types: [creator]
+limits:
+  daily_default: 7
+media:
+  max_mb: 500
+statuses:
+  uploaded_inbox: uploaded_inbox
+  waiting_manual_publish: waiting_manual_publish
+  published: published
+docs: MODULE_TIKTOK.txt
+
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

@@ -1,1 +1,0 @@
-instagram module skeleton 0.1.0\nТребует B2 public URL (media_host). Live — [ЖДЁТ] Meta keys.\n

@@ -1,0 +1,8 @@
+# WordPress
+
+Status: NATIVE_CODE (native transport present for declared capability scope; live access/canary required)
+
+Implemented in this snapshot: application-password authentication, post publish, metadata update, status lookup, remote inventory reconciliation with date filters, and delete. Media upload is intentionally outside this module's current text-first contract.
+
+Account: WordPress site.
+API reference: https://developer.wordpress.org/rest-api/reference/posts/

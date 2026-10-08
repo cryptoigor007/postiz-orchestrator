@@ -1,0 +1,50 @@
+id: google_business
+name: Google Business Profile
+api_version: v4
+module_version: 0.1.0
+core_min: 8.6.0
+auth:
+  method: oauth2_bearer
+  strategy: business
+provider_type: business
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: true
+  text: true
+  stories: false
+  clips: false
+  public_media_required: true
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds: [text, image, offer, event]
+  content_kind_default: text
+limits:
+  source: official
+  source_url: https://developers.google.com/my-business/content/posts-data
+media:
+  source: pull_from_url
+statuses:
+  published: [published]
+  pending: []
+docs: MODULE_GOOGLE_BUSINESS.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: CODE_READY
+publish_mode: direct
+status_authority: authoritative
+media_transfer: pull_from_url
+review_requirement: project_access_approval
+account_types: [location]
+contract_strict: true

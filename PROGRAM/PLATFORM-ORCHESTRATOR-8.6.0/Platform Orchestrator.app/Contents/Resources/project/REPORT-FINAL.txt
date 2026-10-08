@@ -1,0 +1,42 @@
+> HARD_CUT: historical only — see REPORT-HARD-CUT.txt for current status.
+
+POSTIZ_ZERO_STATUS=FINAL_ALL_IN_ONE
+date=2026-09-29
+core_version=8.5.0
+schema_version=18
+
+## Verify
+gate tests (c*+f*): 130 passed
+extended suite (youtube/telegram/b2/platforms/ig_fb/daily_ahead/contracts + zero): 193 passed, 3 skipped
+bash scripts/gate_postiz_zero.sh: OK
+grep production postiz clients: none
+
+## Completed in final pass
+- safety SQL full COALESCE + expanded statuses
+- publisher: external_sub_id, IG scheduled_platform, TikTok uploaded_inbox status
+- runner: IG near-slot finalize cycle (120s)
+- ClaimsCfg hours_before + config.example
+- PlatformCfg.graph_version; FB reads from cfg (default v21.0)
+- IG token_provider + channel_id from cfg
+- f22 platform HTTP-shaped dry contracts
+- broader tests aligned to module versions 2.2/1.1/0.3; no postiz registry
+- README operational Postiz phrasing scrubbed
+- n8n webhook path attributes configurable
+
+## Owner-only (cannot be completed in code)
+- Google/Meta/TikTok Production + App Review
+- Real client_id/secret (env / tokens/)
+- DNS / cloudflared / SSL
+- Power-off legacy Postiz VM
+- Live publish without test_account_ids
+
+POSTIZ_ZERO_STATUS=FINAL_ALL_IN_ONE
+
+
+CURRENT IMPLEMENTATION CHECKPOINT (2026-10-01)
+- Full pytest: 803 passed / 5 skipped / 0 failed.
+- Social architecture gate: PASS.
+- Platform-zero gate: PASS.
+- Canonical provider catalog: 42 module IDs / 42 manifests.
+- Beehiiv native module added; Rutube partner is modeled as an access mode, not a separate network.
+- Provider/account fault isolation and persisted health/circuit state are active.

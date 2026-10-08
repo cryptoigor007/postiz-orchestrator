@@ -1,0 +1,25 @@
+================================================================================
+PLATFORM ORCHESTRATOR — ONE-CLICK (HARD_CUT)
+================================================================================
+
+Linux/macOS:
+  ./install.sh              # full install + start on :8080
+  ./install.sh --no-start   # install/prepare only, no daemon
+  ./install.sh --systemd    # + systemd unit (sudo for system-wide)
+  ./start.sh                # start only (auto-bootstrap venv if needed)
+
+macOS Finder:  double-click `Platform Orchestrator.app` (preferred) или `START.command` — runtime/user state is kept in ~/Library/Application Support/Platform Orchestrator
+                If macOS shows a Gatekeeper warning for the downloaded app without Apple Developer ID signing/notarization, use Finder "Open" once after verifying the archive checksum.
+Windows:       double-click start.bat
+
+Panel:   http://127.0.0.1:8080/webapp/
+Health:  http://127.0.0.1:8080/health
+
+Needs: Python 3.11+, network for first pip install.
+Debian: sudo apt install python3 python3-venv python3-pip
+
+Real publish needs tokens/*.json + config.yaml — docs/PLATFORM_SETUP.md
+Gate: bash scripts/gate_platform_zero.sh
+
+STATUS=HARD_CUT · Postiz not required · module path only
+================================================================================

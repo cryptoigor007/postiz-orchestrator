@@ -1,0 +1,44 @@
+> HARD_CUT: historical only — see REPORT-HARD-CUT.txt for current status.
+
+POSTIZ_ZERO_STATUS=HARD_CUT
+Date: 2026-09-30
+
+## Acceptance (required)
+scripts/gate_postiz_zero.sh → PASS
+  pytest test_postiz_zero_c* + f* + hardcut → 139 passed
+
+## Full suite (honest)
+  746 collected
+  ~620 passed / ~103 failed / ~18 errors / 5 skipped
+  Failures are mostly legacy tests still expecting Postiz dual-write,
+  old Publisher(postiz, ...) semantics, or live Postiz calendar/orphan behavior.
+  Production path is module-only; those tests are residual debt, not runtime bugs.
+
+## Deprecated shims (tests only, marked DEPRECATED)
+  src/orchestrator/postiz.py
+  src/orchestrator/postiz_factory.py
+  src/orchestrator/postiz_http.py
+  src/orchestrator/postiz_errors.py
+  src/orchestrator/engines/postiz_engine.py
+  scripts/postiz_mcp_server.py
+  Not used by main/publisher/scheduler production path.
+
+## Hard-cut code changes (summary)
+  external_id / scheduled_for canon; COALESCE reads; no Postiz client on live path
+  engines=postiz rejected; remote_scan no postiz_post_id write; detach clears external_id
+  test_publish module path; UI external_id cancel; expanded gate greps
+
+## Remaining non-blocking
+  Docs/README/.env.example POSTIZ_* wording
+  deploy/README postiz-tunnel mentions (ops)
+  TikTok in-memory inbox
+  Legacy test rewrite (optional)
+
+
+CURRENT IMPLEMENTATION CHECKPOINT (2026-10-01)
+- Full pytest: 803 passed / 5 skipped / 0 failed.
+- Social architecture gate: PASS.
+- Platform-zero gate: PASS.
+- Canonical provider catalog: 42 module IDs / 42 manifests.
+- Beehiiv native module added; Rutube partner is modeled as an access mode, not a separate network.
+- Provider/account fault isolation and persisted health/circuit state are active.

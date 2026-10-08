@@ -1,0 +1,12 @@
+PLATFORM ORCHESTRATOR 8.6.0 — FINAL COVERAGE
+Date: 2026-10-02
+
+Command: COVERAGE_FILE=/tmp/po_cov_final coverage run --branch --source=src -m pytest -q
+Result: 968 passed, 5 skipped, 0 failed
+
+Statements: 12165/17733 = 68.6009%
+Branches: 3261/6264 = 52.0594%
+Combined Coverage.py: 64.2830%
+
+Note: residual V-03 did not require 100% branch coverage; required deferred/next_retry, webhook DLQ, multi-account UI/backlog and restore-all regressions are covered by targeted tests.
+The overall project remains intentionally below full-branch coverage.

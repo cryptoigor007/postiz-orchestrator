@@ -1,0 +1,20 @@
+PLATFORM ORCHESTRATOR 8.6.0 — FINAL STAGED RELEASE
+Date: 2026-10-03
+Full pytest: 987 passed / 5 skipped / 0 failed
+Final automated audit: ALL AUTOMATED CHECKS PASSED (RC=0)
+Provider catalog/manifests: 42/42
+Capability audit: 42/42
+Platform gate: 126 passed
+Python compile: 169 source modules
+Runtime bare-except-pass: 0
+Active secret/query-key scan: 0
+Owner-specific active IP scan: 0
+Provider-list unlogged exception paths: 0
+Exact test dependency pins: pytest 8.3.5 / pytest-asyncio 0.25.3
+Stage archives: R0 Integration / R1 Review / R2 Correction / R3 Production
+API approval guide: docs/API-AND-LAUNCH-GUIDE-2026-10-03.md
+Stage index: docs/release-stages/RELEASE-STAGES-2026-10-03.md
+macOS launcher: Platform Orchestrator.app
+macOS app build fingerprint: e9092e0f19a14539187df719eb2c9e1e68c3c25660f1c781bd04126312f1fa89
+User runtime state is intentionally excluded from distribution archives.
+External provider approval/live credentials are intentionally not embedded or claimed as completed.

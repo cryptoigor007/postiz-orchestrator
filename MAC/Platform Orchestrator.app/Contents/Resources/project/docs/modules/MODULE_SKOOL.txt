@@ -1,0 +1,8 @@
+# Skool
+
+Status: SCAFFOLD (no native production publishing transport)
+
+This provider is intentionally bounded as a feasibility/scaffold module. It must remain fail-closed until an official, supported API/access contract is confirmed and a native transport is implemented.
+
+Category: community
+Implementation checklist: see FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md.

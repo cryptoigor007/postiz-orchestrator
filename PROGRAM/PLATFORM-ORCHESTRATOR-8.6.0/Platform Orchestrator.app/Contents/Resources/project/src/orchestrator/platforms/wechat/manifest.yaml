@@ -1,0 +1,62 @@
+id: wechat
+name: WeChat Official Account
+api_version: official-api
+module_version: 1.0.0
+core_min: 8.6.0
+auth:
+  method: app_credentials
+  strategy: server_side_access_token
+  env: WECHAT_APP_ID,WECHAT_APP_SECRET
+provider_type: publishing
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds:
+  - text
+  content_kind_default: text
+limits:
+  source: official
+  posts_per_day: provider_defined
+media:
+  text:
+    source: html
+    thumb_media_required: true
+statuses:
+  published:
+  - published
+  pending:
+  - processing
+  failed:
+  - failed
+  - deleted
+docs: MODULE_WECHAT.txt
+messaging:
+  supported: false
+webhooks:
+  supported: true
+access_state: CODE_READY
+publish_mode: direct
+status_authority: authoritative
+media_transfer: pull_from_url
+review_requirement: none
+account_types:
+- official_account
+sdk_min: 1.0.0
+sdk_policy: backward_compatible
+contract_strict: true

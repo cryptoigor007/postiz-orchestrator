@@ -1,0 +1,52 @@
+id: medium
+name: Medium
+api_version: deprecated-v1
+module_version: 1.0.0-deprecated
+core_min: 8.6.0
+auth:
+  method: none
+  strategy: api_deprecated
+provider_type: publishing
+capabilities:
+  publish: false
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: false
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+  content_kinds: []
+  content_kind_default: text
+limits:
+  source: official
+  source_url: https://github.com/Medium/medium-api-docs
+media:
+  source: unsupported
+statuses:
+  published: []
+  pending: []
+docs: README.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: FEASIBILITY
+publish_mode: unsupported
+status_authority: unknown
+media_transfer: mixed
+review_requirement: none
+account_types:
+- user
+- publication
+contract_strict: true

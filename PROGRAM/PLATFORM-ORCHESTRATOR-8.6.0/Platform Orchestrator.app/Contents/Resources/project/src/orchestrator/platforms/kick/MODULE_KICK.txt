@@ -1,0 +1,10 @@
+KICK Public API module.
+
+Confirmed native API surface:
+- GET /public/v1/channels
+- PATCH /public/v1/channels
+- GET /public/v1/livestreams and related livestream endpoints
+
+The public documentation currently does not provide a general server-side local-video upload
+endpoint. Therefore this module does not claim Direct Publish. Channel metadata and livestream
+inventory/status are implemented and isolated from unsupported media publishing.

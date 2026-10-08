@@ -1,0 +1,60 @@
+id: snapchat
+name: Snapchat
+api_version: public-profile-v1
+module_version: 1.0.0
+core_min: 8.6.0
+auth:
+  method: bearer_oauth
+  strategy: snapchat_public_profile
+  env: SNAPCHAT_ACCESS_TOKEN
+provider_type: social
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: true
+  text: false
+  stories: true
+  clips: false
+  public_media_required: true
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds:
+  - image
+  - video
+  content_kind_default: video
+limits:
+  source: official
+  source_url: https://developers.snap.com/marketing-api/Public-Profile-API/ProfileAssetManagement
+media:
+  source: provider_media_id
+statuses:
+  published:
+  - published
+  pending: []
+  failed:
+  - failed
+  - rejected
+docs: README.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: PARTIAL_NATIVE
+publish_mode: direct
+status_authority: best_effort
+media_transfer: mixed
+review_requirement: app_review
+account_types:
+- public_profile
+sdk_min: 1.0.0
+sdk_policy: backward_compatible
+contract_strict: true

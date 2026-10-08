@@ -1,0 +1,29 @@
+PLATFORM ORCHESTRATOR — CLEAN FINAL RELEASE MANIFEST
+Date: 2026-10-02
+Version: 8.6.0 HARD_CUT
+
+Release contents:
+- Full source tree: src/, tests/, scripts/, webapp/, deploy/, docs/, tools/
+- Configuration/templates and locked requirements
+- Current README and complete functional reference
+- Current provider catalog + provider matrix
+- Current audit/release reports
+- Historical archive/reports retained where useful
+
+Excluded from clean release:
+- Python __pycache__ directories
+- *.pyc / *.pyo
+- .pytest_cache
+- root checkpoint ZIP leftovers
+- embedded historical checkpoint ZIPs (provided separately as rollback artifacts)
+
+Provider modules: 42
+Provider manifests: 42
+Tests: 916 passed / 5 skipped
+Platform-zero gate: 126 passed
+Social-architecture gate: PASS
+Strict DeprecationWarning test: PASS
+YAML duplicate-key audit: PASS
+AST/compile/bash/node/json/YAML checks: PASS
+
+Current authoritative verification: docs/FINAL-ARCHIVE-REPORT-2026-10-02.md

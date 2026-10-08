@@ -1,0 +1,15 @@
+# DEPRECATED (HARD_CUT): Description kept for ops on old hosts; runtime uses module-path tokens
+[Unit]
+Description=OAuth token broker (module-path; formerly Postiz-related name)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/token-broker.env
+ExecStart=/usr/bin/python3 /opt/token_broker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

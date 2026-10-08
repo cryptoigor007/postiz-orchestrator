@@ -1,0 +1,8 @@
+# Listmonk
+
+Status: NATIVE_CODE (native transport present for declared capability scope; live access/canary required)
+
+Implemented in this snapshot: BasicAuth/token authentication, campaign create, draft/scheduled/running status transition, campaign metadata update, authoritative status reconciliation, and delete. Native scheduled-list enumeration is not advertised; the orchestrator remains the scheduler owner.
+
+Account: Listmonk installation.
+API reference: https://listmonk.app/docs/apis/campaigns/

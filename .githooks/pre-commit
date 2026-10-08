@@ -1,3 +1,0 @@
-#!/bin/bash
-# Enable with: git config core.hooksPath .githooks
-exec "$(dirname "$0")/../scripts/check.sh"

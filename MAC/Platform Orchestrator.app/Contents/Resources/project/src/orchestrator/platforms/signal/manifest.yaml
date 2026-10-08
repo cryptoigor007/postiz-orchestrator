@@ -1,0 +1,50 @@
+id: signal
+name: Signal
+api_version: TBD
+module_version: 0.0.1-scaffold
+core_min: 8.6.0
+auth:
+  method: planned
+  strategy: messaging
+provider_type: messaging
+capabilities:
+  publish: false
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: false
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+  content_kinds: []
+  content_kind_default: text
+limits:
+  source: not_implemented
+media:
+  source: not_implemented
+statuses:
+  published: []
+  pending: []
+docs: MODULE_SIGNAL.txt
+messaging:
+  supported: true
+webhooks:
+  supported: true
+access_state: FEASIBILITY
+publish_mode: unsupported
+status_authority: unknown
+media_transfer: mixed
+review_requirement: none
+account_types: []
+
+contract_strict: true

@@ -1,0 +1,15 @@
+Native Nostr NIP-01 module.
+
+Implemented:
+- secp256k1 x-only public key derivation;
+- BIP340 Schnorr event signing;
+- NIP-01 EVENT publish to configured WebSocket relays;
+- REQ/EOSE inventory and status lookup;
+- kind:5 deletion events;
+- optional NIP-65 relay configuration via explicit relay URLs.
+
+Configuration:
+NOSTR_PRIVATE_KEY=<64 hex chars>
+NOSTR_RELAY_URLS=wss://relay.example,wss://relay.example/another
+
+No default relays are assumed; account operators must configure their own relay set.

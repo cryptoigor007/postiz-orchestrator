@@ -1,0 +1,61 @@
+id: mewe
+name: MeWe
+api_version: open-api-0.18.0
+auth:
+  method: bearer_app
+  strategy: mewe_open_api
+  env: MEWE_API_TOKEN
+provider_type: community
+module_version: 1.0.0
+core_min: 8.6.0
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: true
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: true
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: true
+  list_private: true
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds:
+  - text
+  - image
+  content_kind_default: text
+limits:
+  source: official
+  source_url: https://developer.mewe.com/api-docs
+media:
+  source: provider_preuploaded_photo_ids
+statuses:
+  published:
+  - published
+  pending:
+  - scheduled
+  failed:
+  - failed
+  - rejected
+docs: README.txt
+messaging:
+  supported: true
+webhooks:
+  supported: true
+access_state: PARTIAL_NATIVE
+publish_mode: direct
+status_authority: authoritative
+media_transfer: mixed
+review_requirement: app_review
+account_types:
+- group
+sdk_min: 1.0.0
+sdk_policy: backward_compatible
+contract_strict: true

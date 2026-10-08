@@ -1,0 +1,8 @@
+# Whop
+
+Status: NATIVE_PARTIAL (native transport present; scope remains partial)
+
+This provider remains registered and fail-closed. The current build exposes no production publishing/messaging path because a stable, supported public API contract and/or provider access for this exact workflow is not verified. Do not submit this module as a completed native integration until its official access path and live canary are available.
+
+Category: community
+Implementation checklist: see FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md.

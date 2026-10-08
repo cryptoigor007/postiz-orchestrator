@@ -1,0 +1,17 @@
+PLATFORM ORCHESTRATOR 8.6.0 FINAL CLICKABLE BUILD
+Date: 2026-10-02
+
+Root files/dirs: 62
+Python source files: 169
+Tests: 177
+
+Executable launchers:
+  755 START.command
+  755 start.sh
+  755 install.sh
+  755 Platform Orchestrator.app/Contents/MacOS/Platform Orchestrator
+
+Automated verification:
+  971 passed, 5 skipped
+  final_audit RC=0
+  providers 42/42

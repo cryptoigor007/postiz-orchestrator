@@ -1,0 +1,61 @@
+id: kick
+name: Kick
+api_version: public-v1
+module_version: 1.0.0
+core_min: 8.6.0
+auth:
+  method: bearer_oauth
+  strategy: kick_dev
+  env: KICK_ACCESS_TOKEN
+provider_type: streaming
+capabilities:
+  publish: false
+  early_upload: false
+  schedule_publish: false
+  update_metadata: true
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: false
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: true
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds:
+  - video_native
+  - channel_metadata
+  content_kind_default: video_native
+limits:
+  source: official
+media:
+  video:
+    source: unsupported_upload
+statuses:
+  published:
+  - live
+  pending:
+  - processing
+  failed:
+  - failed
+docs: MODULE_KICK.txt
+messaging:
+  supported: false
+webhooks:
+  supported: true
+access_state: PARTIAL_NATIVE
+publish_mode: unsupported
+status_authority: authoritative
+media_transfer: mixed
+review_requirement: none
+account_types:
+- channel
+- broadcaster
+sdk_min: 1.0.0
+sdk_policy: backward_compatible
+contract_strict: true

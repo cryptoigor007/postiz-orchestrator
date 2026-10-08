@@ -1,0 +1,50 @@
+id: listmonk
+name: Listmonk
+api_version: v1
+module_version: 0.2.0
+core_min: 8.6.0
+auth:
+  method: basic_token
+  strategy: newsletter
+provider_type: publishing
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: true
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds: [text, newsletter]
+  content_kind_default: newsletter
+limits:
+  source: official
+  source_url: https://listmonk.app/docs/apis/campaigns/
+media:
+  source: not_required_for_text
+statuses:
+  published: [running, finished]
+  pending: [draft, scheduled, paused]
+docs: MODULE_LISTMONK.txt
+messaging:
+  supported: true
+webhooks:
+  supported: false
+access_state: CODE_READY
+publish_mode: direct
+status_authority: authoritative
+media_transfer: mixed
+review_requirement: none
+account_types: [installation]
+contract_strict: true

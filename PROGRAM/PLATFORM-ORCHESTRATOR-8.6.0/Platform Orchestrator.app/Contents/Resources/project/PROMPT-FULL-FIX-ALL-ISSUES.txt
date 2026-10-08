@@ -1,0 +1,313 @@
+================================================================================
+ПОЛНЫЙ ПРОМПТ: исправление ВСЕХ ошибок platform-orchestrator
+РЕЖИМ: ОДИН ПРОХОД ДО КОНЦА · АРХИВ ТОЛЬКО ПОСЛЕ DoD
+Дата аудита: 2026-09-30 | Транспорт: HARD CUT (module path only)
+================================================================================
+
+################################################################################
+# 0. ЖЁСТКИЙ РЕЖИМ ИСПОЛНЕНИЯ (ОБЯЗАТЕЛЬНО, ЧИТАТЬ ПЕРВЫМ)
+################################################################################
+
+0.1 ОДИН ПРОХОД
+  - Выполнить этот документ ЦЕЛИКОМ за один непрерывный проход работы.
+  - Не останавливаться на «частично сделано», «осталось на потом», «P2 отложим».
+  - P0 + P1 + P2 + P3 из этого файла — все закрыть до выдачи результата.
+  - Время выполнения и расход токенов / контекста — НЕ ограничение и НЕ аргумент
+    для упрощения, пропуска или урезания scope.
+
+0.2 ЗАПРЕТ НА ЧАСТИЧНУЮ СДАЧУ
+  - ЗАПРЕЩЕНО присылать архив, «готовый» отчёт или заявлять DONE, пока не
+    выполнены ВСЕ пункты Definition of Done (раздел 9) с зелёными проверками.
+  - ЗАПРЕЩЕНО помечать тесты skip/xfail без явной причины HARD_CUT и только если
+    закрытие невозможно без внешнего API; такие случаи перечислить в REPORT и
+    минимизировать до нуля, где возможно.
+  - ЗАПРЕЩЕНО оставлять «TODO пофикшу потом» в коде по пунктам этого промпта.
+
+0.3 ПОРЯДОК ФИНАЛА (строго)
+  1) Все правки кода
+  2) Стандарты кода (раздел 1)
+  3) Контроль версий (раздел 2)
+  4) Полный прогон тестов без ошибок (раздел 3)
+  5) Регрессионные проверки (раздел 4)
+  6) Только после 1–5: REPORT + полный zip-архив проекта в сообщении
+
+0.4 КРИТЕРИЙ «МОЖНО ОТДАВАТЬ АРХИВ»
+  Все команды из раздела 9 (DoD) завершились с exit code 0.
+  Если любая команда упала — архив НЕ собирать, продолжать фикс.
+
+################################################################################
+# 1. СТАНДАРТЫ НАПИСАНИЯ КОДА (обязательны)
+################################################################################
+
+1.1 Стиль
+  - Python 3.11+ typing где уместно; без противоречий существующему стилю пакета
+    orchestrator (уже принятые dataclass/BaseModel/logging).
+  - Имена: snake_case функции/модули, PascalCase классы.
+  - Без мёртвого кода, без закомментированных «на всякий случай» блоков >5 строк.
+  - Без print() в library-коде src/ — только logging.
+  - Docstrings на публичных функциях, которые менялись по смыслу.
+
+1.2 Архитектура hard-cut
+  - Не возвращать PostizClient / HttpPostiz / MockPostiz / live Postiz API в src/.
+  - Не dual-write в legacy_post_id / legacy_scheduled_for (только NULL cleanup
+    и миграция RENAME в db.py).
+  - Новые EPS: external_id, external_sub_id, external_url, scheduled_for, source.
+  - engines: только module:* | n8n | browser | direct.
+  - В src/ слово "postiz" — ТОЛЬКО пара строк миграции в db.py (RENAME COLUMN).
+
+1.3 Качество правок
+  - Правки минимально необходимые, но полные по требованиям этого документа.
+  - Не ломать публичные сигнатуры без обновления всех call-site в src/ и tests/.
+  - После rename/рефактора — rg по старому символу, пока hits не осмысленны.
+
+1.4 Форматирование
+  - Если в репо есть ruff/black/isort — прогнать на изменённых файлах.
+  - Не оставлять SyntaxError / undefined name (platformEngine и т.п.).
+
+################################################################################
+# 2. КОНТРОЛЬ ВЕРСИЙ (обязателен)
+################################################################################
+
+2.1 Schema / совместимость БД
+  - SCHEMA_VERSION: не понижать; при смене схемы — bump и миграция в db.py.
+  - SQLite: RENAME COLUMN / backfill допустимы; не требовать DROP COLUMN.
+  - Старые БД с legacy_* должны открываться и backfill’ить external_*/scheduled_for.
+
+2.2 Конфиг и совместимость API
+  - load_config / engine_for: неизвестный engine → ValueError (не silent default).
+  - WebApp API: не удалять action’ы UI без замены; UI и API согласованы.
+  - i18n ключи: не удалять ключи, на которые ссылается app.js, без замены вызовов.
+
+2.3 Артефакты версионирования в отчёте
+  - REPORT-HARD-CUT.txt: SCHEMA_VERSION, список изменённых модулей, pytest count,
+    gate status, known limitations (если остались внешние).
+  - Не коммитить/не класть в архив: tokens/, data/*.sqlite, .venv/, __pycache__/,
+    .pytest_cache/, секреты.
+
+2.4 Идентичность проекта
+  - Продуктовое имя: Platform Orchestrator / platform-orchestrator.
+  - Python package: orchestrator (не переименовывать package без крайней нужды).
+
+################################################################################
+# 3. ПРОВЕРКА ВСЕХ ТЕСТОВ (обязательна, zero errors)
+################################################################################
+
+3.1 Команды (все должны быть exit 0)
+  export PYTHONPATH=src:scripts
+  python -m pytest tests/ -q --tb=line
+
+  Требование:
+  - 0 errors на collection
+  - 0 failed
+  - skip/xfail только с reason="HARD_CUT: ..." и только если иначе нужен live API
+
+3.2 Затронутые зоны тестов (все починить, не только gate)
+  - test_platform_zero_* (gate) — должны остаться зелёными
+  - Все файлы с orchestrator.postiz / MockPostiz / postiz_errors
+  - Все файлы с SQL postiz_post_id / postiz_scheduled_for
+    (включая test_webapp_projects.py, test_safety.py и любой hit
+     `rg -l 'postiz_post_id|postiz_scheduled_for' tests/`)
+  - test_manual_sources.py (сигнатура build_manual_sources(cfg, env);
+    убрать NameError platformEngine)
+  - test_media.py, test_closure_8_1.py после фикса make_media
+  - test_fix_error_rows.py после переписки tools/fix_error_rows.py
+  - tests/gui/check.mjs: postiz_scheduled_for → scheduled_for
+  - engines/registry/platforms/n8n тесты — без ожидания engine=postiz
+
+3.3 Стратегия постов postiz-тестов
+  Предпочтительно A: переписать на module path + правильные конструкторы:
+    Publisher(db, cfg, safety, clock, dry_run=..., module_registry=...)
+    StatusSync(db, clock, cfg, module_registry=...)
+    LinkUpdater(db, cfg, clock, tg)
+  Запрещено класть production shim orchestrator.postiz в src/.
+
+################################################################################
+# 4. РЕГРЕССИИ (обязательная проверка перед архивом)
+################################################################################
+
+4.1 Gate
+  bash scripts/gate_platform_zero.sh
+  → PASS
+
+4.2 Импорт ядра
+  python -c "from orchestrator.media import make_media, maybe_compress"
+  python -c "from orchestrator.publisher import Publisher"
+  python -c "from orchestrator.webapp_api import WebAppAPI"
+  python -c "from orchestrator.config import load_config; load_config('config.ci.yaml')"
+
+4.3 Grep-регрессии (ожидаемое поведение)
+  rg -n 'postiz' src/
+    → только db.py migration pair (postiz_post_id / postiz_scheduled_for в RENAME)
+  rg -n 'postiz' webapp/
+    → пусто
+  rg -n 'orchestrator\.postiz|MockPostiz|HttpPostiz' tests/ src/ tools/
+    → пусто
+  rg -n 'postiz_post_id|postiz_scheduled_for' tests/ tools/ webapp/
+    → пусто (после миграции имён в тестах/tools/gui)
+  rg -n 'в платформы' webapp/app.js
+    → пусто
+  rg -n 'legacy_post_id=\?|legacy_scheduled_for=\?' src/orchestrator
+    → нет non-NULL write (кроме осознанного NULL cleanup)
+
+4.4 Packaging / onboarding регрессии
+  test -s requirements.txt
+  test -s .env.example
+  test -f config.yaml -o -f config.ci.yaml
+  grep -vi postiz .env.example   # нет POSTIZ_*
+  # engines в example/ci только module:*|n8n|browser|direct
+
+4.5 Расширить gate_platform_zero.sh (и прогнать)
+  - python -c "from orchestrator.media import make_media"
+  - запрет postiz в webapp/
+  - опционально: полный pytest если FULL=1; по умолчанию gate + обязательный
+    отдельный полный pytest из раздела 3 перед архивом
+
+################################################################################
+# 5. КОНТЕКСТ ПРОЕКТА (кратко)
+################################################################################
+
+Package: orchestrator | Schema ≥ 19
+Canon EPS: external_id, external_sub_id, external_url, scheduled_for, source
+Legacy read: legacy_post_id, legacy_scheduled_for + COALESCE
+Publish path: engines.module:* → PlatformModule
+Gate сейчас: scripts/gate_platform_zero.sh (должен остаться зелёным и строже)
+
+################################################################################
+# 6. ПОЛНЫЙ СПИСОК РАБОТ (выполнить весь)
+################################################################################
+
+## P0 — RUNTIME / PACKAGING
+
+P0.1 src/orchestrator/media.py
+  Сломано: def make_media(path, platform, cfg, platform=None, broker=None)
+  Исправить: client: Any = None вместо второго platform; обновить call-sites.
+
+P0.2 requirements.txt
+  Файла нет — СОЗДАТЬ полный список зависимостей под src+tests+scripts.
+  Критерий: pip install -r requirements.txt в чистом venv + pytest/gate.
+
+P0.3 Dual-write
+  Не вводить записей в legacy_*; проверить grep.
+
+## P1 — ONBOARDING / I18N / TESTS / TOOLS
+
+P1.1 config.yaml — добавить (из example) и/или все тесты → config.ci.yaml
+P1.2 .env.example — не пустой, без POSTIZ_*
+P1.3 yaml engines — только module:*|n8n|browser|direct
+
+P1.4 webapp/app.js — русские падежи:
+  «в платформы» → «на платформе» / «на платформу» по смыслу
+  «из платформы» (ложные) → «с платформы» / «на платформе»
+  «Сверка с платформы» → «Сверка с платформой»
+P1.5 Схлопнуть дубли ключей: err_platform_error, err_missing_on_platform, st_platform
+
+P1.6 Все tests с postiz import/SQL — переписать (см. §3)
+  Обязательно включить hits:
+    rg -l 'orchestrator.postiz|MockPostiz|postiz_errors' tests/
+    rg -l 'postiz_post_id|postiz_scheduled_for' tests/
+  В т.ч. test_webapp_projects.py, test_safety.py, test_webapp_*.py, scheduler, …
+
+P1.7 Publisher/StatusSync/LinkUpdater сигнатуры в тестах
+P1.8 test_manual_sources: build_manual_sources(cfg, env); убрать platformEngine
+P1.9 engines/platforms/telegram_module/skeletons — engine module:*
+P1.10 test_n8n_browser_engines IndexError
+P1.11 test_media / test_closure_8_1 после P0.1
+P1.12 config path в тестах → config.ci.yaml где нужно
+
+P1.13 tools/fix_error_rows.py — убрать postiz_*; module StatusSync/delete;
+      SQL external_id/legacy_*; docstring без Postiz API
+P1.14 tests/test_fix_error_rows.py — зелёный после P1.13
+P1.15 tests/gui/check.mjs — postiz_scheduled_for → scheduled_for
+
+## P2 — PRODUCT
+
+P2.1 TikTok _inbox → персист в EPS/БД
+P2.2 Detach non-TG через module.delete(external_id) при supports delete
+P2.3 IG finalize: публичный API раньше mod._api; warning на fallback
+P2.4 Browser: понятная engine_not_implemented без traceback наружу
+P2.5 scripts: убрать POSTIZ_* из stage_run/comments; очистить __pycache__
+
+## P3 — HYGIENE
+
+P3.1 START/README/REPORT — Platform Orchestrator; REPORT с цифрами pytest
+P3.2 gate расширить (§4.5)
+P3.3 zip-корень platform-orchestrator/; без секретов и sqlite
+
+test_platform_zero_f20_gates.py — НЕ ломать: там postiz в именах banned-файлов
+(это gate «модуля postiz.py быть не должно»).
+
+################################################################################
+# 7. ПОРЯДОК РАБОТЫ ВНУТРИ ПРОХОДА
+################################################################################
+
+1. P0.1 media → verify import
+2. P0.2 requirements.txt
+3. P1.1–P1.3 config/env
+4. P1.4–P1.5 i18n
+5. P1.6–P1.15 tests + tools + gui
+6. P2.1–P2.5
+7. P3 + расширение gate
+8. Разделы 1–4 (стандарты, VCS-отчёт, полный pytest, регрессии)
+9. REPORT-HARD-CUT.txt
+10. Только теперь: полный zip + сообщение пользователю
+
+################################################################################
+# 8. НЕ ДЕЛАТЬ
+################################################################################
+
+- Не возвращать live Postiz client в src/
+- Не писать новые id в legacy_post_id / legacy_scheduled_for
+- Не ослаблять load_config/engine_for
+- Не удалять COALESCE legacy без миграции данных
+- Не сдавать архив при красном pytest или gate
+- Не пропускать P2 «ради скорости» — время не ограничение
+- Не коммитить tokens/, *.sqlite, .venv, секреты в архив
+
+################################################################################
+# 9. DEFINITION OF DONE (все пункты = да, иначе НЕ АРХИВ)
+################################################################################
+
+[ ] make_media импортируется без SyntaxError
+[ ] requirements.txt не пустой; документирован в START
+[ ] .env.example не пустой; без POSTIZ_*
+[ ] config.yaml и/или единообразный config.ci.yaml в тестах
+[ ] bash scripts/gate_platform_zero.sh → PASS
+[ ] python -m pytest tests/ -q → 0 errors, 0 failed
+[ ] Регрессии §4.2–4.4 — все выполнены, grep-ожидания совпали
+[ ] webapp без postiz; нет «в платформы»
+[ ] tools/fix_error_rows без postiz-модулей; test_fix_error_rows зелёный
+[ ] gui check.mjs без postiz_scheduled_for
+[ ] test_manual_sources зелёный
+[ ] Нет dual-write legacy_* в runtime
+[ ] P2 TikTok/detach/IG/browser закрыты или явно невозможны без live API
+    (предпочтительно закрыты кодом)
+[ ] REPORT-HARD-CUT.txt с pytest count и SCHEMA_VERSION
+[ ] Полный zip platform-orchestrator без секретов/pycache/sqlite
+
+################################################################################
+# 10. ФОРМАТ ФИНАЛЬНОГО СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЮ
+################################################################################
+
+Только после §9:
+
+1. Краткий отчёт: что сделано по P0/P1/P2/P3
+2. Вывод команд: gate PASS; pytest N passed, 0 failed, 0 errors
+3. SHA256 и путь к zip
+4. Известные внешние ограничения (квоты API, App Review) — если есть
+
+Архив: zip с корнем platform-orchestrator/, exclude:
+  __pycache__, .venv, .git, data/*.sqlite*, tokens/, .pytest_cache, htmlcov
+
+################################################################################
+# 11. СВОДКА НАХОДОК АУДИТА (контроль полноты)
+################################################################################
+
+P0: media.py SyntaxError; requirements.txt missing
+P1: config.yaml; .env.example empty; i18n RU/dups; ~16 test postiz imports;
+    SQL postiz_* in tests (webapp_projects, safety, …); Publisher sig;
+    manual_sources arity/platformEngine; tools/fix_error_rows; gui check.mjs
+P2: TikTok RAM inbox; detach_unavailable; IG _api; browser stub; scripts POSTIZ
+P3: docs/REPORT naming; gate tighten
+
+КОНЕЦ ПРОМПТА — ВЫПОЛНИТЬ ЦЕЛИКОМ, АРХИВ ТОЛЬКО ПОСЛЕ DoD
+================================================================================

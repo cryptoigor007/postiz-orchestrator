@@ -1,0 +1,8 @@
+# Dev.to
+
+Status: NATIVE_CODE (native transport present for declared capability scope; live access/canary required)
+
+Implemented in this snapshot: API-key authentication, article publish/draft, metadata update, status lookup, and authenticated inventory reconciliation. Delete is not advertised because the current Forem API reference exposes create, update and unpublish rather than a general article DELETE endpoint.
+
+Account: member or organization.
+API reference: https://developers.forem.com/api/v1

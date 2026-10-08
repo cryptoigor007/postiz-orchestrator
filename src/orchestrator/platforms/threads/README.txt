@@ -1,1 +1,0 @@
-threads module skeleton 0.1.0\nТребует B2; [ЖДЁТ] Meta.\n

@@ -1,0 +1,15 @@
+# Ротация логов хостовых скриптов (аудит остатков 2026-09-23, пункт 5).
+# До этого ни один из этих логов никем не ротировался и рос бесконечно;
+# usb-net-restore.log пишется при каждом событии USB-сетевухи.
+# Ставится в /etc/logrotate.d/orchestrator-host-logs.
+/var/log/net-watchdog.log
+/var/log/lan-default.log
+/var/log/usb-net-restore.log
+/var/log/ssd_backup.log {
+    size 5M
+    rotate 5
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

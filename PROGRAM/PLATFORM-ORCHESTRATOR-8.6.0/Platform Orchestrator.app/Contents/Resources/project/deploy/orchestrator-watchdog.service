@@ -1,0 +1,6 @@
+[Unit]
+Description=Orchestrator watchdog check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/orchestrator/watchdog_check.py

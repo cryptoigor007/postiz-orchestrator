@@ -1,0 +1,18 @@
+FINAL VERIFICATION — 2026-10-03
+
+pytest: 987 passed / 5 skipped / 0 failed
+final_audit.py: ALL AUTOMATED CHECKS PASSED (RC=0) on canonical source tree
+capability audit: 42/42
+platform gate: 126 passed
+python parse/compile: 169 source modules
+runtime bare-except-pass: 0
+active secret/query-key scan: 0
+owner-specific active IP scan: 0
+provider-list unlogged exception paths: 0
+CI exact pins: pytest 8.3.5 / pytest-asyncio 0.25.3
+
+Packaging v2 contract:
+- full PROGRAM contains Platform Orchestrator.app at its root
+- separate MAC convenience copy present
+- all four stage archives contain full PROGRAM + app + stage passport/templates
+- no user tokens/state/cache paths present

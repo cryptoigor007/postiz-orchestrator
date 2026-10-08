@@ -1,0 +1,86 @@
+id: youtube
+name: YouTube
+api_version: Data API v3
+module_version: 2.3.0
+core_min: 8.5.0
+auth:
+  method: oauth2_authorization_code
+  scopes:
+  - youtube.upload
+  - youtube
+  - youtube.force-ssl
+  broker_key: youtube
+capabilities:
+  publish: true
+  early_upload: true
+  schedule_publish: true
+  update_metadata: true
+  delete: true
+  thumbnail: true
+  claims_check: manual
+  video: true
+  image: false
+  text: false
+  stories: false
+  public_media_required: false
+  list_uploads: true
+  list_scheduled: true
+  list_private: true
+  scan_mode: auto
+  schedule_owner: platform
+limits:
+  posts_per_day: 6
+  rate:
+    rpm: 60
+  quota:
+    unit: api_units
+    per_day: 10000
+    upload_bucket:
+      default_daily_limit: 100
+      cost_per_call: 1
+    general_bucket:
+      default_daily_limit: 10000
+      costs:
+        videos.list: 1
+        videos.update: 50
+        videos.delete: 50
+        thumbnails.set: 50
+media:
+  video:
+    container: mp4
+    video_codec: h264
+    audio_codec: aac
+    aspect:
+    - '9:16'
+    - '16:9'
+    max_mb: 256000
+    max_duration_sec: 10800
+  thumbnail:
+    formats:
+    - jpg
+    - png
+    max_mb: 2
+statuses:
+  published:
+  - published
+  - live
+  pending:
+  - processing
+  - scheduled
+  failed:
+  - rejected
+  - failed
+provider_type: social
+publish_mode: direct
+status_authority: authoritative
+media_transfer: resumable
+review_requirement: audit
+account_types:
+- channel
+docs: MODULE_YOUTUBE.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

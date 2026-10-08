@@ -1,0 +1,8 @@
+# Moltbook
+
+Status: NATIVE_CODE (native transport present for declared capability scope; live access/canary required)
+
+This module contains native transport code for publishing declared by its manifest. Provider access/approval, credentials, automated tests, and a live owner canary are still required before this provider is considered LIVE.
+
+Category: agent_native
+Implementation checklist: see FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md.

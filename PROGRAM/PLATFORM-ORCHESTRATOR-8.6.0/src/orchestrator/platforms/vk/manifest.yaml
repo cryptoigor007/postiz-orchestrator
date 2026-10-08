@@ -1,0 +1,86 @@
+id: vk
+name: VK
+api_version: '5.199'
+module_version: 0.2.0
+core_min: 8.5.0
+auth:
+  method: community_token
+  scopes:
+  - video
+  - wall
+  - photos
+  - offline
+  broker_key: vk
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: true
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: true
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: true
+  list_scheduled: false
+  list_private: false
+  scan_mode: published_only
+  schedule_owner: platform
+  content_kinds:
+  - video_native
+  - video_link
+  - promo_text
+  - image_carousel
+  content_kind_default: video_native
+limits:
+  posts_per_day: 20
+  rate:
+    rpm: 3
+  quota:
+    unit: api_calls
+    per_day: 5000
+media:
+  video:
+    container: mp4
+    video_codec: h264
+    audio_codec: aac
+    aspect:
+    - '9:16'
+    - '16:9'
+    max_mb: 2048
+    max_duration_sec: 14400
+  image:
+    formats:
+    - jpg
+    - png
+    max_mb: 50
+  text:
+    max_chars: 4096
+statuses:
+  published:
+  - published
+  pending:
+  - processing
+  - scheduled
+  failed:
+  - failed
+  - rejected
+provider_type: social
+publish_mode: direct
+status_authority: best_effort
+media_transfer: file_upload
+review_requirement: none
+account_types:
+- community
+- profile
+docs: MODULE_VK.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+
+contract_strict: true

@@ -1,0 +1,11 @@
+[Unit]
+Description=LAN routing fix (optional legacy workaround)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/orchestrator/network.env
+ExecStart=/usr/local/sbin/lan-fix.sh
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

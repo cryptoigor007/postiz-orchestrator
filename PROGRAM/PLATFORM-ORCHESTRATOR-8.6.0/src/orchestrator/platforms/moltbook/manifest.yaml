@@ -1,0 +1,62 @@
+id: moltbook
+name: Moltbook
+api_version: v1
+module_version: 1.0.0
+core_min: 8.6.0
+auth:
+  method: bearer_api_key
+  strategy: agent_api_key
+  env: MOLTBOOK_API_KEY
+  header: Authorization
+provider_type: protocol
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: true
+  list_scheduled: false
+  list_private: true
+  scan_mode: auto
+  schedule_owner: orchestrator
+  content_kinds:
+  - text
+  - link
+  content_kind_default: text
+limits:
+  posts_per_day: provider_defined
+  source: https://www.moltbook.com/api/v1
+media:
+  text:
+    source: inline
+statuses:
+  published:
+  - published
+  pending: []
+  failed:
+  - failed
+  - deleted
+docs: MODULE_MOLTBOOK.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: CODE_READY
+publish_mode: direct
+status_authority: authoritative
+media_transfer: mixed
+review_requirement: none
+account_types:
+- agent
+sdk_min: 1.0.0
+sdk_policy: backward_compatible
+contract_strict: true

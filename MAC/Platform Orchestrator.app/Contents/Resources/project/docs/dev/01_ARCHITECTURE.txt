@@ -1,0 +1,133 @@
+================================================================================
+  01. АРХИТЕКТУРА СИСТЕМЫ — CURRENT MODULAR / POSTIZ-FREE
+================================================================================
+
+Назначение: self-hosted VideoMaker/ShortsMaker → независимый social/messaging
+публишер с нативными provider modules. Production runtime не требует Postiz,
+n8n, browser automation или legacy direct engines.
+
+--------------------------------------------------------------------------------
+1. CORE
+--------------------------------------------------------------------------------
+main.py              wiring / startup / dependency construction
+runner.py            daemon loop, health, provider supervision, outbox/jobs/recon
+publisher.py         reserve → module prepare/upload/publish → durable attempt
+scheduler.py         local/native scheduling, account-aware targets
+status_sync.py       canonical remote status sync
+reconciliation.py    remote inventory ↔ local EPS reconciliation
+consistency.py       periodic authoritative-state sweeper
+durable_jobs.py      persistent job ownership/retry state
+outbox.py            transactional outbox bridge
+webhook_ingress.py   verification + durable webhook inbox
+provider_supervisor.py provider/account health + circuit breaker
+auth_tokens.py       unified account-scoped token resolution
+db.py                SQLite schema/migrations (SCHEMA 22)
+
+--------------------------------------------------------------------------------
+2. DATA MODEL
+--------------------------------------------------------------------------------
+EPS canonical identity:
+  (entity_type, entity_id, platform, account_id)
+
+platform_accounts contains provider account identity, connection state, token_ref,
+granted scopes, expiry, webhook/access/review state.
+
+Durable reliability entities:
+  publish_attempts, durable_jobs, outbox_events, webhook_events,
+  distribution_targets, media_artifacts, consistency_runs, provider_health,
+  provider_access.
+
+Legacy fields exist only in migration/archive compatibility and are not operational reads.
+
+--------------------------------------------------------------------------------
+3. PROVIDER KERNEL
+--------------------------------------------------------------------------------
+Provider modules are discovered through `ModuleRegistry`. Modules declare executable
+capabilities in `manifest.yaml` and implement capability interfaces from
+`platforms/capabilities.py`.
+
+Capability families:
+  PublishingModule
+  MessagingModule
+  IdentityModule / AccountModule
+  WebhookModule
+  MediaModule
+  AnalyticsModule (optional)
+
+Provider modules must be isolated by provider and account. A provider failure may
+open only that provider/account circuit; unrelated queues continue.
+
+--------------------------------------------------------------------------------
+4. MODULE STRUCTURE
+--------------------------------------------------------------------------------
+platforms/<provider>/
+  __init__.py
+  manifest.yaml
+  module.py
+  api.py           (when provider needs a dedicated client)
+  README.txt
+
+Cross-provider functionality stays in core/infrastructure and is never duplicated
+in provider-specific scheduler/publisher branches.
+
+--------------------------------------------------------------------------------
+5. AUTH / MEDIA / WEBHOOKS
+--------------------------------------------------------------------------------
+Auth: account-scoped token references; broker is optional but strict when configured;
+refresh/revoke/quarantine states are provider-specific.
+
+Media: shared ModuleHttpClient + MediaTransferManager; supports file, URL, resumable,
+chunk/container flows where provider requires them. URL ingestion is SSRF-safe.
+
+Webhooks: provider verification/signature checks → webhook_events → durable jobs;
+events are deduplicated, replayable and safe under out-of-order delivery.
+
+--------------------------------------------------------------------------------
+6. RELIABILITY
+--------------------------------------------------------------------------------
+Publish flow:
+  ContentRevision → DistributionTarget → durable job → lease → attempt ledger
+  → provider module → authoritative reconciliation → EPS update.
+
+Lost response handling:
+  provider side effect uncertain → remote reconciliation first → attach existing
+  remote object when confidently matched → retry only if safe.
+
+ProviderSupervisor tracks health per provider/account and emits actionable alerts.
+Circuit breakers distinguish transient platform outages from user/config errors.
+
+--------------------------------------------------------------------------------
+7. DEPLOYMENT
+--------------------------------------------------------------------------------
+Single-host SQLite remains supported. The job abstraction is durable and can later be
+backed by PostgreSQL without rewriting provider modules. One daemon owns one DB file.
+Backups happen before critical migration; readiness is separate from liveness.
+
+--------------------------------------------------------------------------------
+8. POSTIZ-ZERO INVARIANTS
+--------------------------------------------------------------------------------
+1) No Postiz runtime transport.
+2) No n8n/browser/direct legacy engine resolution.
+3) No legacy operational EPS reads.
+4) No non-null legacy runtime writes.
+5) Provider modules are the only external publish/send integration boundary.
+6) Provider/account failure cannot become Core-wide failure.
+
+--------------------------------------------------------------------------------
+9. CURRENT PROVIDER COVERAGE
+--------------------------------------------------------------------------------
+Canonical provider modules are listed in:
+  docs/provider-catalog.yaml
+  docs/PROVIDER-MATRIX.md
+  docs/FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md
+
+The catalog includes native/scaffold/partner/feasibility states. A scaffold is not
+represented to users as live Direct Publish.
+
+--------------------------------------------------------------------------------
+10. TEST / ACCEPTANCE
+--------------------------------------------------------------------------------
+Tests must cover auth, refresh/revoke, account isolation, idempotency, lost-response
+recovery, webhook signatures/dedup/replay, provider 429/5xx, restart during publish,
+and module capability honesty. Live canary tests remain provider-credential dependent.
+================================================================================

@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-10-02T13:25:01.610180+00:00",
+  "count": 3,
+  "static_ok": 3,
+  "dry_ok": 3,
+  "live_ok": 0,
+  "states": {
+    "dry_ready": 3
+  },
+  "results": [
+    {
+      "module_id": "youtube",
+      "static_ok": true,
+      "dry_ok": true,
+      "live_ok": false,
+      "state": "dry_ready",
+      "notes": [
+        "manifest=2.3.0",
+        "publish=True",
+        "dry-auth-ok"
+      ]
+    },
+    {
+      "module_id": "telegram",
+      "static_ok": true,
+      "dry_ok": true,
+      "live_ok": false,
+      "state": "dry_ready",
+      "notes": [
+        "manifest=1.2.0",
+        "publish=True",
+        "dry-auth-blocked:TELEGRAM_BOT_TOKEN не задан",
+        "config:TELEGRAM_BOT_TOKEN пуст; platforms.telegram.publish_chat_id пуст"
+      ]
+    },
+    {
+      "module_id": "facebook",
+      "static_ok": true,
+      "dry_ok": true,
+      "live_ok": false,
+      "state": "dry_ready",
+      "notes": [
+        "manifest=0.3.0",
+        "publish=True",
+        "dry-auth-ok"
+      ]
+    }
+  ]
+}
+{
+  "count": 42,
+  "static_ok": 42,
+  "dry_ok": 42,
+  "states": {
+    "dry_ready": 42
+  }
+}

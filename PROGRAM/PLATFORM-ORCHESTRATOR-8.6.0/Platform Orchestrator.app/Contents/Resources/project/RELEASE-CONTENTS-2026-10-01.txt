@@ -1,0 +1,7 @@
+Platform Orchestrator 8.6.0 — clean release contents
+
+Source files: 696
+Provider modules: 42
+Provider manifests: 42
+Historical checkpoint ZIPs are intentionally excluded from this clean production source archive.
+See the separate PLATFORM-ORCHESTRATOR-8.6.0-CHECKPOINTS-ROLLBACK.zip bundle for all 24 rollback checkpoints.

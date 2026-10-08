@@ -1,0 +1,736 @@
+================================================================================
+PLATFORM ORCHESTRATOR — ГЛУБОКИЙ АНАЛИЗ + НЕОБХОДИМЫЕ ПРАВКИ + PROMPT
+Документ: docs/DEEP-ANALYSIS-AND-RESIDUAL-CLOSE.txt
+Дата: 2026-10-01
+Статус кода на момент документа: HARD_CUT + P0_GPT_FIXES
+pytest: 760 passed / 0 failed / 5 skipped | gate: PASS | SCHEMA 20
+Архив: platform-orchestrator-HARD-CUT-FINAL.zip
+================================================================================
+
+1. ЧТО ЭТО ЗА ПРОДУКТ (границы)
+--------------------------------------------------------------------------------
+Фактический продукт:
+  VideoMaker / ShortsMaker → Orchestrator (module path) → соцсети
+  + WebApp (Telegram) + Telegram bot + MCP + manual uploads + reconciliation
+
+Это НЕ:
+  multi-tenant SaaS «как Postiz/Postmill»
+  AI Control Plane / unified inbox / social analytics suite
+  browser-agent automation platform
+
+HARD_CUT означает:
+  - runtime publish path = PlatformModule only
+  - нет Postiz client / dual-write
+  - legacy_post_id только NULL в runtime + миграция rename
+  - engines/ могут лежать как optional/NotSupported stubs, но не Postiz transport
+
+2. АРХИТЕКТУРА (как есть)
+--------------------------------------------------------------------------------
+Слои:
+  main.py          — wiring (publisher, scheduler, status_sync, recon, watcher, …)
+  runner.py        — daemon loop + /health + webapp
+  publisher.py     — reserve → module prepare/upload/publish → EPS
+  scheduler.py     — слоты long/short/thematic/telegram (VideoMaker-aware)
+  status_sync.py   — module.get_status по external_id
+  remote_scan/     — list_remote_items → match/claim
+  manual_uploads   — confirm manual adoption
+  platforms/*      — YouTube, Telegram, IG, FB, Threads, TikTok, VK, X, Rutube
+  oauth/           — PKCE sessions + token exchange
+  webapp_api.py    — монолит REST (~2.6k LOC) + static webapp/
+  db.py            — SQLite SCHEMA 19/20, EPS entity_platform_status
+
+EPS (ядро состояния публикации):
+  PK (entity_type, entity_id, platform)  — один аккаунт на платформу на сущность
+  external_id, external_sub_id, external_url
+  scheduled_for, status, source, publish_mode, content_kind, placement
+  lease / attempt / last_error
+  legacy_* — совместимость, не operational write
+
+Capability:
+  manifest.yaml + platformCap в UI
+  contract ещё не fully executable (часть list/schedule исторически расходилась)
+
+3. ЧТО УЖЕ СДЕЛАНО (не переделывать без регрессии)
+--------------------------------------------------------------------------------
+HARD_CUT residual R1–R7 (README, NotSupported 501, gate, deploy deprecation…)
+UI: legend, offline banner, quota, kind/placement, cross-post, platformCap buttons
+VK wall photo pipeline; X multi-image; TikTok inbox file persist
+promo ← cover_path; deep /health (db, tokens, cycle_fail_streak)
+cycle_fail Telegram alerts
+One-click: install.sh, start.sh, install.bat, Makefile
+Runner._health_payload (daemon больше не падает на AttributeError)
+
+P0 из аудита GPT (закрыто в коде):
+  1) OAuth callback_uri = {base}/webapp/api/oauth/callback/{provider}
+  2) GET callback читает code/state из query
+  3) token_saver пишет tokens/<provider>.json
+  4) scheduled + no media → local_schedule hold (НЕ publish сейчас)
+  5) manual confirm → external_id + external_url + source=manual
+  6) StatusSync create module с token_provider
+  7) RemoteScan adapters list_remote_items / list_remote
+  8) VK manifest schedule_publish: false  ← НЕ ПОДТВЕРЖДЕНО СВЕРКОЙ: в файле всё ещё true
+  9) token_broker BIND default 127.0.0.1
+ 10) дубль resume_platform убран; cross_post валидирует entity + enabled
+
+4. ГЛУБОКИЙ РАЗБОР ОСТАВШИХСЯ РИСКОВ
+--------------------------------------------------------------------------------
+4.1 OAuth e2e (код частично; live не доказан)
+  Сделано: URI path, query params, token_saver.
+  Осталось:
+    - callback без Telegram auth (публичный redirect от Google/Meta)
+    - опциональный alias /oauth/callback/* → webapp route
+    - атомарность: account enabled только после успешного save токена
+    - unit-тест с mock token exchange → файл tokens/*.json
+  Риск без A: «OAuth в UI есть, токен на диск не попал / 401 на callback».
+
+4.2 local_schedule due publish (КРИТИЧНО)
+  Hold при schedule+no-media уже есть.
+  Нужно: когда scheduled_for <= now и publish_mode=local_schedule
+  (или external_id local-*), runner/scheduler должен вызвать IMMEDIATE publish,
+  не снова «schedule hold».
+  Иначе: слоты «на завтра» никогда не выйдут в сеть.
+  Тест: FakeClock, EPS в прошлом → один цикл → published|error, не вечный scheduled.
+
+4.3 Publisher exception / lease
+  После reserve status=publishing; exception может оставить publishing до lease expiry.
+  Нужно: retryable → ready/error + last_error + clear lease; permanent → error.
+  Тест: module raises → не stuck publishing.
+
+4.4 Единый token_provider
+  StatusSync уже с helper-логикой; Publisher — через broker.
+  Reconciliation / RemoteScan / Claims могут создавать module без того же пути.
+  Вынести orchestrator/auth_tokens.py::get_access_token и подключить везде.
+
+4.5 CI honesty
+  check.sh: ruff || true — зелёный CI при lint fail.
+  Часть тестов с assert True / or True ослабляет HARD_CUT доказательства.
+  Исправить: ruff fail = fail (если установлен); запрет tautology в critical tests.
+
+4.6 YAML duplicate keys
+  facebook/instagram/… могут дублироваться; loader last-wins.
+  Fail-closed + почистить example/ci.
+
+4.7 Модель данных (не блокер YT+TG single-account)
+  PK без account_id → multi-account Instagram на одну сущность невозможен.
+  Для текущего HARD_CUT YT+TG одного канала — OK.
+  Для «замена Postiz multi-account» — отдельный schema v21+ проект.
+
+4.8 Ops-only (код не заменит)
+  tokens/*.json, OAuth client secrets, ORCH_PUBLIC_BASE_URL + HTTPS
+  STAGE_ACCEPTANCE: 1× YT + 1× TG live
+  14 дней полевой прогон
+  App Review Meta/TikTok, X tier, Rutube partner
+
+5. НЕОБХОДИМЫЕ ПРАВКИ (спецификация для реализации)
+--------------------------------------------------------------------------------
+
+### A. OAuth e2e completeness
+A1. HTTP: GET /webapp/api/oauth/callback/{provider} без Telegram initData
+    (только state CSRF из OAuthSessionStore).
+A2. Опционально: GET /oauth/callback/{provider} → тот же handler.
+A3. token_saver обязателен; account_store.upsert(enabled=True) только после save.
+A4. Tests: mock exchange → tokens/youtube.json; missing code → error.
+
+### B. local_schedule due publish
+B1. В runner или scheduler: выборка
+    status IN ('scheduled','ready') AND publish_mode='local_schedule'
+    AND scheduled_for <= now (или external_id LIKE 'local-%' AND due).
+B2. Вызов publisher.publish(..., scheduled_for=None) или internal immediate path.
+B3. Идемпотентность: published / active lease → skip.
+B4. Test FakeClock.
+
+### C. Publishing recovery
+C1. try/except вокруг module upload/publish после reserve:
+    retryable → status ready/error, lease_until NULL, last_error set
+    permanent → status error
+C2. Test module raise.
+
+### D. auth_tokens helper
+D1. src/orchestrator/auth_tokens.py
+D2. Publisher, StatusSync, reconciliation, remote_scan, claims
+D3. Test read from tmp json
+
+### E. CI
+E1. scripts/check.sh — ruff fails build if installed
+E2. no assert True / or True in test_platform_zero* and test_p0*
+E3. fix fallout
+
+### F. YAML
+F1. detect duplicate keys on load → ConfigurationError
+F2. clean config.example.yaml / config.ci.yaml
+
+### G. Docs
+G1. START.md / PLATFORM_SETUP.md:
+    Redirect URI = {ORCH_PUBLIC_BASE_URL}/webapp/api/oauth/callback/{provider}
+    tokens chmod 600
+    STAGE: dry-run → YT → TG
+
+OUT OF SCOPE:
+  multi-account PK, multi-tenant, AI, inbox, analytics, Temporal, Playwright product,
+  full webapp_api split
+
+6. ПОЛНЫЙ PROMPT ДЛЯ ДОДЕЛКИ (копировать в новый чат)
+--------------------------------------------------------------------------------
+
+# PROMPT: HARD_CUT residual close — remaining necessary items
+
+## Role
+Senior engineer on platform-orchestrator (HARD_CUT, module path only).
+Implement pure-code items A–G below. No multi-tenant/AI/inbox/Temporal/Playwright suite.
+Do not replace implementation with “test on your server”.
+
+## Baseline already done
+Runner health; OAuth URI under /webapp/api/oauth/callback; query code/state; token_saver;
+scheduled text hold; manual external_id; StatusSync token_provider; RemoteScan adapters;
+VK schedule false; broker 127.0.0.1; one-click install; 760 pytest / gate PASS.
+
+## Implement
+
+### A. OAuth e2e
+- Public callback route (no Telegram auth), state CSRF only
+- Optional /oauth/callback/* alias
+- Account enabled only after token save success
+- Tests with mocked token HTTP → tokens/*.json
+
+### B. local_schedule due
+- When scheduled_for <= now and local_schedule/local-* → immediate publish
+- Idempotent; FakeClock test
+
+### C. Lease/error recovery
+- Exception after reserve → not stuck publishing; last_error; clear lease
+
+### D. auth_tokens.get_access_token shared by StatusSync, recon, remote_scan, claims, publisher
+
+### E. check.sh ruff strict if installed; no tautological asserts in platform_zero/p0 tests
+
+### F. YAML duplicate key fail-closed; clean example/ci
+
+### G. Docs: exact OAuth redirect URI, tokens, STAGE checklist
+
+## Acceptance
+export PYTHONPATH=src:scripts
+python3 -m pytest tests/ -q --tb=line   # 0 failed
+bash scripts/gate_platform_zero.sh        # OK
+bash scripts/check.sh                     # pass
+Update REPORT-ABSOLUTE.txt (A–G DONE/SKIPPED)
+Zip FINAL without secrets/venv/tokens/sqlite
+
+7. ПРИЁМКА ПРОДАКШЕНА (ops checklist)
+--------------------------------------------------------------------------------
+[ ] ./install.sh или systemd на хосте
+[ ] config.yaml: folders, platforms youtube+telegram enabled, timezone
+[ ] tokens/youtube.json, telegram bot token / chat ids
+[ ] ORCH_PUBLIC_BASE_URL=https://… (oauth + webapp phone)
+[ ] OAuth redirect в Google/Meta console =
+      {ORCH_PUBLIC_BASE_URL}/webapp/api/oauth/callback/youtube
+[ ] curl -sf http://127.0.0.1:8080/health
+[ ] Panel http://127.0.0.1:8080/webapp/
+[ ] Dry-run once
+[ ] One live YouTube long or short
+[ ] One live Telegram post
+[ ] 7–14 days: no cycle_fail_streak storms, queue filled
+
+8. ОЦЕНКА ЗРЕЛОСТИ (честная)
+--------------------------------------------------------------------------------
+| Область              | Состояние                                      |
+|----------------------|------------------------------------------------|
+| Module-path HARD_CUT | Да (gate green)                                |
+| Daemon lifecycle     | Да (после health fix)                          |
+| WebApp               | Да, как раньше + caps/UI                       |
+| OAuth code path      | Исправлен; live e2e не в pytest                |
+| Schedule hold        | Да; due-fire ещё дожать (B)                    |
+| Manual EPS identity  | Да                                             |
+| Token path единство  | Частично (D)                                   |
+| Multi-account        | Нет (и не цель текущего HARD_CUT)              |
+| AI / Inbox / Analytics | Нет (out of scope)                           |
+| Production field     | Только ops + STAGE                             |
+
+Итог: для **YT+TG single-channel orchestrator** необходимое в коде — добить A–E
+(особенно B и C). Для **absolute Postiz-replacement platform** — отдельный
+roadmap (schema multi-account, Provider Kernel 2.0, durable jobs, inbox, AI).
+
+9. ФАЙЛЫ-ЯКОРЯ ДЛЯ ПРАВОК
+--------------------------------------------------------------------------------
+src/orchestrator/oauth/manager.py
+src/orchestrator/webapp_api.py          # _oauth_*, routes, auth skip for callback
+src/orchestrator/http_server.py         # optional /oauth alias
+src/orchestrator/publisher.py           # lease/error, immediate path
+src/orchestrator/runner.py              # due local_schedule cycle
+src/orchestrator/scheduler.py           # if due logic lives here
+src/orchestrator/status_sync.py
+src/orchestrator/reconciliation.py
+src/orchestrator/remote_scan/service.py
+src/orchestrator/claims.py
+src/orchestrator/auth_tokens.py         # NEW
+scripts/check.sh
+scripts/token_broker.py
+config.example.yaml / config.ci.yaml
+docs/PLATFORM_SETUP.md / START.md
+tests/test_p0_gpt_fixes.py              # extend
+tests/test_*local_schedule*             # NEW
+
+10. КРИТЕРИЙ «ГОТОВО К ПОЛЮ»
+--------------------------------------------------------------------------------
+Код: A–E зелёные + gate + pytest 0 failed
+Ops: STAGE YT+TG live + health green неделю
+Документ обновлён: все A–G отмечены DONE в REPORT-ABSOLUTE.txt
+
+
+
+================================================================================
+11. ВЕРИФИКАЦИЯ TXT ПРОТИВ КОДА (абсолютная сверка)
+Дата сверки: 2026-10-01T02:15:00+03:00
+Метод: автоматический разбор исходников + ручная проверка критических путей
+Результат: 48 подтверждений, 2 противоречия (ниже)
+================================================================================
+
+11.1 ПОДТВЕРЖДЕНО КОДОМ (TXT был прав)
+--------------------------------------------------------------------------------
+[OK] LOC: webapp_api=2697, scheduler=1118, runner=560, publisher=537
+[OK] Runner._health_payload — метод есть, daemon не падает на AttributeError
+[OK] publisher: scheduled+no media → local_schedule hold («NOT publish now»)
+[OK] runner: _cycle_ig_finalize есть (образец due-цикла для IG containers)
+[OK] OAuth callback_uri содержит /webapp/api/oauth/callback/
+[OK] OAuth GET читает code/state из query
+[OK] token_saver + _oauth_token_saver подключены к OAuthManager
+[OK] manual confirm пишет external_id / source=manual / manual_confirmed
+[OK] StatusSync создаёт module с token_provider
+[OK] Reconciliation и RemoteScan создают module БЕЗ token_provider (долг P1)
+[OK] list_remote_items adapters: facebook, instagram, threads, tiktok
+[OK] token_broker BIND default 127.0.0.1
+[OK] postiz в src/ только db.py rename postiz_* → legacy_*
+[OK] EPS PK (entity_type, entity_id, platform) — без account_id
+[OK] gate проверяет postiz/legacy
+[OK] OAuth callback в handle() идёт ПОСЛЕ auth = self._auth → 401
+     (публичный redirect Google/Meta без Telegram key = сломан e2e)
+     auth_at offset < oauth route offset — подтверждено порядком в webapp_api.py
+
+11.2 ПРОТИВОРЕЧИЯ / ОШИБКИ В TXT ИЛИ В КОДЕ
+--------------------------------------------------------------------------------
+[CONFLICT-1] TXT §3 P0 пункт 8 и §5 заявляют:
+    «VK manifest schedule_publish: false»
+  ФАКТ в platforms/vk/manifest.yaml:
+    schedule_publish: true
+  Вердикт: правка либо не сохранилась, либо откатилась.
+  TXT в части «уже сделано P0.8» — УСТАРЕЛ/НЕВЕРЕН.
+  Код манифеста — всё ещё НЕ honest. Нужно: schedule_publish: false.
+
+[CONFLICT-2] TXT корректно говорит, что due local_schedule НЕТ.
+  ФАКТ: в runner.py нет строк local_schedule / due для local-*.
+  Только _cycle_ig_finalize для Instagram.
+  Вердикт: TXT прав; это главный продуктовый gap hold→fire.
+
+[NOTE] TXT §4.6 / GPT про duplicate YAML keys facebook/instagram:
+  На сверке config.ci.yaml / config.example.yaml / config.yaml
+  в секции platforms: дубликатов top-level ключей НЕ найдено.
+  Вердикт: риск мог быть в старых копиях; сейчас fail-closed YAML —
+  профилактика, не горящий баг.
+
+[NOTE] publisher: _release_reserve вызывается (10 раз в файле),
+  но def publish() не обёрнут единым try/except state machine
+  PUBLISHING→error. Риск stuck publishing остаётся (TXT §4.3 верно).
+
+11.3 КРИТИЧЕСКИЙ ГРАФ (проверено)
+--------------------------------------------------------------------------------
+  Google/Meta redirect
+       → GET /webapp/api/oauth/callback/{provider}?code&state
+       → WebAppAPI.handle
+       → is_api=True → НЕ static
+       → auth = self._auth(...)  # нет initData → None
+       → return 401 unauthorized
+       → token exchange НЕ вызывается
+  Вывод: A1 «public callback» — обязателен, иначе OAuth e2e мёртв.
+
+  schedule text/promo без файла
+       → _try_module_publish scheduled_for set, media None
+       → external_id=local-… publish_mode=local_schedule
+       → runner циклы: НЕТ обработчика local_schedule due
+       → слот наступает → статус остаётся scheduled
+  Вывод: B due-fire — обязателен для отложенных non-native постов.
+
+  module.create в recon/remote_scan без token
+       → get_status / list_remote могут быть «пустыми» при живом publish
+  Вывод: D unified token — P1 стабильности.
+
+11.4 ИТОГ СВЕРКИ ДОКУМЕНТА
+--------------------------------------------------------------------------------
+TXT в целом СОСТОЯТЕЛЕН как roadmap и анализ рисков.
+Ошибки документа:
+  1) VK schedule_publish:false указан как DONE — фактически true
+  2) YAML duplicates как «горящий» — сейчас не подтверждены в example/ci
+
+Код vs «production-ready YT+TG»:
+  HARD_CUT module-path: YES
+  Daemon/tests green: YES (на момент 760 passed)
+  OAuth live e2e: NO (auth gate)
+  local_schedule auto-fire: NO
+  multi-account: NO (by design)
+
+Необходимый минимум кода после сверки (порядок):
+  1. Public OAuth callback (до _auth или allowlist route)
+  2. due cycle local_schedule (runner, по образцу IG finalize)
+  3. VK manifest schedule_publish: false
+  4. publish exception → clear publishing/lease
+  5. auth_tokens helper → recon + remote_scan (+ claims)
+  6. check.sh ruff strict; optional YAML fail-closed
+
+Ops по-прежнему: tokens, ORCH_PUBLIC_BASE_URL, STAGE YT+TG, 14d field.
+
+================================================================================
+END VERIFICATION SECTION
+================================================================================
+
+
+================================================================================
+12. ВСЁ НЕОБХОДИМОЕ — ПОЛНЫЙ РЕЕСТР (после абсолютной сверки)
+Ничего лишнего (AI/inbox/Temporal/multi-tenant). Только то, без чего
+YT+TG HARD_CUT оркестратор врёт, молчит или не доезжает до поля.
+================================================================================
+
+12.1 КОД — ОБЯЗАТЕЛЬНО (P0)
+--------------------------------------------------------------------------------
+
+N1. PUBLIC OAUTH CALLBACK
+    Проблема: GET /webapp/api/oauth/callback/{provider} идёт ПОСЛЕ _auth → 401.
+    Нужно:
+      - В WebAppAPI.handle: для route oauth/callback/* (и опционально oauth/*/start
+        только если нужен) НЕ требовать Telegram initData.
+      - Проверка CSRF: state ∈ OAuthSessionStore, одноразовый consume.
+      - Опционально alias в http_server: /oauth/callback/{p} → тот же handler.
+    Файлы: webapp_api.py, http_server.py, oauth/manager.py, oauth/sessions.py
+    Тест: mock request без X-Telegram-Init-Data + valid state → 200 / exchange path;
+          invalid state → error; без state → error.
+
+N2. TOKEN SAVE АТОМАРНОСТЬ
+    Проблема: account enabled при пустом/несохранённом токене.
+    Нужно:
+      - token_saver обязан; при failure — не upsert account enabled=True.
+      - tokens/<provider>.json mode 0600, каталог tokens/ 0700.
+    Файлы: webapp_api.py _oauth_token_saver, oauth/manager.py handle_callback
+    Тест: mock exchange → файл существует и содержит access_token.
+
+N3. LOCAL_SCHEDULE DUE FIRE
+    Проблема: hold пишет local-* + local_schedule, runner не публикует в срок.
+    Нужно:
+      - Runner cycle (рядом с _cycle_ig_finalize), например _cycle_local_schedule_due:
+        SELECT … WHERE publish_mode='local_schedule'
+          OR external_id LIKE 'local-%'
+          AND status IN ('scheduled','ready')
+          AND COALESCE(scheduled_for, legacy_scheduled_for) <= now
+        → publisher.publish(..., scheduled_for=None)  # immediate path
+      - Идемпотентность: status published / active lease → skip
+      - Ошибки: last_error, status error|ready, не вечный scheduled
+    Файлы: runner.py, publisher.py (убедиться что scheduled_for=None = immediate)
+    Тест: FakeClock, EPS due local_schedule → после цикла published|error.
+
+N4. PUBLISHING / LEASE RECOVERY
+    Проблема: exception после reserve может оставить status=publishing.
+    Нужно:
+      - После _reserve_publish: try module path; except:
+          retryable → status=ready или error, lease_until=NULL, last_error=…
+          permanent → status=error
+      - Всегда _release_reserve или явный переход состояния
+    Файлы: publisher.py
+    Тест: FakeMod raises → row не publishing.
+
+N5. VK MANIFEST HONESTY
+    Проблема: schedule_publish: true при NotSupported / orchestrator hold.
+    Нужно: platforms/vk/manifest.yaml → schedule_publish: false
+            schedule_owner: orchestrator (если поле есть)
+    Файлы: platforms/vk/manifest.yaml (+ тест capabilities если есть)
+
+12.2 КОД — СИЛЬНО ЖЕЛАТЕЛЬНО (P1)
+--------------------------------------------------------------------------------
+
+N6. UNIFIED auth_tokens
+    Создать src/orchestrator/auth_tokens.py:
+      get_access_token(platform, account_id="") -> str
+      порядок: TOKEN_BROKER_URL → tokens/{platform}.json → tokens/{platform}__{id}.json
+    Подключить:
+      Publisher (если ещё не единообразно)
+      StatusSync (уже есть — свести к helper)
+      reconciliation.py
+      remote_scan/service.py
+      claims.py (где создаётся module)
+    Тест: tmp tokens/foo.json → get_access_token("foo") == token
+
+N7. CI HONESTY
+    scripts/check.sh:
+      if ruff installed: ruff check …  (exit != 0 → fail)
+      if not installed: skip with message
+    Запрет в tests/test_platform_zero*.py и tests/test_p0*.py:
+      assert True / assert x or True как единственное условие
+    Починить падения.
+
+N8. OAUTH REDIRECT В ДОКУМЕНТАЦИИ
+    START.md + docs/PLATFORM_SETUP.md:
+      Redirect URI =
+        {ORCH_PUBLIC_BASE_URL}/webapp/api/oauth/callback/{provider}
+      Пример: https://orch.example/webapp/api/oauth/callback/youtube
+      Требование HTTPS для non-localhost
+      chmod 600 tokens/*.json
+
+12.3 КОД — ПО ЖЕЛАНИЮ (P2, не блокирует STAGE)
+--------------------------------------------------------------------------------
+
+N9. YAML duplicate keys fail-closed при load_config
+    DONE: unique-key loader для config + manifests; штатные YAML очищены от дубликатов.
+N10. Мелкая декомпозиция только oauth routes из webapp_api (не весь файл)
+    DONE: OAuth start/callback вынесены в oauth/web.py.
+N11. ruff clean + убрать мёртвые assert True в прочих тестах
+    DONE for critical HARD_CUT tests: tautology gate + removal of critical tautologies.
+    Ruff itself is skipped when unavailable.
+
+12.4 OPS — ОБЯЗАТЕЛЬНО НА ХОСТЕ (код не заменяет)
+--------------------------------------------------------------------------------
+
+O1. Python 3.11+, ./install.sh или systemd
+O2. config.yaml: folders VideoMaker/Shorts, platforms youtube+telegram, timezone
+O3. tokens/youtube.json (+ telegram bot token / allowed_chat_ids)
+O4. ORCH_PUBLIC_BASE_URL=https://… (tunnel/DNS) для OAuth + WebApp с телефона
+O5. В консоли Google/Meta: Redirect URI = точный URL из N8
+O6. WEBAPP_ACCESS_KEY или Telegram allowlist
+O7. STAGE_ACCEPTANCE:
+      [ ] curl -sf http://127.0.0.1:8080/health
+      [ ] panel /webapp/
+      [ ] dry-run --once
+      [ ] 1 live YouTube
+      [ ] 1 live Telegram
+O8. 7–14 дней: queue не растёт без причины, cycle_fail_streak не пилит alerts
+
+12.5 ЯВНО НЕ НУЖНО ДЛЯ ТЕКУЩЕГО HARD_CUT
+--------------------------------------------------------------------------------
+- multi-account EPS PK / multi-tenant RBAC
+- AI gateway, RAG, agents
+- unified inbox (DM/comments product)
+- social analytics product
+- Temporal / full durable workflow framework
+- Playwright browser-agent product
+- 20 новых платформ
+- полная нарезка webapp_api на пакеты (кроме N10 optional)
+
+12.6 ЧЕКЛИСТ ВЫПОЛНЕНИЯ (отмечать DONE)
+--------------------------------------------------------------------------------
+[x] N1 Public OAuth callback
+[x] N2 Token save atomic + test
+[x] N3 local_schedule due cycle + FakeClock test
+[x] N4 publishing lease recovery + test
+[x] N5 VK schedule_publish: false
+[x] N6 auth_tokens helper + recon/remote_scan
+[x] N7 check.sh ruff strict + no tautology in critical tests
+[x] N8 Docs redirect URI + STAGE
+[x] N9 YAML duplicate-key fail-closed
+[x] N10 OAuth route extraction
+[x] N11 critical tautology cleanup + automated gate (ruff skipped if unavailable)
+[x] N12 media_host module wiring
+[x] N13 honest Threads get_status
+[x] N14 claims module/token wiring
+[x] N15 EPS schema verification before version bump
+[ ] O1–O8 ops on host (owner)
+[x] pytest 0 failed
+[x] gate_platform_zero.sh OK
+[x] REPORT-ABSOLUTE.txt updated
+[x] zip FINAL without secrets
+
+12.7 КРИТЕРИЙ «НЕОБХОДИМОЕ ЗАКРЫТО»
+--------------------------------------------------------------------------------
+Код: N1–N5 обязательно; N6–N8 желательно до STAGE.
+Поле: O1–O7.
+После этого формулировка:
+  «HARD_CUT YT+TG orchestrator готов к полевой приёмке»
+а не:
+  «absolute Postiz-replacement platform».
+
+12.8 ПОЛНЫЙ PROMPT НА ДОДЕЛКУ N1–N8 (копировать агенту)
+--------------------------------------------------------------------------------
+
+ROLE: Senior engineer, platform-orchestrator HARD_CUT. Module path only.
+
+IMPLEMENT ALL of N1–N8 from docs/DEEP-ANALYSIS-AND-RESIDUAL-CLOSE.txt section 12.
+Prioritize N1, N3, N4, N5 first.
+
+CONSTRAINTS:
+- No multi-tenant, AI, inbox, Temporal, Playwright product
+- Keep gate_platform_zero green
+- No non-null legacy_post_id runtime writes
+- Minimal diffs; add tests for N1–N4, N6
+
+ACCEPTANCE:
+  export PYTHONPATH=src:scripts
+  python3 -m pytest tests/ -q --tb=line
+  bash scripts/gate_platform_zero.sh
+  Update REPORT-ABSOLUTE.txt and section 12.6 checklist to DONE
+  Zip platform-orchestrator-HARD-CUT-FINAL.zip (exclude venv, tokens, sqlite, .env)
+
+VERIFY AFTER:
+- OAuth callback works without Telegram headers (unit/integration)
+- local_schedule due row publishes under FakeClock
+- VK manifest schedule_publish: false
+- recon/remote_scan use get_access_token
+
+12.9 СВЯЗЬ С УЖЕ СДЕЛАННЫМ
+--------------------------------------------------------------------------------
+НЕ ПЕРЕДЕЛЫВАТЬ без регрессии:
+  health payload, local_schedule HOLD (без due), manual external_id,
+  OAuth URI path + query + token_saver helper (но открыть callback публично = N1),
+  StatusSync token path, list_remote adapters, broker 127.0.0.1, one-click install,
+  webapp UI caps/kind/placement/cross-post/offline.
+
+N1 дополняет OAuth (сейчас URI правильный, auth-gate ломает redirect).
+N3 дополняет hold (сейчас hold есть, fire нет).
+N5 исправляет ложный DONE в старых отчётах.
+
+================================================================================
+END SECTION 12 — ALL NECESSARY ITEMS
+================================================================================
+
+
+================================================================================
+13. ДОПОЛНЕНИЕ: ЧЕГО НЕ ХВАТАЛО В §12 (полная доборка необходимого)
+Сверка 2026-10-01T02:24 — после повторного поиска по коду.
+§12 покрывал N1–N11 / O1–O8. Ниже — пробелы, без которых список
+«точно всё необходимое» был неполон.
+================================================================================
+
+13.1 КОД — ДОБАВИТЬ В ОБЯЗАТЕЛЬНОЕ / P1
+--------------------------------------------------------------------------------
+
+N12. MEDIA_HOST → MODULES (Meta / Threads video)
+    Факт: facebook/threads module требуют media_host для video URL;
+          main создаёт media_host в comps, но reg.create в publisher/
+          recon часто без media_host=…
+    Нужно: при create(module) передавать media_host=comps.get("media_host")
+            из Publisher / единого factory.
+    Без этого: FB/Threads video падают MEDIA_INVALID даже при живом B2.
+    Для чистого YT+TG: не блокер. Для Meta — блокер.
+    Файлы: publisher.py, platforms/registry create, main wiring
+    Тест: create facebook module with media_host mock → publish path sees host
+
+N13. HONEST get_status (Threads и аналоги)
+    Факт: threads.get_status всегда state="published" (и dry_run, и live).
+    Следствие: reconciliation врёт «всё published».
+    Нужно: live — реальный API status или state="unknown" + not_authoritative;
+            dry_run — явно dry published.
+    Файлы: platforms/threads/module.py (+ fb/ig если similarly optimistic)
+    Тест: get_status dry vs live mock
+
+N14. CLAIMS WIRING
+    Факт: claims требует youtube_module; при None — errors "youtube_module missing".
+    Нужно: main/runner всегда передаёт module с token (через N6 auth_tokens),
+            либо claims cycle no-op с логом, не тихий skip без метрики.
+    Файлы: claims.py, runner/main claims cycle
+    Для YT claims feature — P1. Если claims выключен в config — OK skip.
+
+N15. MIGRATION FAIL-CLOSED (минимально)
+    Факт: db.py — много except Exception: pass вокруг ALTER/migrate.
+    Риск: schema_version++, колонки нет.
+    Нужно: критичные ALTER (external_id, publish_mode, content_kind) —
+            при failure не повышать schema_version / fail startup.
+    Не обязательно переписывать все миграции за один проход — только
+            текущая SCHEMA 20 path + verification SELECT колонок.
+
+13.2 OPS — ДОБАВИТЬ В ОБЯЗАТЕЛЬНОЕ CHECKLIST
+--------------------------------------------------------------------------------
+
+O9.  BACKUP
+     deploy/orch-backup.timer или scripts/backup_*.sh
+     Проверить: data/*.sqlite + config.yaml + tokens/ (secrets!) копируются
+     Restore drill раз в квартал (scripts/restore_kit)
+
+O10. LOGROTATE
+     deploy/logrotate-orchestrator подключить на хосте
+     Иначе диск забьётся journal/logs
+
+O11. FIRST BOOT SAFETY
+     Первый запуск: ORCH_READ_ONLY=1 или --dry-run
+     Потом снять флаг после STAGE dry-run OK
+     .env.example уже содержит ORCH_READ_ONLY=0 — документировать порядок
+
+O12. TELEGRAM LINK-MODE ЗАВИСИТ ОТ YOUTUBE
+     scheduler: last_error='waiting_for_youtube' пока нет release_url/external_url YT
+     Ops: для TG link-post сначала успешный YT publish на ту же сущность
+     Иначе TG будет вечно ready/waiting
+
+O13. TIMEZONE
+     config timezone = host TZ = ожидания слотов
+     Расхождение → «слот 18:00» уезжает не в то время
+
+O14. SQLITE SINGLE WRITER
+     Один процесс orchestrator (pidfile уже есть: orchestrator.pidfile + test)
+     Не запускать два daemon на один db file
+     timeout=30 уже в db.py — не крутить параллельные writers вручную
+
+O15. WEBAPP_ACCESS_KEY в .env
+     Для panel без Telegram / curl API
+     Добавить в .env.example явный WEBAPP_ACCESS_KEY= (сейчас только в docs)
+
+O16. REQUIREMENTS.LOCK
+     При смене deps: обновить requirements.lock
+     install.sh предпочитает lock
+
+13.3 ТЕСТЫ — ДОБАВИТЬ К ACCEPTANCE
+--------------------------------------------------------------------------------
+
+T1. OAuth callback без Telegram headers → не 401 (после N1)
+T2. local_schedule due FakeClock (N3)
+T3. module raise → not stuck publishing (N4)
+T4. get_access_token helper (N6)
+T5. threads get_status not always authoritative published (N13)
+T6. VK capabilities schedule_publish is false (N5)
+T7. gate + full pytest 0 failed
+
+13.4 ОБНОВЛЁННЫЙ ИТОГОВЫЙ ЧЕКЛИСТ «ТОЧНО ВСЁ НЕОБХОДИМОЕ»
+--------------------------------------------------------------------------------
+Код P0 (без этого поле/ OAuth/слоты врут):
+  [x] N1  Public OAuth callback
+  [x] N2  Atomic token save (manager raises on save fail)
+  [x] N3  local_schedule due fire
+  [x] N4  publishing lease recovery
+  [x] N5  VK schedule_publish: false
+
+Код P1 (стабильность / Meta / claims / schema):
+  [x] N6  auth_tokens unified
+  [x] N7  CI ruff strict
+  [x] N8  Docs OAuth redirect + STAGE
+  [x] N12 media_host into module create
+  [x] N13 honest Threads get_status
+  [x] N14 claims youtube module wired
+  [x] N15 verify_eps_schema after migrate
+
+Ops:
+  [ ] O1–O8  (host owner: install, config, tokens, public URL, STAGE, 14d)
+  [ ] O9  backup
+  [ ] O10 logrotate
+  [ ] O11 first boot dry-run/read-only
+  [ ] O12 TG link after YT
+  [ ] O13 timezone
+  [ ] O14 single writer / pidfile
+  [ ] O15 WEBAPP_ACCESS_KEY in env example
+  [ ] O16 lockfile sync on dep change
+
+По-прежнему НЕ необходимо для HARD_CUT YT+TG:
+  multi-account PK, AI, inbox, analytics suite, Temporal, Playwright agents
+
+13.5 ОТВЕТ НА «ЭТО ТОЧНО ВСЁ?»
+--------------------------------------------------------------------------------
+После §12+§13 — да, для цели:
+
+  «Module-path HARD_CUT оркестратор YT+TG (и честный stub остальных),
+   который не врёт в OAuth, слотах local_schedule, EPS и tokens,
+   и может пройти STAGE на одном хосте»
+
+Для цели «полный Postiz-replacement multi-account social OS» — НЕТ,
+и это сознательно вне документа.
+
+Если появится новый блокер на STAGE (например Meta без media_host) —
+он уже покрыт N12. Если claims включите — N14. Если только YT+TG —
+N12/N14 можно отложить после STAGE, но они остаются в реестре
+необходимого для полной честности платформенного набора.
+
+================================================================================
+END SECTION 13 — GAP FILL
+================================================================================
+
+================================================================================
+END OF DOCUMENT
+================================================================================

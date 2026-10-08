@@ -1,0 +1,12 @@
+stage_id: R3
+stage_name: "Post-approval production build"
+version: "8.6.0"
+date: "2026-10-03"
+full_program: true
+macos_clickable_app: true
+external_write: true
+automation_default: explicit_operator_enable
+provider_binding: required_before_submission
+scope_policy: least_privilege
+live_canary: required_after_approval
+rejection_policy: n_a

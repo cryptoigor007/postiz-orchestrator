@@ -1,0 +1,12 @@
+stage_id: R1
+stage_name: "Review build"
+version: "8.6.0"
+date: "2026-10-03"
+full_program: true
+macos_clickable_app: true
+external_write: test_destination_only
+automation_default: false
+provider_binding: required_before_submission
+scope_policy: least_privilege
+live_canary: prohibited
+rejection_policy: n_a

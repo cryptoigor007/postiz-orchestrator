@@ -1,0 +1,51 @@
+id: mastodon
+name: Mastodon
+api_version: v1
+module_version: 0.1.0
+core_min: 8.6.0
+auth:
+  method: oauth2
+  strategy: protocol_social
+provider_type: social
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: true
+  image: true
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: unsupported
+  schedule_owner: orchestrator
+  content_kinds: []
+  content_kind_default: text
+limits:
+  source: not_implemented
+media:
+  source: not_implemented
+statuses:
+  published: []
+  pending: []
+docs: MODULE_MASTODON.txt
+messaging:
+  supported: false
+  code_ready: true
+webhooks:
+  supported: false
+access_state: CODE_READY
+publish_mode: direct
+status_authority: authoritative
+media_transfer: mixed
+review_requirement: none
+account_types:
+- profile
+contract_strict: true

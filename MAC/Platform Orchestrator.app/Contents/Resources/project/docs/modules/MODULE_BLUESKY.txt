@@ -1,0 +1,8 @@
+# Bluesky
+
+Status: NATIVE_PARTIAL (native transport present; scope remains partial)
+
+This module contains native transport code for publishing declared by its manifest. Provider access/approval, credentials, automated tests, and a live owner canary are still required before this provider is considered LIVE.
+
+Category: protocol_social
+Implementation checklist: see FULL-SOCIAL-ORCHESTRATOR-ROADMAP-FINAL.md.

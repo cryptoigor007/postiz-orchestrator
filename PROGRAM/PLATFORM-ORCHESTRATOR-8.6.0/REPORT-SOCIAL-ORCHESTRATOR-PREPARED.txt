@@ -1,0 +1,80 @@
+PLATFORM ORCHESTRATOR — SOCIAL STACK PREPARED / IMPLEMENTATION CHECKPOINT
+Date: 2026-10-01
+
+PURPOSE
+This archive contains the current independent native social/messaging orchestrator
+implementation, HARD_CUT residual fixes, provider-isolation infrastructure, and
+prepared modules/access tracks. It is intentionally honest about what is locally
+implemented versus what still depends on third-party credentials, review, audit,
+partner contracts, plans, or sandbox/live assets.
+
+LOCAL BASELINE
+- Python compileall: PASS
+- Full pytest: 803 passed / 5 skipped / 0 failed
+- Platform-zero gate: PASS (126 targeted tests)
+- Social-architecture gate: PASS
+- Provider catalog: 42 canonical module IDs / 42 manifests
+- Provider catalog ↔ manifest uniqueness: PASS
+- No direct provider HTTP bypass in gated provider modules: PASS
+- Critical test tautologies: PASS
+
+IMPLEMENTED / HARDENED
+- Production engine resolution is module-only; legacy n8n/browser/direct transport
+  files are archived outside the active runtime graph.
+- Active runtime no longer reads legacy EPS operational fields. Legacy fields remain
+  only for migration compatibility.
+- OAuth callback/state handling includes one-shot claim support and provider/client
+  binding; Threads is registered with explicit scopes.
+- Unified account-scoped token resolver uses the configured broker first and strict
+  broker behavior by default; shared-token fallback is opt-in.
+- Token file permissions are normalized to 0600 where supported.
+- EPS schema is account-aware: (entity_type, entity_id, platform, account_id).
+- Provider capability families are separated: Publishing, Messaging, Identity,
+  Webhook, Media, Analytics.
+- Executable manifest contract prevents false capability declarations in strict modules.
+- ProviderSupervisor isolates failures per provider/account, persists circuit state,
+  supports half-open recovery probes, and exposes health for operator alerts.
+- Durable primitives exist for publish attempts, transactional-outbox events,
+  webhook events, durable jobs, distribution targets, media artifacts and
+  consistency runs. Outbox-to-job handoff uses deterministic job IDs and is idempotent.
+- Consistency sweeper is account-aware and performs conservative authoritative status
+  repair when a provider exposes an authoritative get_status implementation.
+- Shared ModuleHttpClient is enforced for provider HTTP paths used by the implementation.
+- Threads live publish/status path and X authoritative status path are implemented.
+- WhatsApp, Viber and LINE native messaging modules are present with webhook/signature
+  foundations; Beehiiv now has a native v2 publish/status/list implementation.
+- Provider catalog includes the current parity target set plus WhatsApp, Viber, LINE,
+  Meta messaging, Beehiiv, and feasibility-gated regional/special providers.
+
+CURRENT PROVIDER STATUS
+Implemented native scope currently includes: YouTube, Telegram, Instagram, Facebook,
+Threads, TikTok Inbox, VK, X, plus native messaging adapters for WhatsApp/Viber/LINE,
+Mastodon and Beehiiv as implemented in code.
+
+Other catalog entries are intentionally honest SCAFFOLD/PARTNER/FEASIBILITY modules.
+They are registered and isolated so they can be promoted without changing Core, but
+their external API implementation/access must be completed and canary-tested before
+being advertised as LIVE.
+
+REMAINING EXTERNAL DEPENDENCIES
+- Meta production Business/App setup, scopes, Business Verification and App Review
+  where applicable.
+- TikTok Direct Post approval/audit.
+- YouTube compliance/audit/quota requirements where applicable.
+- Viber commercial bot/business access.
+- Rutube partner/API access.
+- Provider-specific credentials, webhooks, domains and legal URLs.
+- Live canary tests on real accounts.
+
+RELIABILITY INVARIANTS
+1. Provider failure must never become Core failure.
+2. One provider/account circuit may pause only that provider/account.
+3. Provider health degradation must be visible through persisted health/access state
+   and operator alerts.
+4. Retries after ambiguous side effects must reconcile before re-creating an object.
+5. Shared token fallback is never implicit in multi-account mode.
+6. A provider is not LIVE merely because a module directory exists.
+
+ARCHIVE EXCLUSIONS
+No .env, provider secrets, runtime tokens, SQLite runtime DBs, virtualenvs, Python
+cache, pytest cache or generated runtime artifacts are intended for release packaging.

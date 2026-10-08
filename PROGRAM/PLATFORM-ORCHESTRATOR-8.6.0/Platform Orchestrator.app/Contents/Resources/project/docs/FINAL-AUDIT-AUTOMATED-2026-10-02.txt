@@ -1,0 +1,63 @@
+[check] critical test tautologies: none
+capability audit: modules=42 errors=0
+[gate] config.ci
+[gate] pytest platform_zero
+........................................................................ [ 57%]
+......................................................                   [100%]
+126 passed in 1.35s
+[gate] no legacy_post_id non-null writes in runtime
+[gate] no bare ORDER BY legacy_scheduled_for without COALESCE
+[gate] no active legacy transport/field reads in runtime
+[gate] no postiz word in src runtime (except db migration pair)
+[gate] core imports
+[gate] no postiz in webapp
+[gate] OK
+[social-gate] provider catalog ↔ manifests
+catalog=42 manifests=42 unique=OK
+[social-gate] no direct provider HTTP calls
+[social-gate] provider modules instantiate and planned modules stay unsupported
+registered=42 catalog=42
+[social-gate] critical test tautologies
+[social-gate] api versions
+api_versions=OK
+[social-gate] modular primitives
+capability_interfaces=OK provider_supervisor=OK
+[social-gate] OK
+........................................................................ [  7%]
+.....sss................................................................ [ 14%]
+........................................................................ [ 22%]
+........................................................................ [ 29%]
+........................................................................ [ 36%]
+........................................................................ [ 44%]
+........................................................................ [ 51%]
+........................................................................ [ 59%]
+........................................................................ [ 66%]
+........................................................................ [ 73%]
+........................................................................ [ 81%]
+...............................................s............s........... [ 88%]
+........................................................................ [ 96%]
+.....................................                                    [100%]
+968 passed, 5 skipped in 17.82s
+python parse/compile: 169 source modules
+tautologies=0; runtime bare-except-pass=0
+active secret/query-key scan=0
+owner-specific active IP scan=0
+catalog/manifests/live_status=42/42/NOT_LIVE
+
+=== provider list observability ===
+provider list exception logging=0 unlogged
+
+=== dependency pins ===
+pytest pins: requirements/lock/CI exact=8.3.5 + 0.25.3
+
+=== check_test_tautologies ===
+
+=== capability audit ===
+
+=== platform gate ===
+
+=== social gate ===
+
+=== full pytest ===
+
+FINAL AUDIT: ALL AUTOMATED CHECKS PASSED

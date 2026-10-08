@@ -1,0 +1,2 @@
+API_DEPRECATED — Medium API is no longer supported and new integrations are not allowed.
+No live native publisher should be implemented until Medium publishes a replacement API.

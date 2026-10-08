@@ -1,0 +1,36 @@
+ONEPAGE-RUN — HARD_CUT module path (no Postiz client)
+
+1) venv
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.lock  # fallback: requirements.txt
+
+2) config
+   cp config.example.yaml config.yaml
+   # engines: module:youtube / module:telegram / …
+   # secrets: env or tokens/*.json only — never in yaml committed to git
+
+3) tokens
+   mkdir -p data tokens
+   chmod 700 tokens
+   # tokens/<platform>.json (chmod 600)
+
+4) dry-run
+   PYTHONPATH=src python -m orchestrator.main --config config.yaml --db data/orch.sqlite --dry-run --once
+
+5) gate + tests
+   bash scripts/gate_platform_zero.sh
+   # or: ./scripts/check.sh
+
+6) ops CLI
+   --remote-scan   inventory via module list_remote
+   --claims        YouTube claims checkpoint
+   --b2-cleanup    media_host TTL delete
+   --daemon        continuous runner (watch/sync/recon/claims/scan/b2)
+
+7) live
+   Only with test_account_ids set; production App Review / DNS / secrets = owner.
+
+See START.md and docs/PLATFORM_SETUP.md.
+
+
+ONE-CLICK: Linux/macOS `./install.sh` installs + starts; `./install.sh --no-start` installs only; `./start.sh` starts. macOS Finder: double-click `Platform Orchestrator.app` or `START.command`. Windows: `install.bat` then `start.bat`.

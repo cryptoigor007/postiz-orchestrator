@@ -1,0 +1,10 @@
+# Platform Orchestrator — runtime + tests
+# Prefer exact pins in production (requirements.lock optional).
+pyyaml>=6.0,<7
+pydantic>=2.0,<3
+httpx>=0.27,<1
+pytest==8.3.5
+pytest-asyncio==0.25.3
+python-dotenv>=1.0,<2
+websocket-client>=1.8,<2
+urllib3>=2.2,<3

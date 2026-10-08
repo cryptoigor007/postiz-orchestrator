@@ -1,0 +1,3 @@
+FEASIBILITY — official direct server-side publishing API not confirmed.
+Do not promote a third-party or browser automation route to native provider transport without an
+explicit reviewed provider contract.

@@ -1,0 +1,53 @@
+id: dribbble
+name: Dribbble
+api_version: v2
+module_version: 0.1.0
+core_min: 8.6.0
+auth:
+  method: oauth2
+  strategy: bearer_access_token
+  broker_key: dribbble
+provider_type: community
+capabilities:
+  publish: true
+  early_upload: false
+  schedule_publish: true
+  update_metadata: true
+  delete: true
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: true
+  text: true
+  stories: false
+  clips: false
+  public_media_required: false
+  list_uploads: true
+  list_scheduled: true
+  list_private: false
+  scan_mode: auto
+  schedule_owner: platform
+  content_kinds: [image]
+  content_kind_default: image
+limits:
+  max_mb: 8
+  dimensions: [[400, 300], [800, 600]]
+  tags_max: 12
+media:
+  source: local_file
+  upload: multipart
+statuses:
+  published: [published]
+  pending: [processing]
+docs: MODULE_DRIBBBLE.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: CODE_READY
+publish_mode: direct
+status_authority: authoritative
+media_transfer: file_upload
+review_requirement: none
+account_types: [designer, team]
+contract_strict: true

@@ -1,0 +1,7 @@
+PARTNER — automatic upload API access is external and contract-gated.
+Required before activation:
+- partner agreement/API access
+- endpoint/schema documentation
+- partner credentials/token
+- account/channel mapping
+- live upload/status canary

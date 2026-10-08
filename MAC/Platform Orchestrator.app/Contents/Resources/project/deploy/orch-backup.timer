@@ -1,0 +1,12 @@
+[Unit]
+Description=Ежедневный бэкап конфигурации сервера в 04:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# если сервер в это время спал/выключен — сделать бэкап сразу после включения
+Persistent=true
+RandomizedDelaySec=300
+Unit=orch-backup.service
+
+[Install]
+WantedBy=timers.target

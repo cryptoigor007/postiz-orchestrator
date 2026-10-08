@@ -1,0 +1,51 @@
+id: twitch
+name: Twitch
+api_version: helix
+module_version: 0.1.0
+core_min: 8.6.0
+auth:
+  method: oauth2
+  strategy: user_access_token
+  broker_key: twitch
+provider_type: streaming
+capabilities:
+  publish: false
+  early_upload: false
+  schedule_publish: false
+  update_metadata: false
+  delete: false
+  thumbnail: false
+  claims_check: unsupported
+  video: false
+  image: false
+  text: false
+  stories: false
+  clips: true
+  public_media_required: false
+  list_uploads: false
+  list_scheduled: false
+  list_private: false
+  scan_mode: auto
+  schedule_owner: platform
+  content_kinds: [clip]
+  content_kind_default: clip
+limits:
+  clip_duration_sec: [5, 60]
+media:
+  source: live_or_vod
+  upload: unsupported
+statuses:
+  published: [published]
+  pending: [processing]
+docs: MODULE_TWITCH.txt
+messaging:
+  supported: false
+webhooks:
+  supported: false
+access_state: CODE_READY
+publish_mode: unsupported
+status_authority: authoritative
+media_transfer: pull_from_url
+review_requirement: none
+account_types: [broadcaster]
+contract_strict: true

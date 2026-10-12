@@ -93,7 +93,7 @@ def get_access_token(platform: str, account_id: str = "") -> str:
 def token_provider_for(platform_hint: str = ""):
     """Return callable compatible with module registry token_provider(plat, account_id)."""
 
-    def _provider(plat: str, account_id: str = "") -> str:
+    def _provider(plat: str = "", account_id: str = "") -> str:
         return get_access_token(plat or platform_hint, account_id=account_id)
 
     return _provider

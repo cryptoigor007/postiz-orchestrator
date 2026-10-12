@@ -399,8 +399,12 @@ class Runner:
             return
         r = recon.run()
         logger.info("Reconciliation: %s", r)
-        missing = int(r.get("missing") or 0)
-        orphans = int(r.get("orphans") or 0)
+        if isinstance(r, dict):
+            missing = int(r.get("missing") or 0)
+            orphans = int(r.get("orphans") or 0)
+        else:
+            missing = int(getattr(r, "missing", 0) or 0)
+            orphans = int(getattr(r, "orphans", 0) or 0)
         if not missing:
             return
         lines = [

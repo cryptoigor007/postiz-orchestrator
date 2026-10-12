@@ -14,9 +14,16 @@ def _public_base_url() -> str:
 
 def _providers() -> dict[str, Any]:
     from .manager import FACEBOOK, GOOGLE_YOUTUBE, INSTAGRAM, THREADS, TIKTOK
+    import dataclasses as _dc
+
+    _yt = _dc.replace(
+        GOOGLE_YOUTUBE,
+        client_id=(os.getenv("YT_CLIENT_ID") or "").strip(),
+        client_secret=(os.getenv("YT_CLIENT_SECRET") or "").strip(),
+    )
 
     return {
-        "youtube": GOOGLE_YOUTUBE,
+        "youtube": _yt,
         "facebook": FACEBOOK,
         "instagram": INSTAGRAM,
         "threads": THREADS,

@@ -2487,6 +2487,24 @@ class WebAppAPI:
             expires_at=_time.time() + float(getattr(result, "expires_in", 0) or 3600),
             metadata={"token_type": str(getattr(result, "token_type", "Bearer") or "Bearer"), "scope": str(getattr(result, "scope", "") or "")},
         )
+        # (860) legacy single-file compatibility: модуль/паблишер читают tokens/youtube.json
+        if prov == "youtube":
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+                _root = _Path(os.getenv("TOKENS_DIR", "tokens"))
+                _legacy = _root / "youtube.json"
+                _legacy.write_text(_json.dumps({
+                    "access_token": str(getattr(result, "access_token", "") or ""),
+                    "refresh_token": str(getattr(result, "refresh_token", "") or ""),
+                    "expires_at": _time.time() + float(getattr(result, "expires_in", 0) or 3600),
+                    "token_type": str(getattr(result, "token_type", "Bearer") or "Bearer"),
+                    "scope": str(getattr(result, "scope", "") or ""),
+                    "no_expiry": False,
+                }, indent=2) + "\n", encoding="utf-8")
+                _legacy.chmod(0o600)
+            except Exception:
+                pass
 
     def _oauth_start(self, provider: str, account_hint: str = "") -> dict:
         from .oauth.web import start
